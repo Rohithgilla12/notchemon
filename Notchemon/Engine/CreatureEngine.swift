@@ -356,10 +356,6 @@ actor CreatureEngine {
         let behaviour = BehaviourRules.resolve(inputs)
         let previous = snapshot.behaviour
         if behaviour != previous {
-            if previous == .sleeping {
-                state.lastInteraction = instant
-                persist()
-            }
             snapshot.behaviour = behaviour
             await refreshLoop()
             publish()

@@ -196,7 +196,7 @@ struct EngineTests {
     }
 
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
-        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, lastInteraction: .distantPast, stash: []))
+        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, stash: []))
         let engine = engine()
         await engine.start()
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: Progress(speciesId: 4242, level: 12, xp: 30)))
@@ -297,7 +297,6 @@ struct StateStoreTests {
         let state = CompanionState(
             progress: Progress(speciesId: 7, level: 9, xp: 120),
             totalFocusMinutes: 300,
-            lastInteraction: Date(timeIntervalSince1970: 1_800_000_000),
             stash: [Data([1, 2, 3])],
             preferences: Preferences(focusMinutes: 45, sleepEnabled: false, virtualNotchEnabled: false)
         )
