@@ -85,13 +85,13 @@ final class SpriteLayer: CALayer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let newSpecies = show.reference.frames.first !== reference?.frames.first
-        let replace = newSpecies || show.loop.pixelated != loop?.pixelated
+        let rescale = newSpecies || show.loop.pixelated != loop?.pixelated
         if newSpecies {
             reference = show.reference
             footprint = SpriteRendering.footprint(of: show.reference.frames) ?? footprint
         }
         setLoop(show.loop)
-        if replace { placeImage() }
+        if rescale { placeImage() }
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         CATransaction.commit()
         body.setValue(CGFloat(show.facing.horizontal) * 3, forKeyPath: "transform.translation.x")
