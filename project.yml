@@ -10,6 +10,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_HARDENED_RUNTIME: YES
+    DEVELOPMENT_TEAM: 7D2V3RM56T
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "-"
 targets:
@@ -36,6 +37,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rohithgilla.Notchemon
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Developer ID Application"
+          ENABLE_HARDENED_RUNTIME: YES
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
   NotchemonTests:
     type: bundle.unit-test
     platform: macOS
