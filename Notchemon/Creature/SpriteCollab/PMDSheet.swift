@@ -24,7 +24,7 @@ struct PMDSheet: Sendable {
             throw PMDSheetError.heightNotDivisible(sheetHeight: image.height, frameHeight: spec.frameHeight)
         }
         let rowCount = image.height / spec.frameHeight
-        guard rowCount == 1 || rowCount == PMDFacing.allCases.count else {
+        guard rowCount == 1 || rowCount == Facing.allCases.count else {
             throw PMDSheetError.unsupportedRowCount(rowCount)
         }
 
@@ -43,7 +43,7 @@ struct PMDSheet: Sendable {
         durations = spec.durations.map { TimeInterval($0) / 60 }
     }
 
-    func frames(facing: PMDFacing) -> [CGImage] {
+    func frames(facing: Facing) -> [CGImage] {
         rows.count == 1 ? rows[0] : rows[facing.rawValue]
     }
 }

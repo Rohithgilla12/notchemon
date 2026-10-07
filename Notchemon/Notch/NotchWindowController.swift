@@ -8,6 +8,7 @@ final class NotchWindowController {
     let presentation: NotchPresentation
     /// Every cursor position seen, in global screen coordinates.
     var onCursorMoved: ((CGPoint) -> Void)?
+    var onCursorEnteredNotch: (() -> Void)?
 
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
@@ -158,7 +159,7 @@ final class NotchWindowController {
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable
         }
-        if decision.hop { presentation.hopToken += 1 }
+        if decision.hop { onCursorEnteredNotch?() }
         setMode(decision.mode)
         if decision.scheduleCollapse {
             scheduleCollapse()

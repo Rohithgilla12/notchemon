@@ -10,7 +10,6 @@ final class NotchPresentation {
     var mode: PanelMode = .collapsed
     var isFullScreen = false
     var isDropTargeted = false
-    var hopToken = 0
     var shakeToken = 0
     /// Set by the hotkey; the note field takes focus and clears it.
     var noteFocusRequested = false

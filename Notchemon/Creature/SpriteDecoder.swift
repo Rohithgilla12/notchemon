@@ -3,22 +3,26 @@ import ImageIO
 
 enum SpriteDecoder {
     static let defaultFrameDuration: TimeInterval = 0.1
+    /// Browsers clamp GIF delays below 20 ms the same way.
+    static let minimumFrameDuration: TimeInterval = 0.02
 
-    /// Decodes a GIF into all its frames, or a still image into one frame.
-    /// GIFs carry a delay per frame; the renderer plays at their mean.
+    /// Decodes a GIF into all its frames with their own delays, or a still
+    /// image into one frame. The result faces left and loops.
     static func decode(_ data: Data) -> SpriteFrames? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let count = CGImageSourceGetCount(source)
         var frames: [CGImage] = []
-        var delays: [TimeInterval] = []
-        for index in 0..<count {
+        var durations: [TimeInterval] = []
+        for index in 0..<CGImageSourceGetCount(source) {
             guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
             frames.append(image)
-            if let delay = gifDelay(source, index) { delays.append(delay) }
+            durations.append(max(minimumFrameDuration, gifDelay(source, index) ?? defaultFrameDuration))
         }
         guard !frames.isEmpty else { return nil }
-        let mean = delays.isEmpty ? defaultFrameDuration : delays.reduce(0, +) / Double(delays.count)
-        return SpriteFrames(frames: frames, frameDuration: max(0.02, mean))
+        return SpriteFrames(frames: frames, durations: durations)
+    }
+
+    static func firstImage(_ data: Data) -> CGImage? {
+        CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
     }
 
     private static func gifDelay(_ source: CGImageSource, _ index: Int) -> TimeInterval? {

@@ -36,11 +36,16 @@ struct OriginalCreatureProvider: CreatureProvider {
         return Species(id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel)
     }
 
-    func sprite(for species: Species, state: SpriteState) async throws -> SpriteFrames {
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         guard let design = Self.roster[species.id] else { throw CreatureError.unknownSpecies }
         let frames = [0.0, 1.0].compactMap { squash in Self.draw(design, state: state, squash: squash) }
         guard !frames.isEmpty else { throw CreatureError.missingSprite }
-        return SpriteFrames(frames: frames, frameDuration: state == .levelUp ? 0.2 : 0.45, pixelated: false)
+        let duration = state == .celebrating ? 0.2 : 0.45
+        return SpriteFrames(frames: frames, durations: frames.map { _ in duration }, pixelated: false)
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        throw CreatureError.missingSprite
     }
 
     static let canvas = 96
@@ -112,10 +117,10 @@ struct OriginalCreatureProvider: CreatureProvider {
                 context.move(to: CGPoint(x: centre.x - 4, y: centre.y))
                 context.addLine(to: CGPoint(x: centre.x + 4, y: centre.y))
                 context.strokePath()
-            case .happy, .levelUp:
+            case .celebrating:
                 context.addArc(center: CGPoint(x: centre.x, y: centre.y - 2), radius: 4, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
                 context.strokePath()
-            case .idle:
+            case .idle, .hop, .wake:
                 context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
                 context.fillEllipse(in: CGRect(x: centre.x - 5, y: centre.y - 5, width: 10, height: 10))
                 context.setFillColor(ink)

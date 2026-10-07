@@ -18,14 +18,32 @@ enum Banner: Sendable, Equatable {
 
 struct StarterOption: Sendable, Identifiable {
     let species: Species
-    let frames: SpriteFrames?
+    let portrait: CGImage?
     var id: Int { species.id }
+}
+
+/// A one-shot animation played once over the loop.
+struct OneShot: Sendable {
+    let state: SpriteState
+    let frames: SpriteFrames
+    /// Increments on every play, so a replay differs from a republish.
+    let serial: Int
+}
+
+/// What the sprite view plays.
+struct SpriteShow: Sendable {
+    var loop: SpriteFrames
+    var facing: Facing
+    /// Pixel height of the species' idle frames. Every anim of the species
+    /// scales against it, so switching anims never changes the creature's size.
+    var referenceHeight: Int
+    var oneShot: OneShot?
 }
 
 /// Everything the views render, published by the engine as one value.
 struct CompanionSnapshot: Sendable {
     var phase: CompanionPhase = .loading
-    var frames: SpriteFrames?
+    var sprite: SpriteShow?
     var behaviour: Behaviour = .idle
     var preferences = Preferences()
     var focus: FocusSession?
@@ -56,13 +74,15 @@ actor CreatureEngine {
     private let idleSeconds: @Sendable () -> TimeInterval
     private let now: @Sendable () -> Date
     private let sessionSecondsOverride: TimeInterval?
+    private let sleepAfter: TimeInterval
 
     private var state = CompanionState.empty
     private var snapshot = CompanionSnapshot()
     private var species: Species?
-    private var framesByState: [SpriteState: SpriteFrames] = [:]
+    private var spriteCache: [SpriteKey: SpriteFrames] = [:]
+    private var oneShotSerial = 0
     private var timer = FocusTimer()
-    private var cursorOffsetX: Double?
+    private var cursorOffset: CursorOffset?
     private var lastCursorNear = Date.distantPast
     private var celebration: Celebration?
     private var celebrationTask: Task<Void, Never>?
@@ -82,7 +102,8 @@ actor CreatureEngine {
         notesURL: URL = AppPaths.notes,
         idleSeconds: @escaping @Sendable () -> TimeInterval = InputIdle.seconds,
         now: @escaping @Sendable () -> Date = Date.init,
-        sessionSecondsOverride: TimeInterval? = nil
+        sessionSecondsOverride: TimeInterval? = nil,
+        sleepAfter: TimeInterval = BehaviourRules.sleepAfter
     ) {
         (snapshots, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.provider = provider
@@ -92,6 +113,7 @@ actor CreatureEngine {
         self.idleSeconds = idleSeconds
         self.now = now
         self.sessionSecondsOverride = sessionSecondsOverride
+        self.sleepAfter = sleepAfter
     }
 
     var currentSnapshot: CompanionSnapshot { snapshot }
@@ -110,8 +132,8 @@ actor CreatureEngine {
             for (index, id) in provider.starterIDs.enumerated() {
                 group.addTask { [provider] in
                     guard let species = try? await provider.species(id: id) else { return (index, nil) }
-                    let frames = try? await provider.sprite(for: species, state: .idle)
-                    return (index, StarterOption(species: species, frames: frames))
+                    let portrait = try? await provider.portrait(for: species)
+                    return (index, StarterOption(species: species, portrait: portrait))
                 }
             }
             var options: [(Int, StarterOption)] = []
@@ -140,17 +162,21 @@ actor CreatureEngine {
         cancelFocus()
         state.progress = nil
         species = nil
-        framesByState = [:]
+        spriteCache = [:]
         persist()
-        snapshot.frames = nil
+        snapshot.sprite = nil
         snapshot.phase = .choosingStarter(carryOver: nil)
         publish()
     }
 
-    func cursorMoved(offsetX: Double?) async {
-        cursorOffsetX = offsetX
-        if offsetX != nil { lastCursorNear = now() }
+    func cursorMoved(offset: CursorOffset?) async {
+        cursorOffset = offset
+        if offset != nil { lastCursorNear = now() }
         await sample()
+    }
+
+    func cursorEnteredNotch() async {
+        await play(.cursorEnteredNotch)
     }
 
     func setPreferences(_ preferences: Preferences) {
@@ -224,7 +250,7 @@ actor CreatureEngine {
             guard let target = try? await provider.species(id: targetID) else { return }
             state.progress?.speciesId = targetID
             persist()
-            framesByState = [:]
+            spriteCache = [:]
             await activate(target)
             snapshot.evolutionCount += 1
             await celebrate(.evolution(from: species.id, to: targetID), banner: .evolved(into: target.name))
@@ -319,21 +345,24 @@ actor CreatureEngine {
         let instant = now()
         let inputs = BehaviourInputs(
             secondsSinceInput: idleSeconds(),
-            cursorOffsetX: cursorOffsetX,
+            cursorOffset: cursorOffset,
             secondsSinceCursorNear: instant.timeIntervalSince(lastCursorNear),
             stashCount: snapshot.stash.count,
             celebration: celebration,
-            sleepEnabled: state.preferences.sleepEnabled
+            sleepEnabled: state.preferences.sleepEnabled,
+            sleepAfter: sleepAfter
         )
         let behaviour = BehaviourRules.resolve(inputs)
-        if behaviour != snapshot.behaviour {
-            if snapshot.behaviour == .sleeping {
+        let previous = snapshot.behaviour
+        if behaviour != previous {
+            if previous == .sleeping {
                 state.lastInteraction = instant
                 persist()
             }
             snapshot.behaviour = behaviour
-            await refreshFrames()
+            await refreshLoop()
             publish()
+            await play(.behaviourChanged(from: previous, to: behaviour))
         }
         switch behaviour {
         case .sleeping: return .seconds(1)
@@ -384,21 +413,52 @@ actor CreatureEngine {
         if let progress = state.progress {
             snapshot.phase = .active(newSpecies, progress)
         }
-        await refreshFrames()
+        await refreshLoop()
         publish()
     }
 
-    private func refreshFrames() async {
+    private func refreshLoop() async {
         guard let species else { return }
-        let spriteState = snapshot.behaviour.spriteState
-        if let frames = framesByState[spriteState] {
-            snapshot.frames = frames
-            return
+        let behaviour = snapshot.behaviour
+        let state = SpriteChoreography.loop(for: behaviour)
+        guard let reference = await frames(.idle, facing: .down, of: species),
+              let loop = await frames(state, facing: behaviour.facing, of: species),
+              snapshot.behaviour == behaviour
+        else { return }
+        snapshot.sprite = SpriteShow(
+            loop: loop,
+            facing: behaviour.facing,
+            referenceHeight: reference.frames.map(\.height).max() ?? 1,
+            oneShot: snapshot.sprite?.oneShot
+        )
+    }
+
+    /// Without the cue's own frames, the loop stands in and the renderer
+    /// supplies the motion, so a hop still reads as a hop offline.
+    private func play(_ cue: SpriteCue) async {
+        guard let state = SpriteChoreography.oneShot(for: cue), let species else { return }
+        let fetched = await frames(state, facing: snapshot.behaviour.facing, of: species)
+        guard let frames = fetched ?? snapshot.sprite?.loop, self.species?.id == species.id else { return }
+        oneShotSerial += 1
+        snapshot.sprite?.oneShot = OneShot(state: state, frames: frames, serial: oneShotSerial)
+        publish()
+    }
+
+    private func frames(_ state: SpriteState, facing: Facing, of species: Species) async -> SpriteFrames? {
+        if let hit = spriteCache[SpriteKey(state: state, facing: facing)] { return hit }
+        guard let frames = try? await provider.sprite(for: species, state: state, facing: facing),
+              self.species?.id == species.id
+        else { return nil }
+        // Undirected frames are the same from every side, so one fetch serves all eight.
+        for cached in frames.directional ? [facing] : Facing.allCases {
+            spriteCache[SpriteKey(state: state, facing: cached)] = frames
         }
-        guard let frames = try? await provider.sprite(for: species, state: spriteState) else { return }
-        guard self.species?.id == species.id else { return }
-        framesByState[spriteState] = frames
-        snapshot.frames = frames
+        return frames
+    }
+
+    private struct SpriteKey: Hashable {
+        let state: SpriteState
+        let facing: Facing
     }
 
     private func persist() {

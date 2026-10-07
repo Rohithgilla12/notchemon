@@ -5,7 +5,7 @@ import SwiftUI
 /// plays the effect when a counter moves.
 struct SpritePose: Equatable {
     var frames: SpriteFrames?
-    var gaze: Double?
+    var gaze: Facing?
     var tucked = false
     var celebrating = false
     var hopToken = 0

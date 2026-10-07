@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Fetches species and sprites from PokéAPI at runtime. Nothing it serves is
@@ -17,7 +18,7 @@ struct PokeAPICreatureProvider: CreatureProvider {
 
     /// PokéAPI has one sprite per species, so every state shares it; the
     /// renderer expresses sleep and celebration through motion.
-    func sprite(for species: Species, state: SpriteState) async throws -> SpriteFrames {
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         let pokemonJSON = try await load(baseURL.appendingPathComponent("pokemon/\(species.id)/"))
         let urls = try PokeAPIParser.spriteURLs(pokemonJSON)
         for url in [urls.animated, urls.still].compactMap({ $0 }) {
@@ -25,6 +26,10 @@ struct PokeAPICreatureProvider: CreatureProvider {
                 return frames
             }
         }
+        throw CreatureError.missingSprite
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
         throw CreatureError.missingSprite
     }
 

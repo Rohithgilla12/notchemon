@@ -82,14 +82,14 @@ struct PokeAPICreatureProviderTests {
         }
     }
 
-    @Test func animatedGIFDecodesToAllFramesWithItsDelay() async throws {
+    @Test func animatedGIFDecodesToAllFramesWithTheirDelays() async throws {
         let fetcher = StubFetcher([
             Fixtures.api.appendingPathComponent("pokemon/901/"): Fixtures.pokemonJSON(id: 901, animated: gif, still: png),
             gif: Fixtures.image(.gif, frames: 3, delay: 0.08),
         ])
-        let frames = try await provider(fetcher).sprite(for: testmon, state: .idle)
+        let frames = try await provider(fetcher).sprite(for: testmon, state: .idle, facing: .down)
         #expect(frames.frames.count == 3)
-        #expect(abs(frames.frameDuration - 0.08) < 0.001)
+        #expect(frames.durations.allSatisfy { abs($0 - 0.08) < 0.001 })
     }
 
     @Test func fallsBackToStillWhenNoAnimatedSprite() async throws {
@@ -97,9 +97,8 @@ struct PokeAPICreatureProviderTests {
             Fixtures.api.appendingPathComponent("pokemon/901/"): Fixtures.pokemonJSON(id: 901, animated: nil, still: png),
             png: Fixtures.image(.png, frames: 1),
         ])
-        let frames = try await provider(fetcher).sprite(for: testmon, state: .idle)
+        let frames = try await provider(fetcher).sprite(for: testmon, state: .idle, facing: .down)
         #expect(frames.frames.count == 1)
-        #expect(!frames.isAnimated)
     }
 
     @Test func secondLaunchWorksOffline() async throws {
@@ -111,10 +110,10 @@ struct PokeAPICreatureProviderTests {
             gif: Fixtures.image(.gif, frames: 2),
         ])
         _ = try await provider(fetcher, root: root).species(id: 901)
-        _ = try await provider(fetcher, root: root).sprite(for: testmon, state: .idle)
+        _ = try await provider(fetcher, root: root).sprite(for: testmon, state: .idle, facing: .down)
         fetcher.goOffline()
         #expect(try await provider(fetcher, root: root).species(id: 901) == testmon)
-        #expect(try await provider(fetcher, root: root).sprite(for: testmon, state: .sleeping).frames.count == 2)
+        #expect(try await provider(fetcher, root: root).sprite(for: testmon, state: .sleeping, facing: .left).frames.count == 2)
     }
 }
 
@@ -134,7 +133,7 @@ struct OriginalCreatureProviderTests {
     @Test func drawsTwoFrameSpritesForEveryState() async throws {
         let species = try await provider.species(id: provider.starterIDs[0])
         for state in SpriteState.allCases {
-            let frames = try await provider.sprite(for: species, state: state)
+            let frames = try await provider.sprite(for: species, state: state, facing: .down)
             #expect(frames.frames.count == 2)
         }
     }

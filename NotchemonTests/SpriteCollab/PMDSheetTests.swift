@@ -3,8 +3,8 @@ import Testing
 @testable import Notchemon
 
 struct PMDSheetTests {
-    @Test(arguments: PMDFacing.allCases)
-    func eightRowSheetReturnsTheFacingRow(facing: PMDFacing) throws {
+    @Test(arguments: Facing.allCases)
+    func eightRowSheetReturnsTheFacingRow(facing: Facing) throws {
         let image = SpriteFixtures.sheet(frameWidth: 10, frameHeight: 14, columns: 3, rows: 8)
         let spec = PMDAnimSpec(sheetName: "Idle", frameWidth: 10, frameHeight: 14, durations: [6, 6, 6])
 
@@ -19,7 +19,7 @@ struct PMDSheetTests {
         let spec = PMDAnimSpec(sheetName: "Sleep", frameWidth: 32, frameHeight: 40, durations: [30, 35])
         let sheet = try PMDSheet(image: image, spec: spec)
 
-        for facing in PMDFacing.allCases {
+        for facing in Facing.allCases {
             #expect(sheet.frames(facing: facing).map(SpriteFixtures.cell) == [Cell(column: 0, row: 0), Cell(column: 1, row: 0)])
         }
     }

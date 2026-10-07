@@ -59,11 +59,10 @@ struct NotchRootView: View {
 
     private func pose(expanded: Bool) -> SpritePose {
         let behaviour = model.snapshot.behaviour
-        var pose = SpritePose(frames: model.snapshot.frames)
-        if case .watching(let gaze) = behaviour { pose.gaze = gaze }
+        var pose = SpritePose(frames: model.snapshot.sprite?.loop)
+        if case .watching(let facing) = behaviour { pose.gaze = facing }
         if case .celebrating = behaviour { pose.celebrating = true }
         pose.tucked = behaviour == .sleeping && !expanded
-        pose.hopToken = presentation.hopToken
         pose.flashToken = model.snapshot.evolutionCount
         pose.fidgets = !pose.tucked
         return pose

@@ -30,10 +30,50 @@ struct FakeProvider: CreatureProvider {
         return species
     }
 
-    func sprite(for species: Species, state: SpriteState) async throws -> SpriteFrames {
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
+        SpriteFrames(frames: [Self.image()], durations: [0.1])
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        Self.image()
+    }
+
+    static func image() -> CGImage {
         let context = CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0,
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        return SpriteFrames(frames: [context.makeImage()!], frameDuration: 0.1)
+        return context.makeImage()!
+    }
+}
+
+/// Serves directional frames and records every sprite request.
+final class RecordingProvider: CreatureProvider, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [String] = []
+    let starterIDs = [904]
+
+    var requests: [String] { lock.withLock { recorded } }
+
+    func species(id: Int) async throws -> Species {
+        try await FakeProvider().species(id: id)
+    }
+
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
+        lock.withLock { recorded.append("\(state)/\(facing)") }
+        return SpriteFrames(frames: [FakeProvider.image()], durations: [0.1], directional: true, loops: state == .idle || state == .sleeping)
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        FakeProvider.image()
+    }
+}
+
+final class IdleClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: TimeInterval = 0
+
+    var seconds: TimeInterval {
+        get { lock.withLock { current } }
+        set { lock.withLock { current = newValue } }
     }
 }
 
@@ -131,6 +171,59 @@ struct EngineTests {
         await engine.resetForNewStarter()
         #expect(store.load().progress == nil)
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: nil))
+    }
+
+    @Test func watchingSwapsToTheFacingRowAndFetchesEachRowOnce() async throws {
+        let provider = RecordingProvider()
+        let engine = await started(engine(provider: provider), choosing: 904)
+        await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
+        let watching = await engine.currentSnapshot
+        #expect(watching.behaviour == .watching(facing: .downLeft))
+        #expect(watching.sprite?.facing == .downLeft)
+        await engine.cursorMoved(offset: CursorOffset(dx: 60, dy: -60))
+        await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
+        #expect(await engine.currentSnapshot.sprite?.facing == .downLeft)
+        #expect(provider.requests == ["idle/down", "idle/downLeft", "idle/downRight"])
+    }
+
+    @Test func cursorEnteringTheNotchPlaysHopOverTheLoop() async throws {
+        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
+        await engine.cursorEnteredNotch()
+        let first = try #require(await engine.currentSnapshot.sprite?.oneShot)
+        #expect(first.state == .hop)
+        #expect(!first.frames.loops)
+        await engine.cursorEnteredNotch()
+        #expect(await engine.currentSnapshot.sprite?.oneShot?.serial == first.serial + 1)
+    }
+
+    @Test func fallingAsleepLoopsSleepAndWakingPlaysWake() async throws {
+        let idle = IdleClock()
+        let provider = RecordingProvider()
+        let engine = CreatureEngine(
+            provider: provider,
+            store: store,
+            notesURL: directory.appendingPathComponent("notes.md"),
+            idleSeconds: { idle.seconds },
+            now: { [clock] in clock.now },
+            sleepAfter: 5
+        )
+        await engine.start()
+        await engine.chooseStarter(904)
+        idle.seconds = 6
+        await engine.sample()
+        let asleep = await engine.currentSnapshot
+        #expect(asleep.behaviour == .sleeping)
+        #expect(asleep.sprite?.oneShot == nil)
+        #expect(provider.requests.last == "sleeping/down")
+        idle.seconds = 0
+        await engine.sample()
+        #expect(await engine.currentSnapshot.sprite?.oneShot?.state == .wake)
+    }
+
+    @Test func levelUpPlaysTheCelebrationOneShot() async {
+        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
+        await engine.award(200)
+        #expect(await engine.currentSnapshot.sprite?.oneShot?.state == .celebrating)
     }
 
     @Test func notesAppendToTheNotesFile() async throws {

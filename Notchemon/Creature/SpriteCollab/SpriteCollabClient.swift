@@ -38,7 +38,7 @@ actor SpriteCollabClient {
         self.fetch = fetch
     }
 
-    func sprite(dex: Int, animation: PMDAnimation, facing: PMDFacing) async throws -> SpriteCollabSprite {
+    func sprite(dex: Int, animation: PMDAnimation, facing: Facing) async throws -> SpriteCollabSprite {
         let data = try await animData(dex: dex)
         guard let resolved = data.resolve(animation) else {
             throw SpriteCollabError.noAnimation(dex: dex, animation: animation)

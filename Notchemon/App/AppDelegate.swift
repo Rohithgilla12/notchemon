@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let debugSessionSecondsKey = "NotchemonDebugSessionSeconds"
+    static let debugSleepSecondsKey = "NotchemonDebugSleepSeconds"
 
     let presentation = NotchPresentation()
     let model: CompanionModel
@@ -10,11 +11,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
 
     override init() {
-        let override = UserDefaults.standard.double(forKey: Self.debugSessionSecondsKey)
+        let defaults = UserDefaults.standard
+        let sessionSeconds = defaults.double(forKey: Self.debugSessionSecondsKey)
+        let sleepSeconds = defaults.double(forKey: Self.debugSleepSecondsKey)
         let engine = CreatureEngine(
             provider: CreatureProviderFactory.make(),
             store: .standard,
-            sessionSecondsOverride: override > 0 ? override : nil
+            sessionSecondsOverride: sessionSeconds > 0 ? sessionSeconds : nil,
+            sleepAfter: sleepSeconds > 0 ? sleepSeconds : BehaviourRules.sleepAfter
         )
         model = CompanionModel(engine: engine)
         super.init()
@@ -35,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let centre = metrics.screenPoint(CGPoint(x: frame.midX, y: frame.midY), panelFrame: layout.expanded)
             model.cursorMoved(to: point, spriteCentre: centre)
         }
+        controller.onCursorEnteredNotch = { [model] in model.cursorEnteredNotch() }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
         }

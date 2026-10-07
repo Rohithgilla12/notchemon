@@ -15,7 +15,7 @@ final class CompanionModel {
     @ObservationIgnored var onChoosingStarter: (() -> Void)?
 
     @ObservationIgnored private let engine: CreatureEngine
-    @ObservationIgnored private var lastSentOffset: Double??
+    @ObservationIgnored private var lastSentFacing: Facing??
 
     init(engine: CreatureEngine) {
         self.engine = engine
@@ -104,15 +104,18 @@ final class CompanionModel {
         Task { await engine.removeFromStash(url) }
     }
 
-    /// Forwards the cursor only when what the creature would do changes, so
-    /// mouse movement far from the notch costs no actor hops.
+    /// Forwards the cursor only when the facing it implies changes, so mouse
+    /// movement far from the notch costs no actor hops.
     func cursorMoved(to point: CGPoint, spriteCentre: CGPoint) {
-        let dx = point.x - spriteCentre.x
-        let dy = point.y - spriteCentre.y
-        let near = (dx * dx + dy * dy).squareRoot() <= BehaviourRules.watchRadius
-        let offset: Double? = near ? (Double(dx) / 30).rounded() * 30 : nil
-        guard lastSentOffset != .some(offset) else { return }
-        lastSentOffset = .some(offset)
-        Task { await engine.cursorMoved(offsetX: offset) }
+        let offset = CursorOffset(dx: point.x - spriteCentre.x, dy: point.y - spriteCentre.y)
+        let near = (offset.dx * offset.dx + offset.dy * offset.dy).squareRoot() <= BehaviourRules.watchRadius
+        let facing: Facing? = near ? .toward(dx: offset.dx, dy: offset.dy) : nil
+        guard lastSentFacing != .some(facing) else { return }
+        lastSentFacing = .some(facing)
+        Task { await engine.cursorMoved(offset: near ? offset : nil) }
+    }
+
+    func cursorEnteredNotch() {
+        Task { await engine.cursorEnteredNotch() }
     }
 }

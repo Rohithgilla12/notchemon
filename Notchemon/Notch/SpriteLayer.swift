@@ -59,11 +59,11 @@ final class SpriteLayer: CALayer {
         let filter: CALayerContentsFilter = frames.pixelated ? .nearest : .trilinear
         image.magnificationFilter = filter
         image.contents = first
-        if frames.isAnimated {
+        if frames.frames.count > 1 {
             let animation = CAKeyframeAnimation(keyPath: "contents")
             animation.values = frames.frames
             animation.calculationMode = .discrete
-            animation.duration = frames.frameDuration * Double(frames.frames.count)
+            animation.duration = frames.totalDuration
             animation.repeatCount = .infinity
             image.add(animation, forKey: "frames")
         } else {
@@ -78,13 +78,13 @@ final class SpriteLayer: CALayer {
 
     /// Sprites face left; a cursor to the right flips them, and the body
     /// leans a few points towards the cursor.
-    func gaze(_ gaze: Double?) {
-        let right = (gaze ?? 0) > 0.15
+    func gaze(_ facing: Facing?) {
+        let right = (facing?.horizontal ?? 0) > 0
         if right != facingRight {
             facingRight = right
             image.setAffineTransform(right ? CGAffineTransform(scaleX: -1, y: 1) : .identity)
         }
-        let lean = CGFloat(gaze ?? 0) * 3
+        let lean = CGFloat(facing?.horizontal ?? 0) * 3
         body.setValue(lean, forKeyPath: "transform.translation.x")
     }
 

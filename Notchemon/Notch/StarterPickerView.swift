@@ -38,8 +38,14 @@ private struct StarterButton: View {
     var body: some View {
         Button(action: choose) {
             VStack(spacing: 2) {
-                SpriteView(pose: SpritePose(frames: option.frames, fidgets: false))
-                    .frame(width: 60, height: 60)
+                Group {
+                    if let portrait = option.portrait {
+                        Image(decorative: portrait, scale: 1).resizable().interpolation(.high).scaledToFit()
+                    } else {
+                        Image(systemName: "questionmark").font(.system(size: 22)).foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .frame(width: 60, height: 60)
                 Text(option.species.name)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)

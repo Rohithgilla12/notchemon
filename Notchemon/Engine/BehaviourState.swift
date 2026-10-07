@@ -7,31 +7,32 @@ enum Celebration: Sendable, Equatable {
 
 enum Behaviour: Sendable, Equatable {
     case idle
-    /// `gaze` is -1 (look left) ... 1 (look right).
-    case watching(gaze: Double)
+    case watching(facing: Facing)
     case sleeping
     case holding
     case celebrating(Celebration)
 
-    var spriteState: SpriteState {
-        switch self {
-        case .idle, .watching: .idle
-        case .sleeping: .sleeping
-        case .holding: .happy
-        case .celebrating: .levelUp
-        }
+    var facing: Facing {
+        if case .watching(let facing) = self { facing } else { .down }
     }
+}
+
+/// The cursor relative to the sprite centre, in screen points with y up.
+struct CursorOffset: Sendable, Equatable {
+    var dx: Double
+    var dy: Double
 }
 
 /// Everything the behaviour depends on, sampled at one instant.
 struct BehaviourInputs: Sendable, Equatable {
     var secondsSinceInput: TimeInterval
-    /// Horizontal offset of the cursor from the sprite centre, when within range.
-    var cursorOffsetX: Double?
+    /// Present only while the cursor is within `BehaviourRules.watchRadius`.
+    var cursorOffset: CursorOffset?
     var secondsSinceCursorNear: TimeInterval
     var stashCount: Int
     var celebration: Celebration?
     var sleepEnabled: Bool
+    var sleepAfter: TimeInterval = BehaviourRules.sleepAfter
 }
 
 /// Behaviour is a pure function of its inputs; there is no hidden transition
@@ -43,12 +44,43 @@ enum BehaviourRules {
 
     static func resolve(_ input: BehaviourInputs) -> Behaviour {
         if let celebration = input.celebration { return .celebrating(celebration) }
-        if input.sleepEnabled, input.secondsSinceInput >= sleepAfter { return .sleeping }
-        if let dx = input.cursorOffsetX {
-            return .watching(gaze: max(-1, min(1, dx / watchRadius)))
+        if input.sleepEnabled, input.secondsSinceInput >= input.sleepAfter { return .sleeping }
+        if let offset = input.cursorOffset {
+            return .watching(facing: .toward(dx: offset.dx, dy: offset.dy))
         }
-        if input.secondsSinceCursorNear < watchLinger { return .watching(gaze: 0) }
+        if input.secondsSinceCursorNear < watchLinger { return .watching(facing: .down) }
         if input.stashCount > 0 { return .holding }
         return .idle
+    }
+}
+
+/// Something that interrupts the loop with a one-shot animation.
+enum SpriteCue: Sendable, Equatable {
+    case behaviourChanged(from: Behaviour, to: Behaviour)
+    case cursorEnteredNotch
+}
+
+/// The single place that decides which animation plays when.
+enum SpriteChoreography {
+    static func loop(for behaviour: Behaviour) -> SpriteState {
+        switch behaviour {
+        case .sleeping: .sleeping
+        // Stash icons already show holding, and celebrating is a one-shot
+        // over whatever loop the creature returns to.
+        case .idle, .watching, .holding, .celebrating: .idle
+        }
+    }
+
+    static func oneShot(for cue: SpriteCue) -> SpriteState? {
+        switch cue {
+        case .cursorEnteredNotch:
+            .hop
+        case .behaviourChanged(let previous, .celebrating(let celebration)) where previous != .celebrating(celebration):
+            .celebrating
+        case .behaviourChanged(.sleeping, let next) where next != .sleeping:
+            .wake
+        case .behaviourChanged:
+            nil
+        }
     }
 }
