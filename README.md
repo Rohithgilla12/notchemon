@@ -63,7 +63,7 @@ CI runs this check on every push. All app code talks to the `CreatureProvider` p
 
 ## Release
 
-Releases are Developer ID signed, notarised, and published on GitHub Releases only. `scripts/release.sh` builds the Release configuration, verifies the signature, zips the app, and notarises and staples it when credentials exist. It then prints the SHA-256 for `Casks/notchemon.rb`. Pushing a `v*` tag runs the same script in CI when the signing and App Store Connect secrets are set.
+Releases are Developer ID signed, notarised, and published on GitHub Releases only. To bump the version, edit `CFBundleShortVersionString` and `CFBundleVersion` in `project.yml`. XcodeGen generates `Notchemon/Info.plist` and the entitlements file from it, so neither is tracked. `scripts/release.sh` builds the Release configuration, verifies the signature, zips the app, and notarises and staples it when credentials exist. It then prints the SHA-256 for `Casks/notchemon.rb`. Pushing a `v*` tag runs the same script in CI when the signing and App Store Connect secrets are set.
 
 ## Credits
 

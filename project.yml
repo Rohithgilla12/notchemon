@@ -18,6 +18,8 @@ targets:
     type: application
     platform: macOS
     sources: [Notchemon]
+    # The single source for the version and entitlements. XcodeGen writes
+    # both files on generate, so neither is tracked.
     info:
       path: Notchemon/Info.plist
       properties:
