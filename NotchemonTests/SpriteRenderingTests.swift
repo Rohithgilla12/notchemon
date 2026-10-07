@@ -8,6 +8,20 @@ struct SpriteRenderingTests {
         #expect(SpriteRendering.keyTimes(for: [0.5]) == [0, 1])
     }
 
+    @Test func aLoopStartedAtItsRestFrameKeepsEachFrameWithItsDurationAndGroundPoint() {
+        let frames = (3...5).map { Self.frame(height: 10, opaque: 0...$0) }
+        let loop = SpriteFrames(
+            frames: frames, durations: [0.1, 0.5, 0.2], loops: false,
+            groundPoints: [CGPoint(x: 1, y: 1), CGPoint(x: 2, y: 2), CGPoint(x: 3, y: 3)]
+        )
+        let once = loop.starting(at: 1)
+        #expect(once.frames.map(ObjectIdentifier.init) == [frames[1], frames[2], frames[0]].map(ObjectIdentifier.init))
+        #expect(once.durations == [0.5, 0.2, 0.1])
+        #expect(once.groundPoints == [CGPoint(x: 2, y: 2), CGPoint(x: 3, y: 3), CGPoint(x: 1, y: 1)])
+        #expect(!once.loops)
+        #expect(loop.starting(at: 0).durations == loop.durations)
+    }
+
     @Test func pixelArtAimsForFortyPointsInTheCollapsedPeekInWholeScreenPixels() {
         let peek = NotchGeometry.peekHeight
         #expect(SpriteRendering.pointsPerPixel(visibleHeight: 20, boxHeight: peek, backingScale: 2, pixelated: true) == 2)
@@ -122,7 +136,7 @@ struct SpriteRenderingTests {
         )
         let idle = SpriteFrames(frames: [Self.frame(height: 56, opaque: 8...32)], durations: [1], groundPoints: [CGPoint(x: 2, y: 32)])
         let bounds = SpriteRendering.bounds(rest: idle, anims: [.idle: [.down: idle], .wake: [.down: wake]])
-        let placement = SpriteRendering.placement(bounds, fit: .contain, in: PanelMetrics.expandedSpriteSize, backingScale: 2, pixelated: true)
+        let placement = SpriteRendering.placement(bounds, fit: .contain, style: .calm, in: PanelMetrics.expandedSpriteSize, backingScale: 2, pixelated: true)
         let feet = { (frames: SpriteFrames, index: Int, lowestRow: Int) -> CGFloat in
             placement.centres(of: frames, mirrored: false)[index].y - (CGFloat(lowestRow + 1) - CGFloat(frames.frames[index].height) / 2) * placement.pointsPerPixel
         }
@@ -149,15 +163,28 @@ struct SpriteRenderingTests {
 
     @Test func peekSizesTheRestingCreatureAndStandsTheLowestRowItPlaysOnTheBottomEdge() {
         let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
-        let placement = SpriteRendering.placement(Self.measured, fit: .peek, in: box, backingScale: 2, pixelated: true)
+        let placement = SpriteRendering.placement(Self.measured, fit: .peek, style: .calm, in: box, backingScale: 2, pixelated: true)
         #expect(placement.pointsPerPixel == 1.5)
         // Idle and hop turned sideways reach 3 rows down; wake's 11 never plays here.
         #expect(placement.groundHeight == 4.5)
     }
 
+    @Test func aLyingTailBelowTheGroundMovesTheGroundLineOnlyWhenSitting() {
+        var anims = Self.measured.anims
+        anims[.sitting] = AnimBounds(footprint: Footprint(left: -12, right: 12, top: -14, bottom: 10), lift: 0)
+        let bounds = SpriteBounds(rest: Self.measured.rest, anims: anims, baseline: 0)
+        let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
+        let ground = { (style: IdleStyle) in
+            SpriteRendering.placement(bounds, fit: .peek, style: style, in: box, backingScale: 2, pixelated: true).groundHeight
+        }
+        #expect(ground(.calm) == 4.5)
+        #expect(ground(.lively) == 4.5)
+        #expect(ground(.sitting) == 15)
+    }
+
     @Test func containRaisesTheGroundOverTheDeepestDipAndLeavesTheHopOut() {
         let box = PanelMetrics.expandedSpriteSize
-        let placement = SpriteRendering.placement(Self.measured, fit: .contain, in: box, backingScale: 2, pixelated: true)
+        let placement = SpriteRendering.placement(Self.measured, fit: .contain, style: .calm, in: box, backingScale: 2, pixelated: true)
         // Idle's head 29 rows up and wake's tail 11 rows down: 40 rows in 120 pt.
         // The 59 rows from the hop's arc down to that tail would allow only 2.
         #expect(placement.pointsPerPixel == 3)
@@ -174,7 +201,7 @@ struct SpriteRenderingTests {
         let bounds = SpriteBounds(rest: anim.footprint, anims: [.idle: anim], baseline: 0)
         let box = PanelMetrics.expandedSpriteSize
         for pixelated in [true, false] {
-            let placement = SpriteRendering.placement(bounds, fit: .contain, in: box, backingScale: 2, pixelated: pixelated)
+            let placement = SpriteRendering.placement(bounds, fit: .contain, style: .calm, in: box, backingScale: 2, pixelated: pixelated)
             let points = placement.pointsPerPixel
             // y up from the slot's bottom edge; footprint rows count downwards.
             let lowest = placement.groundHeight - CGFloat(anim.footprint.bottom) * points

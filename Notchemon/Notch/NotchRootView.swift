@@ -63,8 +63,9 @@ struct NotchRootView: View {
             show: model.snapshot.sprite,
             tucked: tucked,
             flashToken: model.snapshot.evolutionCount,
-            fidgets: !tucked,
-            fit: expanded ? .contain : .peek
+            fidgets: model.snapshot.preferences.fidgets && !tucked,
+            fit: expanded ? .contain : .peek,
+            idleStyle: model.snapshot.preferences.idleStyle
         )
     }
 

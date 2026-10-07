@@ -126,11 +126,18 @@ struct SpriteChoreographyTests {
     }
 
     @Test func theOpenPanelNeverHops() {
-        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake, .sitting])
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true, style: .calm) } == [.idle, .sleeping, .celebrating, .wake])
     }
 
     @Test func belowTheNotchTheCreatureNeverPlaysWakeOrSleepInSight() {
-        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false) } == [.idle, .celebrating, .hop, .sitting])
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false, style: .calm) } == [.idle, .celebrating, .hop])
+    }
+
+    @Test(arguments: [true, false])
+    func onlyTheSittingStyleCountsTheSittingAnim(panelExpanded: Bool) {
+        #expect(SpriteChoreography.plays(.sitting, panelExpanded: panelExpanded, style: .sitting))
+        #expect(!SpriteChoreography.plays(.sitting, panelExpanded: panelExpanded, style: .calm))
+        #expect(!SpriteChoreography.plays(.sitting, panelExpanded: panelExpanded, style: .lively))
     }
 
     @Test(arguments: [

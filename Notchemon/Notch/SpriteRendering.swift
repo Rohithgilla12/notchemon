@@ -69,6 +69,20 @@ struct SpritePlacement: Equatable {
     }
 }
 
+extension SpriteFrames {
+    /// The same loop begun at frame `start`, so one pass from a held frame
+    /// ends where it began.
+    func starting(at start: Int) -> SpriteFrames {
+        func rotated<Element>(_ elements: [Element]) -> [Element] {
+            Array(elements[start...] + elements[..<start])
+        }
+        return SpriteFrames(
+            frames: rotated(frames), durations: rotated(durations), pixelated: pixelated, directional: directional,
+            loops: loops, attribution: attribution, groundPoints: groundPoints.map(rotated)
+        )
+    }
+}
+
 /// The pure arithmetic behind `SpriteLayer`.
 enum SpriteRendering {
     /// Key times for a discrete keyframe animation. Frame `i` shows from
@@ -145,8 +159,10 @@ enum SpriteRendering {
     /// The ground line sits as far above the box's bottom edge as the lowest
     /// pixel of any anim the mode plays reaches below it, so that pixel
     /// touches the edge and nothing the mode plays drops out of the box.
-    static func placement(_ bounds: SpriteBounds, fit: SpriteFit, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> SpritePlacement {
-        let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: fit == .contain) }.values
+    static func placement(
+        _ bounds: SpriteBounds, fit: SpriteFit, style: IdleStyle, in box: CGSize, backingScale: CGFloat, pixelated: Bool
+    ) -> SpritePlacement {
+        let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: fit == .contain, style: style) }.values
         let anims = [AnimBounds(footprint: bounds.rest, lift: 0)] + played
         let lowest = anims.map(\.footprint.bottom).max() ?? bounds.rest.bottom
         let points = switch fit {

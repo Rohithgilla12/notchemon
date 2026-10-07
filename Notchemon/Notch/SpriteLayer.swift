@@ -8,6 +8,7 @@ final class SpriteLayer: CALayer {
     private let image = CALayer()
     private let flashGlow = CAGradientLayer()
     private var loop: SpriteFrames?
+    private var playback = LoopPlayback.cycle
     private var loopStart: CFTimeInterval = 0
     private var speciesBounds: SpriteBounds?
     private var placement: SpritePlacement?
@@ -28,6 +29,10 @@ final class SpriteLayer: CALayer {
             if let playing, playing.ends > CACurrentMediaTime(), !plays(playing.state) { stopOneShot() }
             setNeedsLayout()
         }
+    }
+
+    var idleStyle = IdleStyle.calm {
+        didSet { if idleStyle != oldValue { setNeedsLayout() } }
     }
 
     override init() {
@@ -73,6 +78,7 @@ final class SpriteLayer: CALayer {
         let placement = SpriteRendering.placement(
             speciesBounds,
             fit: fit,
+            style: idleStyle,
             in: bounds.size,
             backingScale: backingScale,
             pixelated: loop.pixelated
@@ -80,9 +86,9 @@ final class SpriteLayer: CALayer {
         self.placement = placement
         image.contentsScale = 1 / placement.pointsPerPixel
         let centres = placement.centres(of: loop, mirrored: mirrored)
-        image.position = position(centres[0])
         image.removeAnimation(forKey: "loopStand")
-        if centres.contains(where: { $0 != centres[0] }) {
+        image.position = position(centres[playback == .hold ? SpriteChoreography.restFrame(loop.durations) : 0])
+        if playback == .cycle, centres.contains(where: { $0 != centres[0] }) {
             let stand = stand(loop, at: centres)
             stand.beginTime = loopStart
             stand.repeatCount = .infinity
@@ -127,7 +133,7 @@ final class SpriteLayer: CALayer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         speciesBounds = show.bounds
-        setLoop(show.loop)
+        setLoop(show.loop, playback: show.playback)
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         placeImage()
         CATransaction.commit()
@@ -140,17 +146,23 @@ final class SpriteLayer: CALayer {
     }
 
     /// A new facing of the same anim keeps the loop's phase, so turning to
-    /// follow the cursor never restarts the animation.
-    private func setLoop(_ frames: SpriteFrames) {
-        guard loop?.frames.first !== frames.frames.first else { return }
+    /// follow the cursor never restarts the animation. A held loop shows its
+    /// rest frame and nothing moves it.
+    private func setLoop(_ frames: SpriteFrames, playback: LoopPlayback) {
+        guard loop?.frames.first !== frames.frames.first || playback != self.playback else { return }
         let samePhase = loop?.durations == frames.durations && image.animation(forKey: "loop") != nil
         loop = frames
+        self.playback = playback
         let filter: CALayerContentsFilter = frames.pixelated ? .nearest : .trilinear
         image.magnificationFilter = filter
         image.minificationFilter = filter
-        image.contents = frames.frames[0]
         image.removeAnimation(forKey: "loop")
         image.removeAnimation(forKey: "bob")
+        if playback == .hold {
+            image.contents = frames.frames[SpriteChoreography.restFrame(frames.durations)]
+            return
+        }
+        image.contents = frames.frames[0]
         if frames.frames.count > 1 {
             if !samePhase { loopStart = CACurrentMediaTime() }
             let animation = Self.keyframes(frames)
@@ -175,12 +187,7 @@ final class SpriteLayer: CALayer {
     private func play(_ oneShot: OneShot) {
         guard plays(oneShot.state) else { return }
         guard oneShot.frames.loops else {
-            let animation = Self.keyframes(oneShot.frames)
-            animation.beginTime = CACurrentMediaTime()
-            image.add(animation, forKey: "oneShot")
-            self.oneShot = (animation, oneShot.frames, animation.beginTime + animation.duration)
-            playing = (oneShot.state, animation.beginTime + animation.duration)
-            standOneShot()
+            playOnce(oneShot.frames, as: oneShot.state)
             return
         }
         let duration = switch oneShot.state {
@@ -192,8 +199,17 @@ final class SpriteLayer: CALayer {
         playing = (oneShot.state, CACurrentMediaTime() + duration)
     }
 
+    private func playOnce(_ frames: SpriteFrames, as state: SpriteState) {
+        let animation = Self.keyframes(frames)
+        animation.beginTime = CACurrentMediaTime()
+        image.add(animation, forKey: "oneShot")
+        oneShot = (animation, frames, animation.beginTime + animation.duration)
+        playing = (state, animation.beginTime + animation.duration)
+        standOneShot()
+    }
+
     private func plays(_ state: SpriteState) -> Bool {
-        SpriteChoreography.plays(state, panelExpanded: fit == .contain)
+        SpriteChoreography.plays(state, panelExpanded: fit == .contain, style: idleStyle)
     }
 
     /// A one-shot this mode never plays would leave its box when the panel
@@ -261,9 +277,16 @@ final class SpriteLayer: CALayer {
         return jumps.duration
     }
 
-    /// The idle blink-or-shift: a quick squash or a small sidestep.
+    /// A held loop plays through once from its rest frame and comes back to
+    /// it. Otherwise, or with a single frame to hold, the creature gives a
+    /// quick squash or a small sidestep. Nothing cuts into a one-shot.
     func fidget() {
         guard !tucked else { return }
+        if playback == .hold, let loop, loop.frames.count > 1 {
+            guard (playing?.ends ?? 0) <= CACurrentMediaTime() else { return }
+            playOnce(loop.starting(at: SpriteChoreography.restFrame(loop.durations)), as: .idle)
+            return
+        }
         let animation: CAKeyframeAnimation
         if Bool.random() {
             animation = CAKeyframeAnimation(keyPath: "transform.scale.y")
