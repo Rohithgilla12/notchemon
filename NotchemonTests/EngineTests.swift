@@ -45,7 +45,7 @@ struct FakeProvider: CreatureProvider {
     }
 }
 
-/// Serves directional frames, credited to the row they came from, and
+/// Serves directional frames, attributed to the row they came from, and
 /// records every sprite request.
 final class RecordingProvider: CreatureProvider, @unchecked Sendable {
     private let lock = NSLock()
@@ -65,7 +65,7 @@ final class RecordingProvider: CreatureProvider, @unchecked Sendable {
             durations: [0.1],
             directional: true,
             loops: state == .idle || state == .sleeping,
-            credits: ["\(state)/\(facing)"]
+            attribution: Attribution(authors: ["\(state)/\(facing)"], source: "test", license: "test", url: URL(string: "https://example.test")!)
         )
     }
 
@@ -293,10 +293,10 @@ struct EngineTests {
         let watching = await engine.currentSnapshot
         #expect(watching.behaviour == .watching(facing: .downLeft))
         #expect(watching.sprite?.facing == .downLeft)
-        #expect(watching.sprite?.loop.credits == ["idle/downLeft"])
+        #expect(watching.sprite?.loop.attribution?.authors == ["idle/downLeft"])
         await engine.cursorMoved(offset: CursorOffset(dx: 60, dy: -60))
         await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
-        #expect(await engine.currentSnapshot.sprite?.loop.credits == ["idle/downLeft"])
+        #expect(await engine.currentSnapshot.sprite?.loop.attribution?.authors == ["idle/downLeft"])
         #expect(provider.requests.count == Set(provider.requests).count)
     }
 
@@ -342,7 +342,7 @@ struct EngineTests {
         let asleep = await engine.currentSnapshot
         #expect(asleep.behaviour == .sleeping)
         #expect(asleep.sprite?.oneShot == nil)
-        #expect(asleep.sprite?.loop.credits == ["sleeping/down"])
+        #expect(asleep.sprite?.loop.attribution?.authors == ["sleeping/down"])
         idle.seconds = 0
         await engine.sample()
         #expect(await engine.currentSnapshot.sprite?.oneShot?.state == .wake)

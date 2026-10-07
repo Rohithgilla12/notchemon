@@ -20,6 +20,7 @@ enum SpriteCollabEndpoint {
     }
 
     static let creditNames = root.appending(path: "credit_names.txt")
+    static let project = URL(string: "https://github.com/PMDCollab/SpriteCollab")!
 
     static func dex4(_ dex: Int) -> String {
         String(format: "%04d", dex)

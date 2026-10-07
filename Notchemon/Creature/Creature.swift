@@ -59,6 +59,17 @@ enum Facing: Int, Sendable, CaseIterable {
     }
 }
 
+/// Who made a sprite and on what terms. The provider supplies it so the view
+/// names no artwork source of its own.
+struct Attribution: Sendable, Equatable {
+    /// Display names where known, raw ids otherwise; may be empty when the
+    /// source credits no one for this sprite.
+    let authors: [String]
+    let source: String
+    let license: String
+    let url: URL
+}
+
 /// One animation: a frame per entry in `durations`.
 struct SpriteFrames: Sendable {
     let frames: [CGImage]
@@ -71,17 +82,17 @@ struct SpriteFrames: Sendable {
     /// False only for a dedicated one-shot anim that carries its own motion.
     /// A looping fallback asks the renderer to add the motion itself.
     let loops: Bool
-    /// Artists to credit wherever these frames are shown; empty when none apply.
-    let credits: [String]
+    /// Shown wherever these frames are; nil when the provider owes no credit.
+    let attribution: Attribution?
 
-    init(frames: [CGImage], durations: [TimeInterval], pixelated: Bool = true, directional: Bool = false, loops: Bool = true, credits: [String] = []) {
+    init(frames: [CGImage], durations: [TimeInterval], pixelated: Bool = true, directional: Bool = false, loops: Bool = true, attribution: Attribution? = nil) {
         precondition(!frames.isEmpty && frames.count == durations.count, "one duration per frame")
         self.frames = frames
         self.durations = durations
         self.pixelated = pixelated
         self.directional = directional
         self.loops = loops
-        self.credits = credits
+        self.attribution = attribution
     }
 
     var totalDuration: TimeInterval { durations.reduce(0, +) }

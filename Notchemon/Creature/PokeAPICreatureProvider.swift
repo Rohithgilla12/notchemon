@@ -35,7 +35,7 @@ struct PokeAPICreatureProvider: CreatureProvider {
                 durations: sprite.durations,
                 directional: true,
                 loops: !ownMotion,
-                credits: sprite.authors
+                attribution: sprite.attribution
             )
         }
         for url in try await sources(of: species).animations {

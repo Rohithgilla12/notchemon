@@ -88,8 +88,8 @@ private struct ToolsColumn: View {
                 .focused($noteFocused)
                 .onSubmit { model.submitNote() }
             StashRow(model: model)
-            if let credits = model.snapshot.sprite?.loop.credits, !credits.isEmpty {
-                SpriteCreditLine(authors: credits)
+            if let attribution = model.snapshot.sprite?.loop.attribution {
+                SpriteCreditLine(attribution: attribution)
             }
         }
         .task(id: presentation.noteFocusRequested) {
@@ -156,25 +156,29 @@ private struct StashRow: View {
     }
 }
 
-/// CC BY-NC requires attribution wherever the sprite is shown.
+/// Licences like CC BY-NC require attribution wherever the sprite is shown.
 private struct SpriteCreditLine: View {
-    static let source = URL(string: "https://github.com/PMDCollab/SpriteCollab")!
-    let authors: [String]
+    let attribution: Attribution
 
     var body: some View {
-        let names = authors.joined(separator: ", ")
+        let names = attribution.authors.joined(separator: ", ")
+        let terms = "\(attribution.source) (\(attribution.license))"
         Button {
-            NSWorkspace.shared.open(Self.source)
+            NSWorkspace.shared.open(attribution.url)
         } label: {
             HStack(spacing: 0) {
-                Text("Sprite by \(names)").lineLimit(1).truncationMode(.tail)
-                Text(" · SpriteCollab (CC BY-NC 4.0)").fixedSize()
+                if names.isEmpty {
+                    Text("Sprite from \(terms)").fixedSize()
+                } else {
+                    Text("Sprite by \(names)").lineLimit(1).truncationMode(.tail)
+                    Text(" · \(terms)").fixedSize()
+                }
             }
             .font(.system(size: 9))
             .foregroundStyle(.white.opacity(0.4))
         }
         .buttonStyle(.plain)
-        .help("Sprite by \(names). Opens the SpriteCollab project page.")
+        .help(names.isEmpty ? "Opens the \(attribution.source) project page." : "Sprite by \(names). Opens the \(attribution.source) project page.")
     }
 }
 
