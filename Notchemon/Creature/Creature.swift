@@ -21,6 +21,12 @@ struct SpriteFrames: @unchecked Sendable {
     var isAnimated: Bool { frames.count > 1 }
 }
 
+enum CreatureError: Error, Equatable {
+    /// The provider has no such species, for example after switching providers.
+    case unknownSpecies
+    case missingSprite
+}
+
 /// The only seam between app logic and any creature IP. App code must never
 /// reference a concrete provider outside `CreatureProviderFactory`.
 protocol CreatureProvider: Sendable {
