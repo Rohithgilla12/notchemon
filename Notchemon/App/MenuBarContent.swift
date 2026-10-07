@@ -26,6 +26,13 @@ struct MenuBarContent: View {
             }
             .pickerStyle(.inline)
             Divider()
+            Picker("Wander", selection: preference(\.wander)) {
+                Text("Off").tag(WanderRange.off)
+                Text("Near the Notch").tag(WanderRange.nearNotch)
+                Text("Across the Top Edge").tag(WanderRange.topEdge)
+            }
+            .pickerStyle(.inline)
+            Divider()
             Toggle("Hop When Cursor Comes Near", isOn: preference(\.hopsOnApproach))
             Toggle("Fidgets", isOn: preference(\.fidgets))
         }

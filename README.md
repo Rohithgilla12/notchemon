@@ -1,6 +1,6 @@
 # Notchemon
 
-A small creature lives in your MacBook notch. It peeks out from under the notch, watches your cursor, naps when you step away, and grows when you finish focused work. Hover the notch and it opens into a panel with a focus timer, a quick-note field, and a five-slot file stash.
+A small creature lives in your MacBook notch. It peeks out from under the notch, wanders along the top of the screen, watches your cursor, naps when you step away, and grows when you finish focused work. Hover the notch and it opens into a panel with a focus timer, a quick-note field, and a five-slot file stash.
 
 Notchemon is free, open source, and local. It has no accounts, no telemetry, and no paid tier.
 
@@ -9,11 +9,13 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 ## Features
 
 - **A creature in the notch.** On first launch the notch opens and offers four starters, shown as large portraits. The app fetches species data live from [PokéAPI](https://pokeapi.co) and animated sprites from [SpriteCollab](https://github.com/PMDCollab/SpriteCollab), and caches both in `~/Library/Application Support/Notchemon/Cache/`. Later launches work offline. A species or animation that SpriteCollab lacks falls back to PokéAPI's own animated sprite.
-- **Behaviour.** The creature fidgets every 5 to 15 seconds. When the cursor is within 150 pt, it turns to face it in any of eight directions. It hops when the cursor comes within that distance of the closed notch, at most once every 4 seconds, and strikes a pose when it levels up. After 10 minutes without input it ducks up into the notch to sleep, and any input wakes it and brings it back out.
+- **Behaviour.** The creature fidgets every 5 to 15 seconds. When the cursor is within 150 pt of it, it turns to face it in any of eight directions. It hops when the cursor first comes that close while the notch is closed, at most once every 4 seconds. It strikes a pose when it levels up. After 10 minutes without input it walks home and ducks up into the notch to sleep, and any input wakes it and brings it back out.
+- **Wandering.** While the notch is closed, the creature walks along the strip just below the menu bar. It rests for 4 to 15 seconds, then walks at least 60 pt to a new spot, and sometimes back to the notch. It always stays fully on the screen that has the notch. Clicks anywhere in that strip outside the notch reach the menu bar and apps as usual. The creature goes home during a focus session or when you open the notch, and it stays under the notch over full-screen apps. When the cursor comes within 150 pt of the notch, the creature runs home to greet it.
 - **Motion settings.** Use the menu bar's Motion submenu to choose how much the creature moves. Changes apply at once and persist.
   - **Calm** (the default): the creature stands still on its idle pose. Each fidget plays its idle animation once.
   - **Lively**: the creature loops its idle animation. For some species, that animation is a hop about once a second.
   - **Sitting**: the creature lies down where its sprite set has a lying pose. Otherwise it stands calm.
+  - **Wander** sets how far the creature walks. **Across the Top Edge** (the default) uses the whole width of the screen, **Near the Notch** keeps it within 200 pt of the notch, and **Off** keeps it under the notch.
   - **Hop When Cursor Comes Near** and **Fidgets** turn those motions off.
 - **Expanding notch.** Hover the notch, or press ⌃⌥N anywhere, and the notch springs open. It closes 0.5 seconds after the cursor leaves. ⌃⌥N toggles it, and Escape closes it while the note field has focus. While the notch is closed, menu-bar icons beside it stay clickable.
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger.
