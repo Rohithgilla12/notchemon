@@ -67,13 +67,40 @@ enum Fixtures {
     }}
     """.utf8)
 
-    static func pokemonJSON(id: Int, animated: URL?, still: URL?) -> Data {
+    static func pokemonJSON(
+        id: Int,
+        showdown: URL? = nil,
+        animated: URL? = nil,
+        still: URL? = nil,
+        home: URL? = nil,
+        artwork: URL? = nil
+    ) -> Data {
         func json(_ url: URL?) -> String { url.map { "\"\($0.absoluteString)\"" } ?? "null" }
         return Data("""
         {"id": \(id), "name": "testmon",
          "sprites": {"front_default": \(json(still)),
+           "other": {"home": {"front_default": \(json(home))},
+                     "official-artwork": {"front_default": \(json(artwork))},
+                     "showdown": {"front_default": \(json(showdown))}},
            "versions": {"generation-v": {"black-white": {"animated": {"front_default": \(json(animated))}}}}}}
         """.utf8)
+    }
+
+    /// Idle and Hop with eight facing rows; Wake, Pose, and their fallbacks absent.
+    static func spriteCollab(dex: Int) -> [URL: Data] {
+        [
+            SpriteCollabEndpoint.animData(dex: dex): SpriteFixtures.animData("""
+            \(SpriteFixtures.anim("Idle", width: 10, height: 12, durations: [6, 12, 18]))
+            \(SpriteFixtures.anim("Hop", width: 10, height: 30, durations: [3, 3]))
+            """),
+            SpriteCollabEndpoint.sheet(dex: dex, name: "Idle"): SpriteFixtures.png(
+                SpriteFixtures.sheet(frameWidth: 10, frameHeight: 12, columns: 3, rows: 8)
+            ),
+            SpriteCollabEndpoint.sheet(dex: dex, name: "Hop"): SpriteFixtures.png(
+                SpriteFixtures.sheet(frameWidth: 10, frameHeight: 30, columns: 2, rows: 8)
+            ),
+            SpriteCollabEndpoint.credits(dex: dex): Data("t\tSTUDIO\tCUR\tU\tIdle\nt\tHOPPER\tCUR\tU\tHop".utf8),
+        ]
     }
 
     static func image(_ type: UTType, frames: Int, delay: Double = 0.08) -> Data {

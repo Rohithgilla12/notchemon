@@ -12,6 +12,8 @@ struct Species: Codable, Sendable, Equatable, Identifiable {
 /// `sleeping` loop; the rest are one-shots played over the loop.
 enum SpriteState: String, Sendable, CaseIterable {
     case idle, sleeping, celebrating, hop, wake
+
+    var loops: Bool { self == .idle || self == .sleeping }
 }
 
 /// Eight facings in the row order PMD-style sheets use, counter-clockwise

@@ -27,7 +27,18 @@ struct PokemonDTO: Decodable, Sendable {
 
             enum CodingKeys: String, CodingKey { case generationV = "generation-v" }
         }
+        struct Other: Decodable, Sendable {
+            struct Front: Decodable, Sendable {
+                let frontDefault: URL?
+            }
+            let home: Front?
+            let showdown: Front?
+            let officialArtwork: Front?
+
+            enum CodingKeys: String, CodingKey { case home, showdown, officialArtwork = "official-artwork" }
+        }
         let frontDefault: URL?
+        let other: Other?
         let versions: Versions?
     }
 
@@ -64,6 +75,14 @@ struct EvolutionChainDTO: Decodable, Sendable {
     let chain: Link
 }
 
+/// Where a species' images live, each list best first.
+struct SpriteSources: Sendable, Equatable {
+    /// Left-facing loops: Showdown GIF, then Gen 5 GIF, then the still sprite.
+    let animations: [URL]
+    /// Large smooth art: HOME render, then official artwork.
+    let portraits: [URL]
+}
+
 enum PokeAPIParser {
     static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -97,10 +116,16 @@ enum PokeAPIParser {
         return nil
     }
 
-    static func spriteURLs(_ pokemonJSON: Data) throws -> (animated: URL?, still: URL?) {
-        let pokemon = try decoder.decode(PokemonDTO.self, from: pokemonJSON)
-        let animated = pokemon.sprites.versions?.generationV?.blackWhite?.animated?.frontDefault
-        return (animated, pokemon.sprites.frontDefault)
+    static func spriteSources(_ pokemonJSON: Data) throws -> SpriteSources {
+        let sprites = try decoder.decode(PokemonDTO.self, from: pokemonJSON).sprites
+        return SpriteSources(
+            animations: [
+                sprites.other?.showdown?.frontDefault,
+                sprites.versions?.generationV?.blackWhite?.animated?.frontDefault,
+                sprites.frontDefault,
+            ].compactMap { $0 },
+            portraits: [sprites.other?.home?.frontDefault, sprites.other?.officialArtwork?.frontDefault].compactMap { $0 }
+        )
     }
 
     private static func find(_ id: Int, in link: EvolutionChainDTO.Link) -> EvolutionChainDTO.Link? {

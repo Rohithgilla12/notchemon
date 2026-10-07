@@ -36,26 +36,38 @@ struct OriginalCreatureProvider: CreatureProvider {
         return Species(id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel)
     }
 
+    /// The eyes follow the facing; the body is symmetric, so nothing else
+    /// changes. Every state is a gentle two-frame squash that loops, and the
+    /// renderer adds the hop, wake, and celebration motion.
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         guard let design = Self.roster[species.id] else { throw CreatureError.unknownSpecies }
-        let frames = [0.0, 1.0].compactMap { squash in Self.draw(design, state: state, squash: squash) }
+        let frames = [0.0, 1.0].compactMap { squash in
+            Self.draw(design, state: state, facing: facing, squash: squash, pixels: Self.canvas)
+        }
         guard !frames.isEmpty else { throw CreatureError.missingSprite }
         let duration = state == .celebrating ? 0.2 : 0.45
-        return SpriteFrames(frames: frames, durations: frames.map { _ in duration }, pixelated: false)
+        return SpriteFrames(frames: frames, durations: frames.map { _ in duration }, pixelated: false, directional: true)
     }
 
     func portrait(for species: Species) async throws -> CGImage {
-        throw CreatureError.missingSprite
+        guard let design = Self.roster[species.id] else { throw CreatureError.unknownSpecies }
+        guard let image = Self.draw(design, state: .idle, facing: .down, squash: 0, pixels: Self.portraitPixels) else {
+            throw CreatureError.missingSprite
+        }
+        return image
     }
 
     static let canvas = 96
+    static let portraitPixels = 384
 
-    static func draw(_ design: Design, state: SpriteState, squash: CGFloat) -> CGImage? {
+    /// Draws in `canvas` units onto a `pixels`-square bitmap.
+    static func draw(_ design: Design, state: SpriteState, facing: Facing, squash: CGFloat, pixels: Int) -> CGImage? {
         let side = CGFloat(canvas)
         guard let context = CGContext(
-            data: nil, width: canvas, height: canvas, bitsPerComponent: 8, bytesPerRow: 0,
+            data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
+        context.scaleBy(x: CGFloat(pixels) / side, y: CGFloat(pixels) / side)
 
         let scale = 0.62 + 0.13 * CGFloat(design.stage)
         let width = side * 0.62 * scale * (1 + 0.04 * squash)
@@ -69,7 +81,7 @@ struct OriginalCreatureProvider: CreatureProvider {
         context.fillEllipse(in: body)
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.25))
         context.fillEllipse(in: CGRect(x: body.midX - width * 0.22, y: body.minY + 4, width: width * 0.44, height: height * 0.35))
-        drawFace(on: body, state: state, in: context)
+        drawFace(on: body, state: state, facing: facing, in: context)
         return context.makeImage()
     }
 
@@ -103,7 +115,10 @@ struct OriginalCreatureProvider: CreatureProvider {
         }
     }
 
-    private static func drawFace(on body: CGRect, state: SpriteState, in context: CGContext) {
+    private static func drawFace(on body: CGRect, state: SpriteState, facing: Facing, in context: CGContext) {
+        // Row 0 faces the viewer (straight down); rows turn counter-clockwise.
+        let angle = (-90 + 45 * Double(facing.rawValue)) * .pi / 180
+        let look = facing == .down ? CGPoint.zero : CGPoint(x: 2 * cos(angle), y: 2 * sin(angle))
         let eyeY = body.minY + body.height * 0.55
         let spacing = body.width * 0.18
         let ink = CGColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1)
@@ -124,7 +139,7 @@ struct OriginalCreatureProvider: CreatureProvider {
                 context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
                 context.fillEllipse(in: CGRect(x: centre.x - 5, y: centre.y - 5, width: 10, height: 10))
                 context.setFillColor(ink)
-                context.fillEllipse(in: CGRect(x: centre.x - 2.5, y: centre.y - 3, width: 5, height: 6))
+                context.fillEllipse(in: CGRect(x: centre.x - 2.5 + look.x, y: centre.y - 3 + look.y, width: 5, height: 6))
             }
         }
     }
