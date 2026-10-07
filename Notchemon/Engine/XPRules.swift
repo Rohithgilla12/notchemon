@@ -10,6 +10,17 @@ struct Progress: Codable, Sendable, Equatable {
     }
 }
 
+extension Progress {
+    /// Only the species is required; any field added later must decode with
+    /// a default so older files keep their level and XP.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        speciesId = try container.decode(Int.self, forKey: .speciesId)
+        level = try container.decodeIfPresent(Int.self, forKey: .level) ?? XPRules.startingLevel
+        xp = try container.decodeIfPresent(Int.self, forKey: .xp) ?? 0
+    }
+}
+
 enum ProgressEvent: Sendable, Equatable {
     case levelledUp(to: Int)
     case evolves(from: Int, to: Int)

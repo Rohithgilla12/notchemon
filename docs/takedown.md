@@ -13,7 +13,7 @@ Use this plan if a rights holder asks for the creature content to be removed. On
 
 1. Reply to the notice and confirm that you will comply. Do not argue the merits.
 2. In `CreatureProviderFactory.swift`, make `OriginalCreatureProvider()` the default branch.
-3. Delete `PokeAPICreatureProvider.swift`, `PokeAPIModels.swift`, and the `Notchemon/Creature/SpriteCollab/` folder with its tests, and delete any README text that names either service, including the Credits section and the sprite credit line in `ExpandedView.swift`. Delete the `DataFetcher`, `DiskCache`, and `SpriteDecoder` files only if nothing else uses them.
+3. Delete `PokeAPICreatureProvider.swift`, `PokeAPIModels.swift`, and the `Notchemon/Creature/SpriteCollab/` folder with its tests, and delete any README text that names either service, including the Credits section. The sprite credit line needs no edit: it shows the attribution that the provider supplies, and the original provider supplies none. Delete the `DataFetcher`, `DiskCache`, and `SpriteDecoder` files only if nothing else uses them.
 4. To remove downloaded content from users' Macs, delete `AppPaths.cache` once at launch, for example in `AppDelegate.applicationDidFinishLaunching`.
 5. If the notice covers the name, rename the app. Update `project.yml`, the bundle display name, `README.md`, and `Casks/notchemon.rb`.
 6. Add an entry to `CHANGELOG.md`, bump the version, tag it, and let CI publish the release. Update the cask's `sha256`.

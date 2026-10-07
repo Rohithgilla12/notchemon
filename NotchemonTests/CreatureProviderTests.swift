@@ -29,6 +29,12 @@ struct DiskCacheTests {
             try await DiskCache(root: Fixtures.temporaryDirectory()).data(for: url, using: fetcher)
         }
     }
+
+    @Test func networkFetcherKeepsNoSecondCopy() {
+        let configuration = URLSessionFetcher().session.configuration
+        #expect(configuration.urlCache == nil)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalCacheData)
+    }
 }
 
 struct PokeAPIParsingTests {
@@ -99,7 +105,12 @@ struct PokeAPICreatureProviderTests {
         #expect(frames.directional)
         #expect(frames.pixelated)
         #expect(frames.loops)
-        #expect(frames.credits == ["STUDIO"])
+        #expect(frames.attribution == Attribution(
+            authors: ["STUDIO"],
+            source: "SpriteCollab",
+            license: "CC BY-NC 4.0",
+            url: URL(string: "https://github.com/PMDCollab/SpriteCollab")!
+        ))
         #expect(!fetcher.requests.contains(pokemonURL))
     }
 
@@ -107,7 +118,7 @@ struct PokeAPICreatureProviderTests {
         let frames = try await provider(StubFetcher(Fixtures.spriteCollab(dex: 901))).sprite(for: testmon, state: .hop, facing: .down)
         #expect(frames.frames.map(\.height) == [30, 30])
         #expect(!frames.loops)
-        #expect(frames.credits == ["HOPPER"])
+        #expect(frames.attribution?.authors == ["HOPPER"])
     }
 
     @Test func oneShotThatFellBackToIdleLoopsSoTheRendererAddsMotion() async throws {
@@ -128,7 +139,7 @@ struct PokeAPICreatureProviderTests {
         #expect(frames.durations.allSatisfy { abs($0 - 0.05) < 0.001 })
         #expect(!frames.directional)
         #expect(frames.loops)
-        #expect(frames.credits.isEmpty)
+        #expect(frames.attribution == nil)
         #expect(!fetcher.requests.contains(gif))
     }
 
@@ -181,7 +192,7 @@ struct PokeAPICreatureProviderTests {
         #expect(try await provider(fetcher, root: root).species(id: 901) == testmon)
         let offline = try await provider(fetcher, root: root).sprite(for: testmon, state: .idle, facing: .up)
         #expect(offline.frames.map(SpriteFixtures.cell) == (0..<3).map { Cell(column: $0, row: Facing.up.rawValue) })
-        #expect(offline.credits == ["STUDIO"])
+        #expect(offline.attribution?.authors == ["STUDIO"])
     }
 }
 
@@ -206,6 +217,7 @@ struct OriginalCreatureProviderTests {
                 #expect(frames.frames.count == 2)
                 #expect(frames.directional)
                 #expect(frames.loops)
+                #expect(frames.attribution == nil)
             }
         }
     }

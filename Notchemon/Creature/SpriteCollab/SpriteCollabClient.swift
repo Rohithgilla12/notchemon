@@ -12,6 +12,12 @@ struct SpriteCollabSprite: Sendable {
     let authors: [String]
 }
 
+extension SpriteCollabSprite {
+    var attribution: Attribution {
+        Attribution(authors: authors, source: "SpriteCollab", license: "CC BY-NC 4.0", url: SpriteCollabEndpoint.project)
+    }
+}
+
 enum SpriteCollabError: Error, Equatable {
     case noAnimation(dex: Int, animation: PMDAnimation)
     case undecodableImage(URL)

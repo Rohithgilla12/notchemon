@@ -99,7 +99,7 @@ actor CreatureEngine {
     init(
         provider: any CreatureProvider,
         store: StateStore,
-        bookmarks: any BookmarkCodec = SecurityScopedBookmarks(),
+        bookmarks: any BookmarkCodec = FileBookmarks(),
         notesURL: URL = AppPaths.notes,
         idleSeconds: @escaping @Sendable () -> TimeInterval = InputIdle.seconds,
         now: @escaping @Sendable () -> Date = Date.init,
@@ -249,6 +249,8 @@ actor CreatureEngine {
         while let species, let progress = state.progress,
               case .evolves(_, let targetID)? = XPRules.pendingEvolution(level: progress.level, species: species) {
             guard let target = try? await provider.species(id: targetID) else { return }
+            // Another entrant may have evolved, or reset, during the fetch.
+            guard state.progress?.speciesId == species.id else { continue }
             state.progress?.speciesId = targetID
             persist()
             forgetSprites()
@@ -321,7 +323,7 @@ actor CreatureEngine {
     private func refreshStash() {
         let (items, live) = FileStash.items(state.stash, codec: bookmarks)
         snapshot.stash = items
-        if live.count != state.stash.count {
+        if live != state.stash {
             state.stash = live
             persist()
         }
@@ -357,10 +359,6 @@ actor CreatureEngine {
         let behaviour = BehaviourRules.resolve(inputs)
         let previous = snapshot.behaviour
         if behaviour != previous {
-            if previous == .sleeping {
-                state.lastInteraction = instant
-                persist()
-            }
             snapshot.behaviour = behaviour
             await refreshLoop()
             publish()

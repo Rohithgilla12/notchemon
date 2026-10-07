@@ -45,7 +45,7 @@ struct FakeProvider: CreatureProvider {
     }
 }
 
-/// Serves directional frames, credited to the row they came from, and
+/// Serves directional frames, attributed to the row they came from, and
 /// records every sprite request.
 final class RecordingProvider: CreatureProvider, @unchecked Sendable {
     private let lock = NSLock()
@@ -65,7 +65,7 @@ final class RecordingProvider: CreatureProvider, @unchecked Sendable {
             durations: [0.1],
             directional: true,
             loops: state == .idle || state == .sleeping,
-            credits: ["\(state)/\(facing)"]
+            attribution: Attribution(authors: ["\(state)/\(facing)"], source: "test", license: "test", url: URL(string: "https://example.test")!)
         )
     }
 
@@ -98,6 +98,41 @@ struct TallHopProvider: CreatureProvider {
         context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: height - rows.upperBound - 1, width: 4, height: rows.count))
         return context.makeImage()!
+    }
+}
+
+/// Holds every lookup of `gatedID` until the test releases it, oldest first.
+final class GatedProvider: CreatureProvider, @unchecked Sendable {
+    let starterIDs = [901]
+    private let gatedID: Int
+    private let lock = NSLock()
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    init(gating id: Int) {
+        gatedID = id
+    }
+
+    var waiting: Int { lock.withLock { held.count } }
+
+    func releaseOldest() {
+        lock.withLock { held.removeFirst() }.resume()
+    }
+
+    func species(id: Int) async throws -> Species {
+        if id == gatedID {
+            await withCheckedContinuation { continuation in
+                lock.withLock { held.append(continuation) }
+            }
+        }
+        return try await FakeProvider().species(id: id)
+    }
+
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
+        try await FakeProvider().sprite(for: species, state: state, facing: facing)
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        FakeProvider.image()
     }
 }
 
@@ -195,8 +230,47 @@ struct EngineTests {
         #expect(portrait != nil)
     }
 
+    /// Loading and an award both find the same stage pending and both wait on
+    /// the fetch. The loser must not evolve it again or roll the winner back.
+    @Test func concurrentEntrantsEvolveEachStageOnce() async throws {
+        try store.save(CompanionState(progress: Progress(speciesId: 901, level: 7, xp: 0), totalFocusMinutes: 0, stash: []))
+        let provider = GatedProvider(gating: 902)
+        let engine = engine(provider: provider)
+        let loading = Task { await engine.start() }
+        try await until { provider.waiting == 1 }
+        let awarding = Task { await engine.award(0) }
+        try await until { provider.waiting == 2 }
+        provider.releaseOldest()
+        await loading.value
+        provider.releaseOldest()
+        await awarding.value
+        #expect(store.load().progress?.speciesId == 903)
+        #expect(await engine.currentSnapshot.evolutionCount == 2)
+    }
+
+    private func until(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(condition())
+    }
+
+    @Test func renamedStashFileIsRebookmarkedWhenTheStashLoads() async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let draft = directory.appendingPathComponent("draft.txt")
+        try Data("x".utf8).write(to: draft)
+        #expect(await started(engine()).addToStash([draft]))
+        let before = store.load().stash
+        try FileManager.default.moveItem(at: draft, to: directory.appendingPathComponent("final.txt"))
+        await engine().start()
+        let after = store.load().stash
+        #expect(after != before)
+        #expect(FileBookmarks().resolve(after[0])?.isStale == false)
+        #expect(FileBookmarks().resolve(after[0])?.url.lastPathComponent == "final.txt")
+    }
+
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
-        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, lastInteraction: .distantPast, stash: []))
+        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, stash: []))
         let engine = engine()
         await engine.start()
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: Progress(speciesId: 4242, level: 12, xp: 30)))
@@ -219,10 +293,10 @@ struct EngineTests {
         let watching = await engine.currentSnapshot
         #expect(watching.behaviour == .watching(facing: .downLeft))
         #expect(watching.sprite?.facing == .downLeft)
-        #expect(watching.sprite?.loop.credits == ["idle/downLeft"])
+        #expect(watching.sprite?.loop.attribution?.authors == ["idle/downLeft"])
         await engine.cursorMoved(offset: CursorOffset(dx: 60, dy: -60))
         await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
-        #expect(await engine.currentSnapshot.sprite?.loop.credits == ["idle/downLeft"])
+        #expect(await engine.currentSnapshot.sprite?.loop.attribution?.authors == ["idle/downLeft"])
         #expect(provider.requests.count == Set(provider.requests).count)
     }
 
@@ -275,7 +349,7 @@ struct EngineTests {
         let asleep = await engine.currentSnapshot
         #expect(asleep.behaviour == .sleeping)
         #expect(asleep.sprite?.oneShot == nil)
-        #expect(asleep.sprite?.loop.credits == ["sleeping/down"])
+        #expect(asleep.sprite?.loop.attribution?.authors == ["sleeping/down"])
         idle.seconds = 0
         await engine.sample()
         #expect(await engine.currentSnapshot.sprite?.oneShot?.state == .wake)
@@ -304,7 +378,6 @@ struct StateStoreTests {
         let state = CompanionState(
             progress: Progress(speciesId: 7, level: 9, xp: 120),
             totalFocusMinutes: 300,
-            lastInteraction: Date(timeIntervalSince1970: 1_800_000_000),
             stash: [Data([1, 2, 3])],
             preferences: Preferences(focusMinutes: 45, sleepEnabled: false, virtualNotchEnabled: false)
         )
@@ -322,6 +395,28 @@ struct StateStoreTests {
         let loaded = store.load()
         #expect(loaded.progress == .starter(1))
         #expect(loaded.preferences == Preferences())
+    }
+
+    @Test func preferencesMissingFieldsTakeDefaults() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"focusMinutes": 25}"#.utf8))
+        #expect(decoded == Preferences())
+    }
+
+    @Test func progressMissingFieldsTakeDefaults() throws {
+        let decoded = try JSONDecoder().decode(Progress.self, from: Data(#"{"speciesId": 7, "level": 9}"#.utf8))
+        #expect(decoded == Progress(speciesId: 7, level: 9, xp: 0))
+    }
+
+    @Test func partialNestedObjectsKeepTheRestOfTheState() throws {
+        try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"progress":{"speciesId":7,"level":9},"totalFocusMinutes":300,"stash":["AQID"],"preferences":{"sleepEnabled":false}}"#.utf8).write(to: store.url)
+        let loaded = store.load()
+        #expect(loaded.progress == Progress(speciesId: 7, level: 9, xp: 0))
+        #expect(loaded.totalFocusMinutes == 300)
+        #expect(loaded.stash == [Data([1, 2, 3])])
+        #expect(loaded.preferences == Preferences(focusMinutes: 25, sleepEnabled: false, virtualNotchEnabled: true))
+        let siblings = try FileManager.default.contentsOfDirectory(atPath: store.url.deletingLastPathComponent().path)
+        #expect(!siblings.contains { $0.hasPrefix("state.corrupt-") })
     }
 
     @Test func corruptFileIsSetAsideAndStartsFresh() throws {
@@ -409,13 +504,17 @@ struct QuickNoteTests {
 }
 
 struct FileStashTests {
-    /// Bookmarks are just the path bytes; files listed in `missing` no longer resolve.
+    /// Bookmarks are just the path bytes. Files listed in `missing` no longer
+    /// resolve; files in `moved` resolve, stale, at their new path.
     struct PathCodec: BookmarkCodec {
         var missing: Set<String> = []
+        var moved: [String: String] = [:]
         func bookmark(for url: URL) throws -> Data { Data(url.path.utf8) }
-        func resolve(_ bookmark: Data) -> URL? {
+        func resolve(_ bookmark: Data) -> ResolvedBookmark? {
             let path = String(decoding: bookmark, as: UTF8.self)
-            return missing.contains(path) ? nil : URL(fileURLWithPath: path)
+            if missing.contains(path) { return nil }
+            if let now = moved[path] { return ResolvedBookmark(url: URL(fileURLWithPath: now), isStale: true) }
+            return ResolvedBookmark(url: URL(fileURLWithPath: path), isStale: false)
         }
     }
 
@@ -445,5 +544,26 @@ struct FileStashTests {
         let (items, live) = FileStash.items(held, codec: PathCodec(missing: ["/tmp/a"]))
         #expect(items.map(\.name) == ["b"])
         #expect(live.count == 1)
+    }
+
+    @Test func staleBookmarksAreRecreatedAtTheNewPath() {
+        let held = FileStash.add(urls("a", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let (items, live) = FileStash.items(held, codec: PathCodec(moved: ["/tmp/a": "/tmp/renamed"]))
+        #expect(items.map(\.name) == ["renamed", "b"])
+        #expect(live == [Data("/tmp/renamed".utf8), Data("/tmp/b".utf8)])
+    }
+
+    @Test func renamingAFileMakesItsRealBookmarkStaleUntilRecreated() throws {
+        let directory = Fixtures.temporaryDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let draft = directory.appendingPathComponent("draft.txt")
+        try Data("x".utf8).write(to: draft)
+        let codec = FileBookmarks()
+        let held = [try codec.bookmark(for: draft)]
+        try FileManager.default.moveItem(at: draft, to: directory.appendingPathComponent("final.txt"))
+        #expect(codec.resolve(held[0])?.isStale == true)
+        let (items, live) = FileStash.items(held, codec: codec)
+        #expect(items.map(\.name) == ["final.txt"])
+        #expect(codec.resolve(live[0])?.isStale == false)
     }
 }

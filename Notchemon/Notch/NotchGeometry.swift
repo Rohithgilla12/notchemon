@@ -7,7 +7,6 @@ struct ScreenMetrics: Sendable, Equatable {
     var safeAreaTop: CGFloat
     var auxiliaryTopLeftWidth: CGFloat
     var auxiliaryTopRightWidth: CGFloat
-    var menuBarHeight: CGFloat
 }
 
 enum NotchKind: Sendable, Equatable { case hardware, virtual }

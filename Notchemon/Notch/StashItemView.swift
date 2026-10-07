@@ -57,7 +57,6 @@ final class StashItemNSView: NSView, NSDraggingSource {
         mouseDownEvent = nil
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
         item.setDraggingFrame(bounds, contents: icon)
-        _ = url.startAccessingSecurityScopedResource()
         beginDraggingSession(with: [item], event: event, source: self)
     }
 
@@ -66,7 +65,6 @@ final class StashItemNSView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        url.stopAccessingSecurityScopedResource()
         if !operation.isEmpty { onDraggedOut(url) }
     }
 }

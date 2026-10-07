@@ -26,6 +26,7 @@ xcodebuild build \
   -quiet
 
 app="$build_dir/Build/Products/Release/Notchemon.app"
+# Read from the built bundle, which XcodeGen filled from project.yml.
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 zip="$dist_dir/Notchemon-$version.zip"
 

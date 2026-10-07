@@ -9,7 +9,16 @@ enum FetchError: Error, Equatable {
 }
 
 struct URLSessionFetcher: DataFetcher {
-    var session: URLSession = .shared
+    var session: URLSession = Self.uncached
+
+    /// `DiskCache` already keeps every response, so a URLCache would only
+    /// hold a second copy.
+    static let uncached: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
 
     func data(from url: URL) async throws -> Data {
         let (data, response) = try await session.data(from: url)
