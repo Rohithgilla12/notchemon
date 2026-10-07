@@ -34,6 +34,7 @@ struct OneShot: Sendable {
 /// What the sprite view plays.
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
+    var loopState: SpriteState
     var facing: Facing
     var bounds: SpriteBounds
     var oneShot: OneShot?
@@ -428,6 +429,7 @@ actor CreatureEngine {
         else { return }
         snapshot.sprite = SpriteShow(
             loop: loop,
+            loopState: state,
             facing: behaviour.facing,
             bounds: bounds,
             oneShot: snapshot.sprite?.oneShot
@@ -462,16 +464,18 @@ actor CreatureEngine {
     private func bounds(of species: Species) async -> SpriteBounds? {
         if let spriteBounds { return spriteBounds }
         guard let rest = await frames(.idle, facing: .down, of: species) else { return nil }
-        var shown: [CGImage] = []
-        var seen = Set<ObjectIdentifier>()
+        var anims: [SpriteState: [SpriteFrames]] = [:]
         for state in SpriteState.allCases {
+            var seen = Set<ObjectIdentifier>()
             for facing in Facing.front {
-                guard let frames = await frames(state, facing: facing, of: species) else { continue }
-                shown += frames.frames.filter { seen.insert(ObjectIdentifier($0)).inserted }
+                guard let frames = await frames(state, facing: facing, of: species),
+                      seen.insert(ObjectIdentifier(frames.frames[0])).inserted
+                else { continue }
+                anims[state, default: []].append(frames)
             }
         }
         guard self.species?.id == species.id else { return nil }
-        let measured = SpriteRendering.bounds(rest: rest.frames, shown: shown)
+        let measured = SpriteRendering.bounds(rest: rest.frames, anims: anims)
         spriteBounds = measured
         return measured
     }

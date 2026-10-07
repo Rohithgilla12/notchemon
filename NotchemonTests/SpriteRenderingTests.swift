@@ -25,12 +25,6 @@ struct SpriteRenderingTests {
         #expect(SpriteRendering.pointsPerPixel(visibleHeight: 136, boxHeight: 44, backingScale: 2, pixelated: true) == 0.5)
     }
 
-    @Test func expandedSlotIsRoughlyTwoAndAHalfTimesTheCollapsedSize() {
-        let collapsed = SpriteRendering.pointsPerPixel(visibleHeight: 20, boxHeight: NotchGeometry.peekHeight, backingScale: 2, pixelated: true)
-        let expanded = SpriteRendering.pointsPerPixel(visibleHeight: 20, boxHeight: PanelMetrics.expandedSpriteSide, backingScale: 2, pixelated: true)
-        #expect(expanded / collapsed >= 2.2 && expanded / collapsed <= 2.6)
-    }
-
     @Test func smoothArtScalesToTheTargetExactly() {
         #expect(SpriteRendering.pointsPerPixel(visibleHeight: 80, boxHeight: 44, backingScale: 2, pixelated: false) == 0.5)
     }
@@ -59,66 +53,116 @@ struct SpriteRenderingTests {
         #expect(footprint.halfWidth == 6)
     }
 
-    @Test func boundsReachCoversEveryShownFrameAndRestStaysTheIdle() {
-        let idle = Self.frame(height: 10, opaque: 3...6)
-        let hop = Self.frame(height: 30, opaque: 2...16)
-        let bounds = SpriteRendering.bounds(rest: [idle], shown: [idle, hop])
-        #expect(bounds.rest == Footprint(left: -2, right: 2, top: -2, bottom: 2))
-        #expect(bounds.reach == Footprint(left: -2, right: 2, top: -13, bottom: 2))
+    @Test func eachAnimIsMeasuredAcrossItsFacingsWithTheLiftItBorrows() {
+        let idle = SpriteFrames(frames: [Self.frame(height: 10, opaque: 3...6), Self.frame(height: 10, opaque: 2...6)], durations: [1, 1])
+        let wakeDown = SpriteFrames(frames: [Self.frame(height: 20, opaque: 4...17)], durations: [1], loops: false)
+        let wakeLeft = SpriteFrames(frames: [Self.frame(width: 20, height: 20, opaque: 6...12, columns: 1...12)], durations: [1], loops: false)
+        let poseFallback = SpriteFrames(frames: [Self.frame(height: 10, opaque: 3...6), Self.frame(height: 10, opaque: 3...6)], durations: [1, 1])
+        let bounds = SpriteRendering.bounds(rest: idle.frames, anims: [.idle: [idle], .wake: [wakeDown, wakeLeft], .celebrating: [poseFallback]])
+        #expect(bounds.rest == Footprint(left: -2, right: 2, top: -3, bottom: 2))
+        #expect(bounds.anims[.idle] == AnimBounds(footprint: Footprint(left: -2, right: 2, top: -3, bottom: 2), lift: 0))
+        #expect(bounds.anims[.wake] == AnimBounds(footprint: Footprint(left: -9, right: 3, top: -6, bottom: 8), lift: 0))
+        #expect(bounds.anims[.celebrating] == AnimBounds(footprint: Footprint(left: -2, right: 2, top: -2, bottom: 2), lift: SpriteRendering.celebrationLift))
+        #expect(bounds.anims[.hop] == nil)
+    }
+
+    @Test func singleFrameLoopsBob() {
+        let still = SpriteFrames(frames: [Self.frame(height: 10, opaque: 3...6)], durations: [1])
+        #expect(SpriteRendering.lift(.idle, still) == SpriteRendering.bobLift)
+        #expect(SpriteRendering.lift(.hop, still) == SpriteRendering.hopLift + SpriteRendering.bobLift)
+    }
+
+    @Test func faintPixelsAreNotTheCreature() {
+        // Rows 3...6 are solid; rows 7...9 are a shadow at alpha 0.2.
+        let context = CGContext(data: nil, width: 4, height: 10, bitsPerComponent: 8, bytesPerRow: 16,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 0.2))
+        context.fill(CGRect(x: 0, y: 0, width: 4, height: 3))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 3, width: 4, height: 4))
+        #expect(SpriteRendering.footprint(of: [context.makeImage()!]) == Footprint(left: -2, right: 2, top: -2, bottom: 2))
     }
 
     @Test func transparentRestIsMeasuredByItsWholeFrame() {
-        let bounds = SpriteRendering.bounds(rest: [Self.frame(height: 8, opaque: nil)], shown: [])
+        let bounds = SpriteRendering.bounds(rest: [Self.frame(height: 8, opaque: nil)], anims: [:])
         #expect(bounds.rest == Footprint(left: -2, right: 2, top: -4, bottom: 4))
-        #expect(bounds.reach == bounds.rest)
+        #expect(bounds.anims.isEmpty)
     }
 
-    @Test func peekFitsTheRestingCreatureAndLetsTheReachRiseAbove() {
-        let bounds = SpriteBounds(
-            rest: Footprint(left: -20, right: 20, top: -25, bottom: 5),
-            reach: Footprint(left: -20, right: 20, top: -44, bottom: 15)
-        )
+    /// Shaped like a real species: idle 32 px tall with its feet 7 px below
+    /// the frame centre, a hop arc 51 px tall, and a wake whose first frame
+    /// reaches 15 px below the centre.
+    static let measured = SpriteBounds(
+        rest: Footprint(left: -14, right: 14, top: -25, bottom: 5),
+        anims: [
+            .idle: AnimBounds(footprint: Footprint(left: -20, right: 20, top: -25, bottom: 7), lift: 0),
+            .sleeping: AnimBounds(footprint: Footprint(left: -8, right: 16, top: -17, bottom: 7), lift: 0),
+            .celebrating: AnimBounds(footprint: Footprint(left: -11, right: 14, top: -20, bottom: 6), lift: 0),
+            .hop: AnimBounds(footprint: Footprint(left: -20, right: 20, top: -44, bottom: 7), lift: 0),
+            .wake: AnimBounds(footprint: Footprint(left: -18, right: 18, top: -18, bottom: 15), lift: 0),
+        ]
+    )
+
+    @Test func peekSizesTheRestingCreatureAndStandsEachAnimOnItsOwnLowestRow() {
         let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
-        let placement = SpriteRendering.placement(bounds, fit: .peek, in: box, backingScale: 2, pixelated: true)
-        #expect(placement == SpritePlacement(pointsPerPixel: 1.5, centreHeight: 7.5))
+        let placement = SpriteRendering.placement(Self.measured, fit: .peek, in: box, backingScale: 2, pixelated: true)
+        #expect(placement.pointsPerPixel == 1.5)
+        #expect(placement.centreHeight(of: .idle) == 10.5)
+        #expect(placement.centreHeight(of: .hop) == 10.5)
+        #expect(placement.centreHeight(of: .wake) == 22.5)
     }
 
-    /// Measured from the 100 pt panel slot: idle 30 px tall, a hop arc
-    /// reaching 44 px above the frame centre, and a wake anim lying 15 px below it.
+    @Test func containLeavesTheHopOutBecauseThePanelNeverPlaysIt() {
+        let box = PanelMetrics.expandedSpriteSize
+        let placement = SpriteRendering.placement(Self.measured, fit: .contain, in: box, backingScale: 2, pixelated: true)
+        // 33 wake rows at 3 pt fill 99 of 100 pt; the 51-row hop would allow only 1.5.
+        #expect(placement.pointsPerPixel == 3)
+        #expect(placement.centreHeight(of: .wake) == 45)
+        #expect(placement.centreHeight(of: .idle) == 21)
+    }
+
+    @Test func expandedCreatureIsAboutTwiceTheCollapsedOne() {
+        let peek = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
+        let collapsed = SpriteRendering.placement(Self.measured, fit: .peek, in: peek, backingScale: 2, pixelated: true)
+        let expanded = SpriteRendering.placement(Self.measured, fit: .contain, in: PanelMetrics.expandedSpriteSize, backingScale: 2, pixelated: true)
+        #expect(expanded.pointsPerPixel / collapsed.pointsPerPixel >= 2)
+        #expect(CGFloat(Self.measured.rest.height) * expanded.pointsPerPixel >= 90)
+    }
+
     @Test(arguments: [
-        Footprint(left: -20, right: 20, top: -44, bottom: 15),
-        Footprint(left: -14, right: 16, top: -37, bottom: 7),
-        Footprint(left: -40, right: 10, top: -10, bottom: 10),
-        Footprint(left: -3, right: 3, top: -5, bottom: 1),
+        AnimBounds(footprint: Footprint(left: -20, right: 20, top: -18, bottom: 15), lift: 0),
+        AnimBounds(footprint: Footprint(left: -14, right: 16, top: -37, bottom: 7), lift: 6),
+        AnimBounds(footprint: Footprint(left: -40, right: 10, top: -10, bottom: 10), lift: 2),
+        AnimBounds(footprint: Footprint(left: -3, right: 3, top: -5, bottom: 1), lift: 10),
     ])
-    func containKeepsEveryFrameAndTheRenderersMotionInsideTheSlot(reach: Footprint) {
-        let bounds = SpriteBounds(rest: reach, reach: reach)
-        let box = CGSize(width: PanelMetrics.expandedSpriteSide, height: PanelMetrics.expandedSpriteSide)
+    func containKeepsEachAnimAndItsMotionInsideTheSlot(anim: AnimBounds) {
+        let bounds = SpriteBounds(rest: anim.footprint, anims: [.idle: anim])
+        let box = PanelMetrics.expandedSpriteSize
         for pixelated in [true, false] {
             let placement = SpriteRendering.placement(bounds, fit: .contain, in: box, backingScale: 2, pixelated: pixelated)
             let points = placement.pointsPerPixel
             // y up from the slot's bottom edge; footprint rows count downwards.
-            let lowest = placement.centreHeight - CGFloat(reach.bottom) * points
-            let highest = placement.centreHeight - CGFloat(reach.top) * points
+            let lowest = placement.centreHeight(of: .idle) - CGFloat(anim.footprint.bottom) * points
+            let highest = placement.centreHeight(of: .idle) - CGFloat(anim.footprint.top) * points
             let rounding = 1e-9
             #expect(lowest == 0)
-            #expect(highest + SpriteRendering.maxLift <= box.height + rounding)
-            #expect(CGFloat(reach.halfWidth) * points + SpriteRendering.maxSway <= box.width / 2 + rounding)
+            #expect(highest + anim.lift <= box.height + rounding)
+            #expect(CGFloat(anim.footprint.halfWidth) * points + SpriteRendering.maxSway <= box.width / 2 + rounding)
         }
     }
 
-    @Test func containUsesTheSlotsFullHeightLessTheRenderersLift() {
-        let reach = Footprint(left: -10, right: 10, top: -40, bottom: 5)
-        let box = CGSize(width: PanelMetrics.expandedSpriteSide, height: PanelMetrics.expandedSpriteSide)
-        let placement = SpriteRendering.placement(SpriteBounds(rest: reach, reach: reach), fit: .contain, in: box, backingScale: 2, pixelated: true)
-        #expect(placement.pointsPerPixel == 2)
-        #expect(CGFloat(reach.height) * placement.pointsPerPixel == box.height - SpriteRendering.maxLift)
+    @Test func containPicksTheScaleFromWhicheverDimensionBinds() {
+        let tall = AnimBounds(footprint: Footprint(left: -5, right: 5, top: -45, bottom: 5), lift: 0)
+        let wide = AnimBounds(footprint: Footprint(left: -30, right: 2, top: -5, bottom: 5), lift: 0)
+        let box = CGSize(width: 136, height: 100)
+        #expect(SpriteRendering.pointsPerPixel(containing: [tall], in: box, backingScale: 2, pixelated: true) == 2)
+        #expect(SpriteRendering.pointsPerPixel(containing: [wide], in: box, backingScale: 2, pixelated: true) == 2)
+        #expect(SpriteRendering.pointsPerPixel(containing: [tall, wide], in: CGSize(width: 100, height: 100), backingScale: 2, pixelated: true) == 1)
     }
 
     @Test func containNeverDropsPixelArtBelowOneScreenPixel() {
-        let huge = Footprint(left: -300, right: 300, top: -300, bottom: 300)
-        let box = CGSize(width: 100, height: 100)
-        #expect(SpriteRendering.pointsPerPixel(containing: huge, in: box, backingScale: 2, pixelated: true) == 0.5)
+        let huge = AnimBounds(footprint: Footprint(left: -300, right: 300, top: -300, bottom: 300), lift: 0)
+        #expect(SpriteRendering.pointsPerPixel(containing: [huge], in: CGSize(width: 100, height: 100), backingScale: 2, pixelated: true) == 0.5)
     }
 
     private static func frame(width: Int = 4, height: Int, opaque rows: ClosedRange<Int>?, columns: ClosedRange<Int>? = nil) -> CGImage {

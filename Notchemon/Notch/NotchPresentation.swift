@@ -35,7 +35,9 @@ struct PanelMetrics: Sendable, Equatable {
         peekHeight = layout.collapsed.height - layout.notch.height
     }
 
-    static let expandedSpriteSide: CGFloat = 100
+    /// Wide enough for a creature turned sideways at about twice its
+    /// collapsed size; the slot fills the panel's left column.
+    static let expandedSpriteSize = CGSize(width: 136, height: 100)
     static let expandedInset: CGFloat = 16
     static let expandedVerticalPadding: CGFloat = 12
 
@@ -48,8 +50,7 @@ struct PanelMetrics: Sendable, Equatable {
     }
 
     var expandedSpriteFrame: CGRect {
-        let side = Self.expandedSpriteSide
-        return CGRect(x: Self.expandedInset + 8, y: notchSize.height + Self.expandedVerticalPadding, width: side, height: side)
+        CGRect(origin: CGPoint(x: Self.expandedInset, y: notchSize.height + Self.expandedVerticalPadding), size: Self.expandedSpriteSize)
     }
 
     func spriteFrame(expanded: Bool) -> CGRect {

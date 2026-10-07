@@ -46,7 +46,7 @@ struct ExpandedView: View {
         case .active(let species, let progress):
             HStack(alignment: .top, spacing: 14) {
                 CompanionColumn(species: species, progress: progress)
-                    .frame(width: PanelMetrics.expandedSpriteSide + 16)
+                    .frame(width: PanelMetrics.expandedSpriteSize.width)
                 ToolsColumn(model: model, presentation: presentation)
             }
         }
@@ -59,7 +59,7 @@ private struct CompanionColumn: View {
 
     var body: some View {
         VStack(spacing: 3) {
-            Color.clear.frame(height: PanelMetrics.expandedSpriteSide + 2)
+            Color.clear.frame(height: PanelMetrics.expandedSpriteSize.height + 2)
             Text(species.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
             HStack(spacing: 4) {
                 Text("Lv \(progress.level)").font(.system(size: 10, weight: .medium)).monospacedDigit()

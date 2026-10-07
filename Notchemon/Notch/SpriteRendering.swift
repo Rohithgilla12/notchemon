@@ -21,30 +21,39 @@ struct Footprint: Sendable, Equatable {
     }
 }
 
-/// Where a species' pixels fall, measured once per species so every anim
-/// and facing shares one scale and one anchor: switching them never resizes
-/// the creature or moves where it stands.
+/// One anim's pixels across its frames in every front facing, and how far
+/// the renderer lifts it on top of them.
+struct AnimBounds: Sendable, Equatable {
+    let footprint: Footprint
+    let lift: CGFloat
+}
+
+/// Where a species' pixels fall, measured once per species. Each mode has
+/// one scale for every anim, so switching anims never resizes the creature.
 struct SpriteBounds: Sendable, Equatable {
     /// The idle frames facing the viewer.
     let rest: Footprint
-    /// Every frame of every anim in every facing the creature shows.
-    let reach: Footprint
+    let anims: [SpriteState: AnimBounds]
 }
 
 enum SpriteFit: Sendable, Equatable {
-    /// Below the notch: the resting creature fills the box and stands on its
-    /// bottom edge. Taller frames, like a hop with its arc drawn in, rise up
-    /// behind the notch.
+    /// Below the notch: the resting creature fills the box. Taller frames,
+    /// like a hop with its arc drawn in, rise up behind the notch.
     case peek
-    /// In the panel: every frame of every anim, plus the renderer's own
+    /// In the panel: every anim the panel plays, plus the renderer's own
     /// motion, stays inside the box.
     case contain
 }
 
 struct SpritePlacement: Equatable {
+    let bounds: SpriteBounds
     let pointsPerPixel: CGFloat
-    /// How far the frames' centre sits above the box's bottom edge, in points.
-    let centreHeight: CGFloat
+
+    /// How far the anim's frame centre sits above the box's bottom edge, in
+    /// points, so that its lowest opaque row rests on that edge.
+    func centreHeight(of state: SpriteState) -> CGFloat {
+        CGFloat((bounds.anims[state]?.footprint ?? bounds.rest).bottom) * pointsPerPixel
+    }
 }
 
 /// The pure arithmetic behind `SpriteLayer`.
@@ -67,20 +76,26 @@ enum SpriteRendering {
     /// The union of every frame's opaque pixels. Sprite sheets centre each
     /// frame on the creature whatever the frame's size (a tall hop frame has
     /// room above for the jump, not below the feet), so measuring from the
-    /// centre lets every anim of a species share one anchor.
+    /// centre keeps the frames of one anim in step with each other.
     static func footprint(of frames: [CGImage]) -> Footprint? {
         frames.compactMap(opaqueFootprint).reduce(nil) { union, next in union?.union(next) ?? next }
     }
 
     /// `rest` must not be empty. A species with nothing opaque at rest is
     /// measured by its whole idle frame, so it still gets a sensible scale.
-    static func bounds(rest: [CGImage], shown: [CGImage]) -> SpriteBounds {
+    /// `anims` holds each anim's frames in every front facing.
+    static func bounds(rest: [CGImage], anims: [SpriteState: [SpriteFrames]]) -> SpriteBounds {
         let first = rest[0]
         let resting = footprint(of: rest) ?? Footprint(
             left: -first.width / 2, right: first.width - first.width / 2,
             top: -first.height / 2, bottom: first.height - first.height / 2
         )
-        return SpriteBounds(rest: resting, reach: footprint(of: shown).map(resting.union) ?? resting)
+        var measured: [SpriteState: AnimBounds] = [:]
+        for (state, facings) in anims {
+            guard let union = footprint(of: facings.flatMap(\.frames)) else { continue }
+            measured[state] = AnimBounds(footprint: union, lift: facings.map { lift(state, $0) }.max() ?? 0)
+        }
+        return SpriteBounds(rest: resting, anims: measured)
     }
 
     /// The renderer's own motion, in points, added on top of the frames.
@@ -91,21 +106,32 @@ enum SpriteRendering {
     static let facingLean: CGFloat = 3
     static let sidestep: ClosedRange<CGFloat> = 2...4
 
-    static let maxLift = max(hopLift, wakeLift, celebrationLift, bobLift)
     static let maxSway = facingLean + sidestep.upperBound
+
+    /// Frames that loop get their motion from the renderer: a one-shot
+    /// borrowing them is lifted, and a single frame bobs.
+    static func lift(_ state: SpriteState, _ frames: SpriteFrames) -> CGFloat {
+        let motion: CGFloat = switch state {
+        case .hop: hopLift
+        case .wake: wakeLift
+        case .celebrating: celebrationLift
+        case .idle, .sleeping: 0
+        }
+        guard frames.loops else { return 0 }
+        return motion + (frames.frames.count == 1 ? bobLift : 0)
+    }
 
     static func placement(_ bounds: SpriteBounds, fit: SpriteFit, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> SpritePlacement {
         let points: CGFloat
-        let footprint: Footprint
         switch fit {
         case .peek:
-            footprint = bounds.rest
-            points = pointsPerPixel(visibleHeight: footprint.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
+            points = pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
         case .contain:
-            footprint = bounds.reach
-            points = pointsPerPixel(containing: footprint, in: box, backingScale: backingScale, pixelated: pixelated)
+            let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: true) }.values
+            let anims = played.isEmpty ? [AnimBounds(footprint: bounds.rest, lift: 0)] : Array(played)
+            points = pointsPerPixel(containing: anims, in: box, backingScale: backingScale, pixelated: pixelated)
         }
-        return SpritePlacement(pointsPerPixel: points, centreHeight: CGFloat(footprint.bottom) * points)
+        return SpritePlacement(bounds: bounds, pointsPerPixel: points)
     }
 
     /// How far the visible creature stops short of the top of its box, and
@@ -128,18 +154,23 @@ enum SpriteRendering {
         return screenPixels / backingScale
     }
 
-    /// The largest scale at which `footprint`, standing on the box's bottom
-    /// edge and centred across it, stays inside the box with room for the
-    /// renderer's lift above and sway either side. Pixel art rounds down to
-    /// whole screen pixels, never below one.
-    static func pointsPerPixel(containing footprint: Footprint, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> CGFloat {
-        let fit = min(
-            (box.height - maxLift) / CGFloat(max(1, footprint.height)),
-            (box.width / 2 - maxSway) / CGFloat(max(1, footprint.halfWidth))
-        )
+    /// The largest scale at which each anim, standing on the box's bottom
+    /// edge and centred across it, stays inside the box with room for its
+    /// lift above and the renderer's sway either side. Pixel art rounds down
+    /// to whole screen pixels, never below one.
+    static func pointsPerPixel(containing anims: [AnimBounds], in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> CGFloat {
+        let fit = anims.map { anim in
+            min(
+                (box.height - anim.lift) / CGFloat(max(1, anim.footprint.height)),
+                (box.width / 2 - maxSway) / CGFloat(max(1, anim.footprint.halfWidth))
+            )
+        }.min() ?? 1
         guard pixelated else { return fit }
         return max(1, (fit * backingScale).rounded(.down)) / backingScale
     }
+
+    /// Fainter pixels, like a soft shadow, are not the creature's body.
+    static let opaqueAlpha: UInt8 = 64
 
     private static func opaqueFootprint(_ image: CGImage) -> Footprint? {
         let width = image.width
@@ -153,7 +184,7 @@ enum SpriteRendering {
         var left = Int.max, right = Int.min, top = Int.max, bottom = Int.min
         // Memory row 0 is the image's top row.
         for row in 0..<height {
-            for column in 0..<width where pixels[(row * width + column) * 4 + 3] > 0 {
+            for column in 0..<width where pixels[(row * width + column) * 4 + 3] >= opaqueAlpha {
                 left = min(left, column)
                 right = max(right, column)
                 top = min(top, row)

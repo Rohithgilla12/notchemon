@@ -233,11 +233,12 @@ struct EngineTests {
         #expect(Set(provider.requests) == expected)
     }
 
-    @Test func boundsReachCoversTheHopArcBeforeItPlays() async throws {
+    @Test func boundsMeasureTheHopArcBeforeItPlays() async throws {
         let engine = await started(engine(provider: TallHopProvider()), choosing: 904)
         let bounds = try #require(await engine.currentSnapshot.sprite?.bounds)
         #expect(bounds.rest == Footprint(left: -2, right: 2, top: -2, bottom: 2))
-        #expect(bounds.reach == Footprint(left: -2, right: 2, top: -13, bottom: 2))
+        #expect(bounds.anims[.idle]?.footprint == Footprint(left: -2, right: 2, top: -2, bottom: 2))
+        #expect(bounds.anims[.hop]?.footprint == Footprint(left: -2, right: 2, top: -13, bottom: 2))
     }
 
     @Test func cursorEnteringTheNotchPlaysHopOverTheLoop() async throws {

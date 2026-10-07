@@ -38,7 +38,7 @@ struct NotchGeometryTests {
         let layout = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false))
         #expect(layout.expanded.midX == macBookPro.frame.midX)
         #expect(layout.expanded.maxY == macBookPro.frame.maxY)
-        #expect(layout.expanded.width == 420)
+        #expect(layout.expanded.width == 440)
         #expect(layout.expanded.height == CGFloat(192))
     }
 

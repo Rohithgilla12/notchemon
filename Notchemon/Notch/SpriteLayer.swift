@@ -10,7 +10,9 @@ final class SpriteLayer: CALayer {
     private var loop: SpriteFrames?
     private var loopStart: CFTimeInterval = 0
     private var speciesBounds: SpriteBounds?
-    private var oneShot: (animation: CAKeyframeAnimation, ends: CFTimeInterval)?
+    private var loopState = SpriteState.idle
+    private var placement: SpritePlacement?
+    private var oneShot: (animation: CAKeyframeAnimation, state: SpriteState, ends: CFTimeInterval)?
     private var playedOneShot: Int?
     private var tucked = false
     private var mirrored = false
@@ -70,8 +72,23 @@ final class SpriteLayer: CALayer {
             backingScale: backingScale,
             pixelated: loop?.pixelated ?? true
         )
+        self.placement = placement
         image.contentsScale = 1 / placement.pointsPerPixel
-        image.position = CGPoint(x: bounds.midX, y: bounds.minY + placement.centreHeight)
+        image.position = CGPoint(x: bounds.midX, y: bounds.minY + placement.centreHeight(of: loopState))
+        standOneShot()
+    }
+
+    /// A one-shot drawn in its own frames stands on its own lowest row, not
+    /// on the loop's, for as long as it plays.
+    private func standOneShot() {
+        image.removeAnimation(forKey: "oneShotStand")
+        guard let oneShot, oneShot.ends > CACurrentMediaTime(), let placement else { return }
+        let stand = CABasicAnimation(keyPath: "position.y")
+        stand.fromValue = bounds.minY + placement.centreHeight(of: oneShot.state)
+        stand.toValue = stand.fromValue
+        stand.beginTime = oneShot.animation.beginTime
+        stand.duration = oneShot.animation.duration
+        image.add(stand, forKey: "oneShotStand")
     }
 
     /// `playOneShot` is false for the first pose a view sees, so a one-shot
@@ -85,10 +102,10 @@ final class SpriteLayer: CALayer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let rescale = show.bounds != speciesBounds || show.loop.pixelated != loop?.pixelated
         speciesBounds = show.bounds
+        loopState = show.loopState
         setLoop(show.loop)
-        if rescale { placeImage() }
+        placeImage()
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         CATransaction.commit()
         body.setValue(CGFloat(show.facing.horizontal) * SpriteRendering.facingLean, forKeyPath: "transform.translation.x")
@@ -137,7 +154,8 @@ final class SpriteLayer: CALayer {
             let animation = Self.keyframes(oneShot.frames)
             animation.beginTime = CACurrentMediaTime()
             image.add(animation, forKey: "oneShot")
-            self.oneShot = (animation, animation.beginTime + animation.duration)
+            self.oneShot = (animation, oneShot.state, animation.beginTime + animation.duration)
+            standOneShot()
             return
         }
         switch oneShot.state {
