@@ -255,6 +255,20 @@ struct EngineTests {
         try #require(condition())
     }
 
+    @Test func renamedStashFileIsRebookmarkedWhenTheStashLoads() async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let draft = directory.appendingPathComponent("draft.txt")
+        try Data("x".utf8).write(to: draft)
+        #expect(await started(engine()).addToStash([draft]))
+        let before = store.load().stash
+        try FileManager.default.moveItem(at: draft, to: directory.appendingPathComponent("final.txt"))
+        await engine().start()
+        let after = store.load().stash
+        #expect(after != before)
+        #expect(FileBookmarks().resolve(after[0])?.isStale == false)
+        #expect(FileBookmarks().resolve(after[0])?.url.lastPathComponent == "final.txt")
+    }
+
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
         try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, stash: []))
         let engine = engine()
@@ -483,13 +497,17 @@ struct QuickNoteTests {
 }
 
 struct FileStashTests {
-    /// Bookmarks are just the path bytes; files listed in `missing` no longer resolve.
+    /// Bookmarks are just the path bytes. Files listed in `missing` no longer
+    /// resolve; files in `moved` resolve, stale, at their new path.
     struct PathCodec: BookmarkCodec {
         var missing: Set<String> = []
+        var moved: [String: String] = [:]
         func bookmark(for url: URL) throws -> Data { Data(url.path.utf8) }
-        func resolve(_ bookmark: Data) -> URL? {
+        func resolve(_ bookmark: Data) -> ResolvedBookmark? {
             let path = String(decoding: bookmark, as: UTF8.self)
-            return missing.contains(path) ? nil : URL(fileURLWithPath: path)
+            if missing.contains(path) { return nil }
+            if let now = moved[path] { return ResolvedBookmark(url: URL(fileURLWithPath: now), isStale: true) }
+            return ResolvedBookmark(url: URL(fileURLWithPath: path), isStale: false)
         }
     }
 
@@ -519,5 +537,26 @@ struct FileStashTests {
         let (items, live) = FileStash.items(held, codec: PathCodec(missing: ["/tmp/a"]))
         #expect(items.map(\.name) == ["b"])
         #expect(live.count == 1)
+    }
+
+    @Test func staleBookmarksAreRecreatedAtTheNewPath() {
+        let held = FileStash.add(urls("a", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let (items, live) = FileStash.items(held, codec: PathCodec(moved: ["/tmp/a": "/tmp/renamed"]))
+        #expect(items.map(\.name) == ["renamed", "b"])
+        #expect(live == [Data("/tmp/renamed".utf8), Data("/tmp/b".utf8)])
+    }
+
+    @Test func renamingAFileMakesItsRealBookmarkStaleUntilRecreated() throws {
+        let directory = Fixtures.temporaryDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let draft = directory.appendingPathComponent("draft.txt")
+        try Data("x".utf8).write(to: draft)
+        let codec = FileBookmarks()
+        let held = [try codec.bookmark(for: draft)]
+        try FileManager.default.moveItem(at: draft, to: directory.appendingPathComponent("final.txt"))
+        #expect(codec.resolve(held[0])?.isStale == true)
+        let (items, live) = FileStash.items(held, codec: codec)
+        #expect(items.map(\.name) == ["final.txt"])
+        #expect(codec.resolve(live[0])?.isStale == false)
     }
 }

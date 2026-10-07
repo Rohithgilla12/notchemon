@@ -6,30 +6,33 @@ struct StashItem: Sendable, Equatable, Identifiable {
     var name: String { url.lastPathComponent }
 }
 
+struct ResolvedBookmark: Sendable, Equatable {
+    var url: URL
+    /// The file was renamed or moved since the bookmark was made, so the
+    /// bookmark should be re-created to keep resolving.
+    var isStale: Bool
+}
+
 /// Turns file URLs into persistable bookmarks and back. Injected so stash
 /// rules are testable without touching the file system.
 protocol BookmarkCodec: Sendable {
     func bookmark(for url: URL) throws -> Data
-    func resolve(_ bookmark: Data) -> URL?
+    func resolve(_ bookmark: Data) -> ResolvedBookmark?
 }
 
-struct SecurityScopedBookmarks: BookmarkCodec {
+/// Plain bookmarks: the app is not sandboxed, so security scope would grant
+/// nothing, but a bookmark still follows a file through renames and moves.
+struct FileBookmarks: BookmarkCodec {
     func bookmark(for url: URL) throws -> Data {
-        do {
-            return try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-        } catch {
-            // Outside the sandbox the scope can be refused; a plain bookmark still
-            // survives renames and moves.
-            return try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-        }
+        try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
     }
 
-    func resolve(_ bookmark: Data) -> URL? {
+    func resolve(_ bookmark: Data) -> ResolvedBookmark? {
         var stale = false
-        let url = (try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale))
-            ?? (try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale))
-        guard let url, FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return url
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale),
+              FileManager.default.fileExists(atPath: url.path)
+        else { return nil }
+        return ResolvedBookmark(url: url, isStale: stale)
     }
 }
 
@@ -44,7 +47,7 @@ enum FileStash {
     /// rather than refused; anything past capacity is refused.
     static func add(_ urls: [URL], to bookmarks: [Data], capacity: Int, codec: any BookmarkCodec) -> StashAddResult {
         var result = StashAddResult(bookmarks: bookmarks, added: 0, refused: 0)
-        var held = Set(bookmarks.compactMap { codec.resolve($0)?.standardizedFileURL })
+        var held = Set(bookmarks.compactMap { codec.resolve($0)?.url.standardizedFileURL })
         for url in urls.map(\.standardizedFileURL) where !held.contains(url) {
             guard result.bookmarks.count < capacity else {
                 result.refused += 1
@@ -63,17 +66,19 @@ enum FileStash {
 
     static func remove(_ url: URL, from bookmarks: [Data], codec: any BookmarkCodec) -> [Data] {
         let target = url.standardizedFileURL
-        return bookmarks.filter { codec.resolve($0)?.standardizedFileURL != target }
+        return bookmarks.filter { codec.resolve($0)?.url.standardizedFileURL != target }
     }
 
-    /// Drops bookmarks whose files are gone, so the stash heals itself.
+    /// Drops bookmarks whose files are gone and re-creates stale ones, so the
+    /// stash heals itself.
     static func items(_ bookmarks: [Data], codec: any BookmarkCodec) -> (items: [StashItem], live: [Data]) {
         var items: [StashItem] = []
         var live: [Data] = []
         for bookmark in bookmarks {
-            guard let url = codec.resolve(bookmark) else { continue }
-            items.append(StashItem(url: url))
-            live.append(bookmark)
+            guard let resolved = codec.resolve(bookmark) else { continue }
+            items.append(StashItem(url: resolved.url))
+            let refreshed = resolved.isStale ? try? codec.bookmark(for: resolved.url) : nil
+            live.append(refreshed ?? bookmark)
         }
         return (items, live)
     }

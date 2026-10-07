@@ -5,7 +5,7 @@ import Foundation
 struct CompanionState: Codable, Sendable, Equatable {
     var progress: Progress?
     var totalFocusMinutes: Int
-    /// Security-scoped bookmark data, oldest first.
+    /// File bookmark data, oldest first.
     var stash: [Data]
     var preferences = Preferences()
 

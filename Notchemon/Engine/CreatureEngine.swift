@@ -98,7 +98,7 @@ actor CreatureEngine {
     init(
         provider: any CreatureProvider,
         store: StateStore,
-        bookmarks: any BookmarkCodec = SecurityScopedBookmarks(),
+        bookmarks: any BookmarkCodec = FileBookmarks(),
         notesURL: URL = AppPaths.notes,
         idleSeconds: @escaping @Sendable () -> TimeInterval = InputIdle.seconds,
         now: @escaping @Sendable () -> Date = Date.init,
@@ -322,7 +322,7 @@ actor CreatureEngine {
     private func refreshStash() {
         let (items, live) = FileStash.items(state.stash, codec: bookmarks)
         snapshot.stash = items
-        if live.count != state.stash.count {
+        if live != state.stash {
             state.stash = live
             persist()
         }
