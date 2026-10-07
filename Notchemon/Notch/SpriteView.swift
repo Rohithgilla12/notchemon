@@ -32,7 +32,7 @@ extension SpritePose {
     /// The open panel shows the creature in its own slot wherever it was
     /// wandering. Closed, it walks or rests along the strip, and asleep it
     /// tucks up behind the notch only once it is home.
-    init(_ snapshot: CompanionSnapshot, roam: RoamPhase, expanded: Bool, at now: Date) {
+    init(_ snapshot: CompanionSnapshot, roam: RoamPhase, expanded: Bool) {
         let walk = expanded ? nil : roam.walk
         var show = snapshot.sprite
         if let walk, let cycle = show?.walk {
@@ -46,8 +46,10 @@ extension SpritePose {
             .still(0)
         } else if let walk {
             .walk(walk)
+        } else if case .resting(let x, _) = roam {
+            .still(x)
         } else {
-            .still(roam.x(at: now))
+            .still(0)
         }
         self.init(
             show: show,

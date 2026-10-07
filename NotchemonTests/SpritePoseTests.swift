@@ -23,7 +23,7 @@ struct SpritePoseTests {
     @Test(arguments: [(-200.0, Facing.left), (200, .right)])
     func walkingPlaysTheWalkFacingTheWayItGoesAndMovesAlongTheStrip(to: Double, facing: Facing) throws {
         let walk = RoamWalk(from: 0, to: to, start: t0, speed: RoamRules.walkSpeed)
-        let pose = SpritePose(snapshot(), roam: .walking(walk), expanded: false, at: t0 + 1)
+        let pose = SpritePose(snapshot(), roam: .walking(walk), expanded: false)
         let show = try #require(pose.show)
         #expect(show.loop.frames.first === (facing == .left ? left : right).frames.first)
         #expect(show.loopState == .walking)
@@ -35,7 +35,7 @@ struct SpritePoseTests {
     }
 
     @Test func restingAwayKeepsItsIdleLoopWhereItStopped() throws {
-        let pose = SpritePose(snapshot(), roam: .resting(at: -150, until: t0 + 5), expanded: false, at: t0)
+        let pose = SpritePose(snapshot(), roam: .resting(at: -150, until: t0 + 5), expanded: false)
         #expect(pose.show?.loop.frames.first === idle.frames.first)
         #expect(pose.show?.loopState == .idle)
         #expect(pose.track == .still(-150))
@@ -45,7 +45,7 @@ struct SpritePoseTests {
     @Test func theOpenPanelShowsTheCreatureInItsSlotWhereverItWandered() throws {
         let walk = RoamWalk(from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
         for roam in [RoamPhase.walking(walk), .resting(at: 300, until: t0 + 5)] {
-            let pose = SpritePose(snapshot(), roam: roam, expanded: true, at: t0 + 1)
+            let pose = SpritePose(snapshot(), roam: roam, expanded: true)
             #expect(pose.track == .still(0))
             #expect(pose.show?.loopState == .idle)
             #expect(pose.fit == .contain)
@@ -54,10 +54,10 @@ struct SpritePoseTests {
 
     @Test func asleepItTucksUpOnlyOnceItIsHome() {
         let returning = RoamPhase.returning(RoamWalk(from: 200, to: 0, start: t0, speed: RoamRules.walkSpeed))
-        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: returning, expanded: false, at: t0 + 1).tucked)
-        #expect(SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: false, at: t0).tucked)
-        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: true, at: t0).tucked)
-        #expect(!SpritePose(snapshot(), roam: .home, expanded: false, at: t0).tucked)
+        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: returning, expanded: false).tucked)
+        #expect(SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: false).tucked)
+        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: true).tucked)
+        #expect(!SpritePose(snapshot(), roam: .home, expanded: false).tucked)
     }
 
     @Test func theCursorIsMeasuredFromTheCreaturesLiveSpot() throws {

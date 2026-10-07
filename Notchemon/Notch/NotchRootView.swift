@@ -31,7 +31,7 @@ struct NotchRootView: View {
                 }
 
                 if model.activeSpecies != nil {
-                    SpriteView(pose: SpritePose(model.snapshot, roam: roamer.phase, expanded: expanded, at: Date()))
+                    SpriteView(pose: SpritePose(model.snapshot, roam: roamer.phase, expanded: expanded))
                         .frame(width: sprite.width, height: sprite.height)
                         .offset(x: sprite.minX, y: sprite.minY)
                 }
