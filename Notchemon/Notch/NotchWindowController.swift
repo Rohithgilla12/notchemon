@@ -156,19 +156,22 @@ final class NotchWindowController {
     private func handleCursor(_ point: CGPoint) {
         onCursorMoved?(point)
         guard let layout = presentation.layout else { return }
-        if pressPoll != nil, !isFileDragInProgress { return }
-        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout)
+        let buttonHeld = pressPoll != nil && !isFileDragInProgress
+        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld)
         // Each assignment is a WindowServer round trip; mouse moves arrive at 120 Hz.
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable
         }
         if decision.hop { onCursorEnteredNotch?() }
         setMode(decision.mode)
-        if decision.scheduleCollapse {
+        switch decision.collapse {
+        case .schedule:
             scheduleCollapse()
-        } else {
+        case .cancel:
             collapseTask?.cancel()
             collapseTask = nil
+        case .unchanged:
+            break
         }
     }
 

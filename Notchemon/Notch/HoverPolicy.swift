@@ -14,27 +14,41 @@ enum PanelMode: Sendable, Equatable {
     var isExpanded: Bool { self != .collapsed }
 }
 
+/// What the pending collapse timer should do.
+enum CollapseAction: Sendable, Equatable {
+    case schedule
+    case cancel
+    case unchanged
+}
+
 struct HoverDecision: Sendable, Equatable {
     var mode: PanelMode
     /// Whether the panel should receive mouse events. Outside the notch it must
     /// not, so menu-bar icons beside the notch stay clickable.
     var hitTestable: Bool
-    var scheduleCollapse: Bool
+    var collapse: CollapseAction
     var hop: Bool
 }
 
 enum HoverPolicy {
-    static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout) -> HoverDecision {
+    /// `buttonHeld` is a press in another app that is not dragging files: the
+    /// panel neither opens nor closes under it, but takes clicks only while
+    /// it is open under the cursor.
+    static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false) -> HoverDecision {
+        if buttonHeld {
+            let hitTestable = mode.isExpanded && layout.expanded.contains(cursor)
+            return HoverDecision(mode: mode, hitTestable: hitTestable, collapse: .unchanged, hop: false)
+        }
         switch mode {
         case .collapsed:
             let inside = layout.collapsed.contains(cursor)
-            return HoverDecision(mode: inside ? .expanded(.hover) : .collapsed, hitTestable: inside, scheduleCollapse: false, hop: inside)
+            return HoverDecision(mode: inside ? .expanded(.hover) : .collapsed, hitTestable: inside, collapse: .cancel, hop: inside)
         case .expanded(.hover):
             let inside = layout.expanded.contains(cursor)
-            return HoverDecision(mode: mode, hitTestable: inside, scheduleCollapse: !inside, hop: false)
+            return HoverDecision(mode: mode, hitTestable: inside, collapse: inside ? .cancel : .schedule, hop: false)
         case .expanded(.pinned):
             let inside = layout.expanded.contains(cursor)
-            return HoverDecision(mode: inside ? .expanded(.hover) : mode, hitTestable: inside, scheduleCollapse: false, hop: false)
+            return HoverDecision(mode: inside ? .expanded(.hover) : mode, hitTestable: inside, collapse: .cancel, hop: false)
         }
     }
 }

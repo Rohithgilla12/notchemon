@@ -43,35 +43,48 @@ struct HoverPolicyTests {
 
     @Test func cursorBesideNotchLeavesPanelClickThrough() {
         let decision = HoverPolicy.react(to: menuBarIcon, mode: .collapsed, layout: layout)
-        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, scheduleCollapse: false, hop: false))
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .cancel, hop: false))
     }
 
     @Test func enteringNotchExpandsAndHops() {
         let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout)
-        #expect(decision == HoverDecision(mode: .expanded(.hover), hitTestable: true, scheduleCollapse: false, hop: true))
+        #expect(decision == HoverDecision(mode: .expanded(.hover), hitTestable: true, collapse: .cancel, hop: true))
     }
 
     @Test func expandedPanelStaysWhileCursorIsInsideIt() {
         let decision = HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.hover), layout: layout)
         #expect(decision.mode == .expanded(.hover))
         #expect(decision.hitTestable)
-        #expect(!decision.scheduleCollapse)
+        #expect(decision.collapse == .cancel)
     }
 
     @Test func leavingExpandedPanelSchedulesCollapse() {
         let decision = HoverPolicy.react(to: CGPoint(x: 100, y: 100), mode: .expanded(.hover), layout: layout)
-        #expect(decision.scheduleCollapse)
+        #expect(decision.collapse == .schedule)
         #expect(!decision.hitTestable)
     }
 
     @Test func pinnedPanelIgnoresDistantCursorUntilVisited() {
         let away = HoverPolicy.react(to: CGPoint(x: 100, y: 100), mode: .expanded(.pinned), layout: layout)
         #expect(away.mode == .expanded(.pinned))
-        #expect(!away.scheduleCollapse)
+        #expect(away.collapse == .cancel)
         #expect(!away.hitTestable)
         let visited = HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.pinned), layout: layout)
         #expect(visited.mode == .expanded(.hover))
         #expect(visited.hitTestable)
+    }
+
+    @Test func heldButtonFreezesTheModeButKeepsHitTestingCurrent() {
+        let outside = CGPoint(x: 100, y: 100)
+        #expect(HoverPolicy.react(to: outside, mode: .expanded(.hover), layout: layout, buttonHeld: true)
+            == HoverDecision(mode: .expanded(.hover), hitTestable: false, collapse: .unchanged, hop: false))
+        #expect(HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.pinned), layout: layout, buttonHeld: true)
+            == HoverDecision(mode: .expanded(.pinned), hitTestable: true, collapse: .unchanged, hop: false))
+    }
+
+    @Test func heldButtonOverTheNotchNeitherExpandsNorCatchesClicks() {
+        let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout, buttonHeld: true)
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .unchanged, hop: false))
     }
 }
 
