@@ -1,0 +1,187 @@
+import AppKit
+import SwiftUI
+
+/// Owns the notch panel: which screen it sits on, its layout, and the hover
+/// rules that decide when it expands and when it is hit-testable.
+@MainActor
+final class NotchWindowController {
+    let presentation: NotchPresentation
+    /// Every cursor position seen, in global screen coordinates.
+    var onCursorMoved: ((CGPoint) -> Void)?
+    var onExpandedChanged: ((Bool) -> Void)?
+
+    private let panel: NotchPanel
+    private var virtualNotchEnabled: Bool
+    private var observers: [NSObjectProtocol] = []
+    private var monitors: [Any] = []
+    private var pressPoll: Timer?
+    private var dragChangeCountAtPress = 0
+    private var collapseTask: Task<Void, Never>?
+
+    static let collapseDelay: Duration = .milliseconds(500)
+
+    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, content: Content) {
+        self.presentation = presentation
+        self.virtualNotchEnabled = virtualNotchEnabled
+        panel = NotchPanel(frame: .zero)
+        let hosting = NSHostingView(rootView: content)
+        hosting.sizingOptions = []
+        panel.contentView = hosting
+        panel.acceptsMouseMovedEvents = true
+        panel.onEscape = { [weak self] in self?.collapse() }
+    }
+
+    func start() {
+        relayout()
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.relayout() }
+        })
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
+            observers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.relayout() }
+            })
+        }
+        installMouseMonitors()
+    }
+
+    func setVirtualNotchEnabled(_ enabled: Bool) {
+        guard enabled != virtualNotchEnabled else { return }
+        virtualNotchEnabled = enabled
+        relayout()
+    }
+
+    func relayout() {
+        guard let screen = NSScreen.notchHost else {
+            apply(layout: nil)
+            return
+        }
+        let fullScreen = FullScreenDetector.isFullScreen(screen)
+        presentation.isFullScreen = fullScreen
+        apply(layout: NotchGeometry.layout(for: screen.metrics, virtualNotchEnabled: virtualNotchEnabled, fullScreen: fullScreen))
+    }
+
+    func toggleFromHotkey() {
+        if presentation.isExpanded {
+            collapse()
+        } else {
+            expandPinned(focusNote: true)
+        }
+    }
+
+    func expandPinned(focusNote: Bool) {
+        guard presentation.layout != nil else { return }
+        collapseTask?.cancel()
+        setMode(.expanded(.pinned))
+        if focusNote {
+            panel.makeKeyAndOrderFront(nil)
+            presentation.focusNoteToken += 1
+        }
+    }
+
+    func collapse() {
+        collapseTask?.cancel()
+        setMode(.collapsed)
+        panel.ignoresMouseEvents = true
+        panel.relinquishKey()
+    }
+
+    func shake() {
+        presentation.shakeToken += 1
+    }
+
+    private func apply(layout: NotchLayout?) {
+        presentation.layout = layout
+        guard let layout else {
+            panel.orderOut(nil)
+            return
+        }
+        panel.setFrame(layout.expanded, display: true)
+        panel.orderFrontRegardless()
+        handleCursor(NSEvent.mouseLocation)
+    }
+
+    private func setMode(_ mode: PanelMode) {
+        guard mode != presentation.mode else { return }
+        let wasExpanded = presentation.isExpanded
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+            presentation.mode = mode
+        }
+        if wasExpanded != mode.isExpanded { onExpandedChanged?(mode.isExpanded) }
+    }
+
+    private func installMouseMonitors() {
+        let moved: NSEvent.EventTypeMask = [.mouseMoved]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: moved, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleCursor(NSEvent.mouseLocation) }
+        }) {
+            monitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: moved, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.handleCursor(NSEvent.mouseLocation) }
+            return event
+        }) {
+            monitors.append(local)
+        }
+        if let press = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.beginPressPolling() }
+        }) {
+            monitors.append(press)
+        }
+    }
+
+    /// File drags from other apps do not reliably deliver events to global
+    /// monitors, so while a button is held we poll the cursor instead. The
+    /// timer only exists for the duration of a press.
+    private func beginPressPolling() {
+        dragChangeCountAtPress = NSPasteboard(name: .drag).changeCount
+        pressPoll?.invalidate()
+        pressPoll = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollPress() }
+        }
+    }
+
+    private func pollPress() {
+        guard NSEvent.pressedMouseButtons & 1 != 0 else {
+            pressPoll?.invalidate()
+            pressPoll = nil
+            return
+        }
+        guard isFileDragInProgress else { return }
+        handleCursor(NSEvent.mouseLocation)
+    }
+
+    private var isFileDragInProgress: Bool {
+        let pasteboard = NSPasteboard(name: .drag)
+        return pasteboard.changeCount != dragChangeCountAtPress && pasteboard.types?.contains(.fileURL) == true
+    }
+
+    private func handleCursor(_ point: CGPoint) {
+        onCursorMoved?(point)
+        guard let layout = presentation.layout else { return }
+        if pressPoll != nil, !isFileDragInProgress { return }
+        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout)
+        panel.ignoresMouseEvents = !decision.hitTestable
+        if decision.hop { presentation.hopToken += 1 }
+        setMode(decision.mode)
+        if decision.scheduleCollapse {
+            scheduleCollapse()
+        } else {
+            collapseTask?.cancel()
+            collapseTask = nil
+        }
+    }
+
+    private func scheduleCollapse() {
+        guard collapseTask == nil else { return }
+        collapseTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.collapseDelay)
+            guard !Task.isCancelled else { return }
+            self?.collapseTask = nil
+            self?.collapse()
+        }
+    }
+
+    var panelFrame: CGRect { panel.frame }
+}
