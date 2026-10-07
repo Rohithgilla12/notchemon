@@ -3,7 +3,7 @@ import Testing
 @testable import Notchemon
 
 struct ScreenChooserTests {
-    let metrics = ScreenMetrics(frame: .zero, safeAreaTop: 0, auxiliaryTopLeftWidth: 0, auxiliaryTopRightWidth: 0, menuBarHeight: 24)
+    let metrics = ScreenMetrics(frame: .zero, safeAreaTop: 0, auxiliaryTopLeftWidth: 0, auxiliaryTopRightWidth: 0)
 
     @Test func prefersBuiltInEvenWhenItIsNotMain() {
         let screens = [
@@ -32,8 +32,7 @@ struct HoverPolicyTests {
             frame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
             safeAreaTop: 32,
             auxiliaryTopLeftWidth: 764,
-            auxiliaryTopRightWidth: 764,
-            menuBarHeight: 37
+            auxiliaryTopRightWidth: 764
         ),
         virtualNotchEnabled: false
     )!

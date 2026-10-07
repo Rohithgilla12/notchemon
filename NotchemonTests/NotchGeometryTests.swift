@@ -7,15 +7,13 @@ struct NotchGeometryTests {
         frame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
         safeAreaTop: 32,
         auxiliaryTopLeftWidth: 764,
-        auxiliaryTopRightWidth: 764,
-        menuBarHeight: 37
+        auxiliaryTopRightWidth: 764
     )
     let external = ScreenMetrics(
         frame: CGRect(x: 1728, y: 0, width: 1920, height: 1080),
         safeAreaTop: 0,
         auxiliaryTopLeftWidth: 0,
-        auxiliaryTopRightWidth: 0,
-        menuBarHeight: 24
+        auxiliaryTopRightWidth: 0
     )
 
     @Test func hardwareNotchIsCentredGapBetweenAuxiliaryAreas() throws {

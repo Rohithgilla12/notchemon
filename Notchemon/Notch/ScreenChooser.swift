@@ -26,8 +26,7 @@ extension NSScreen {
             frame: frame,
             safeAreaTop: safeAreaInsets.top,
             auxiliaryTopLeftWidth: auxiliaryTopLeftArea?.width ?? 0,
-            auxiliaryTopRightWidth: auxiliaryTopRightArea?.width ?? 0,
-            menuBarHeight: frame.maxY - visibleFrame.maxY
+            auxiliaryTopRightWidth: auxiliaryTopRightArea?.width ?? 0
         )
     }
 
