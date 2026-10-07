@@ -14,6 +14,12 @@ struct NotchRootView: View {
             ZStack(alignment: .topLeading) {
                 NotchShape(bottomRadius: radius)
                     .fill(.black)
+                    .overlay {
+                        if presentation.isDropTargeted {
+                            NotchShape(bottomRadius: radius, closed: false)
+                                .stroke(.white.opacity(0.7), lineWidth: 1.5)
+                        }
+                    }
                     .frame(width: shapeSize.width, height: shapeSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
 

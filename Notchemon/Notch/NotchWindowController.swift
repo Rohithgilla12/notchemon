@@ -8,7 +8,6 @@ final class NotchWindowController {
     let presentation: NotchPresentation
     /// Every cursor position seen, in global screen coordinates.
     var onCursorMoved: ((CGPoint) -> Void)?
-    var onExpandedChanged: ((Bool) -> Void)?
 
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
@@ -87,10 +86,6 @@ final class NotchWindowController {
         panel.relinquishKey()
     }
 
-    func shake() {
-        presentation.shakeToken += 1
-    }
-
     private func apply(layout: NotchLayout?) {
         presentation.layout = layout
         guard let layout else {
@@ -104,11 +99,9 @@ final class NotchWindowController {
 
     private func setMode(_ mode: PanelMode) {
         guard mode != presentation.mode else { return }
-        let wasExpanded = presentation.isExpanded
         withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
             presentation.mode = mode
         }
-        if wasExpanded != mode.isExpanded { onExpandedChanged?(mode.isExpanded) }
     }
 
     private func installMouseMonitors() {
@@ -131,9 +124,8 @@ final class NotchWindowController {
         }
     }
 
-    /// File drags from other apps do not reliably deliver events to global
-    /// monitors, so while a button is held we poll the cursor instead. The
-    /// timer only exists for the duration of a press.
+    /// A drag in progress sends no mouse-moved events, so while a button is
+    /// held we poll the cursor instead. The timer only exists for the press.
     private func beginPressPolling() {
         dragChangeCountAtPress = NSPasteboard(name: .drag).changeCount
         pressPoll?.invalidate()
@@ -185,6 +177,4 @@ final class NotchWindowController {
             self?.collapse()
         }
     }
-
-    var panelFrame: CGRect { panel.frame }
 }
