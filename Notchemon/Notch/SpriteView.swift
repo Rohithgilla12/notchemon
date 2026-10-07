@@ -4,18 +4,17 @@ import SwiftUI
 /// What the sprite should show. One-shot effects are counters: the view
 /// plays the effect when a counter moves.
 struct SpritePose: Equatable {
-    var frames: SpriteFrames?
-    var gaze: Facing?
+    var show: SpriteShow?
     var tucked = false
-    var celebrating = false
-    var hopToken = 0
     var flashToken = 0
     var fidgets = true
 
     static func == (lhs: SpritePose, rhs: SpritePose) -> Bool {
-        lhs.frames?.frames.first === rhs.frames?.frames.first
-            && lhs.gaze == rhs.gaze && lhs.tucked == rhs.tucked && lhs.celebrating == rhs.celebrating
-            && lhs.hopToken == rhs.hopToken && lhs.flashToken == rhs.flashToken && lhs.fidgets == rhs.fidgets
+        lhs.show?.loop.frames.first === rhs.show?.loop.frames.first
+            && lhs.show?.facing == rhs.show?.facing
+            && lhs.show?.referenceHeight == rhs.show?.referenceHeight
+            && lhs.show?.oneShot?.serial == rhs.show?.oneShot?.serial
+            && lhs.tucked == rhs.tucked && lhs.flashToken == rhs.flashToken && lhs.fidgets == rhs.fidgets
     }
 }
 
@@ -60,6 +59,7 @@ final class SpriteHostView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         sprite.contentsScale = window?.backingScaleFactor ?? 2
+        sprite.backingScale = sprite.contentsScale
     }
 
     override func viewDidMoveToWindow() {
@@ -78,13 +78,10 @@ final class SpriteHostView: NSView {
     func apply(_ next: SpritePose, initial: Bool = false) {
         let previous = pose
         pose = next
-        sprite.show(next.frames)
-        sprite.gaze(next.gaze)
         sprite.setTucked(next.tucked)
+        sprite.show(next.show, playOneShot: !initial)
         guard !initial else { return }
-        if next.hopToken != previous.hopToken { sprite.hop() }
         if next.flashToken != previous.flashToken { sprite.flash() }
-        if next.celebrating, !previous.celebrating { sprite.celebrate() }
         if next.fidgets != previous.fidgets { scheduleFidgets() }
     }
 

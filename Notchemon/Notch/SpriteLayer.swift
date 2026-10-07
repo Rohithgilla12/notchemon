@@ -7,16 +7,27 @@ final class SpriteLayer: CALayer {
     private let body = CALayer()
     private let image = CALayer()
     private let flashGlow = CAGradientLayer()
-    private var shownFrames: ObjectIdentifier?
+    private var loop: SpriteFrames?
+    private var loopStart: CFTimeInterval = 0
+    private var referenceHeight = 1
+    private var oneShot: (animation: CAKeyframeAnimation, ends: CFTimeInterval)?
+    private var playedOneShot: Int?
     private var tucked = false
-    private var facingRight = false
+    private var mirrored = false
+
+    var backingScale: CGFloat = 2 {
+        didSet { if backingScale != oldValue { setNeedsLayout() } }
+    }
 
     override init() {
         super.init()
         masksToBounds = false
         addSublayer(body)
         body.addSublayer(image)
-        image.contentsGravity = .resizeAspect
+        // Frames of any size stand on the same spot, and tall ones (a hop
+        // with its arc drawn in) rise up behind the notch.
+        image.anchorPoint = CGPoint(x: 0.5, y: 0)
+        image.contentsGravity = .bottom
         flashGlow.type = .radial
         flashGlow.colors = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)]
         flashGlow.startPoint = CGPoint(x: 0.5, y: 0.5)
@@ -39,53 +50,122 @@ final class SpriteLayer: CALayer {
         CATransaction.setDisableActions(true)
         body.bounds = bounds
         body.position = CGPoint(x: bounds.midX, y: bounds.midY + (tucked ? tuckDistance : 0))
-        image.frame = body.bounds
+        image.bounds = body.bounds
+        image.position = CGPoint(x: body.bounds.midX, y: body.bounds.minY)
+        applyScale()
         flashGlow.frame = bounds.insetBy(dx: -bounds.width * 0.4, dy: -bounds.height * 0.4)
         CATransaction.commit()
     }
 
     private var tuckDistance: CGFloat { bounds.height + 6 }
 
-    func show(_ frames: SpriteFrames?) {
-        let identity = frames?.frames.first.map(ObjectIdentifier.init)
-        guard identity != shownFrames else { return }
-        shownFrames = identity
-        image.removeAnimation(forKey: "frames")
-        image.removeAnimation(forKey: "bob")
-        guard let frames, let first = frames.frames.first else {
+    /// One scale per species, from its idle height, so switching anims never
+    /// resizes the creature.
+    private func applyScale() {
+        let points = SpriteRendering.pointsPerPixel(
+            referenceHeight: referenceHeight,
+            boxHeight: bounds.height,
+            backingScale: backingScale,
+            pixelated: loop?.pixelated ?? true
+        )
+        image.contentsScale = 1 / points
+    }
+
+    /// `playOneShot` is false for the first pose a view sees, so a one-shot
+    /// that finished before the view existed is not replayed.
+    func show(_ show: SpriteShow?, playOneShot: Bool) {
+        guard let show else {
+            loop = nil
+            image.removeAllAnimations()
             image.contents = nil
             return
         }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let rescale = show.referenceHeight != referenceHeight || show.loop.pixelated != loop?.pixelated
+        referenceHeight = show.referenceHeight
+        setLoop(show.loop)
+        if rescale { applyScale() }
+        setMirrored(!show.loop.directional && show.facing.horizontal > 0)
+        CATransaction.commit()
+        body.setValue(CGFloat(show.facing.horizontal) * 3, forKeyPath: "transform.translation.x")
+
+        if let next = show.oneShot, next.serial != playedOneShot {
+            playedOneShot = next.serial
+            if playOneShot { play(next) }
+        }
+    }
+
+    /// A new facing of the same anim keeps the loop's phase, so turning to
+    /// follow the cursor never restarts the animation.
+    private func setLoop(_ frames: SpriteFrames) {
+        guard loop?.frames.first !== frames.frames.first else { return }
+        let samePhase = loop?.durations == frames.durations && image.animation(forKey: "loop") != nil
+        loop = frames
         let filter: CALayerContentsFilter = frames.pixelated ? .nearest : .trilinear
         image.magnificationFilter = filter
-        image.contents = first
+        image.minificationFilter = filter
+        image.contents = frames.frames[0]
+        image.removeAnimation(forKey: "loop")
+        image.removeAnimation(forKey: "bob")
         if frames.frames.count > 1 {
-            let animation = CAKeyframeAnimation(keyPath: "contents")
-            animation.values = frames.frames
-            animation.calculationMode = .discrete
-            animation.duration = frames.totalDuration
+            if !samePhase { loopStart = CACurrentMediaTime() }
+            let animation = Self.keyframes(frames)
+            animation.beginTime = loopStart
             animation.repeatCount = .infinity
-            image.add(animation, forKey: "frames")
+            image.add(animation, forKey: "loop")
+            restoreOneShot()
         } else {
             let bob = CAKeyframeAnimation(keyPath: "transform.translation.y")
             bob.values = [0, 2]
             bob.calculationMode = .discrete
             bob.duration = 1.0
             bob.repeatCount = .infinity
+            bob.isAdditive = true
             image.add(bob, forKey: "bob")
         }
     }
 
-    /// Sprites face left; a cursor to the right flips them, and the body
-    /// leans a few points towards the cursor.
-    func gaze(_ facing: Facing?) {
-        let right = (facing?.horizontal ?? 0) > 0
-        if right != facingRight {
-            facingRight = right
-            image.setAffineTransform(right ? CGAffineTransform(scaleX: -1, y: 1) : .identity)
+    /// Core Animation applies the most recently added animation on a key path
+    /// last, so a one-shot added after the loop covers it, and the loop shows
+    /// through again once the one-shot is removed on completion.
+    private func play(_ oneShot: OneShot) {
+        guard oneShot.frames.loops else {
+            let animation = Self.keyframes(oneShot.frames)
+            animation.beginTime = CACurrentMediaTime()
+            image.add(animation, forKey: "oneShot")
+            self.oneShot = (animation, animation.beginTime + animation.duration)
+            return
         }
-        let lean = CGFloat(facing?.horizontal ?? 0) * 3
-        body.setValue(lean, forKeyPath: "transform.translation.x")
+        switch oneShot.state {
+        case .hop: hop(height: 8)
+        case .wake: hop(height: 6)
+        case .celebrating: celebrate()
+        case .idle, .sleeping: break
+        }
+    }
+
+    private func restoreOneShot() {
+        guard let oneShot, oneShot.ends > CACurrentMediaTime() else { return }
+        image.removeAnimation(forKey: "oneShot")
+        image.add(oneShot.animation, forKey: "oneShot")
+    }
+
+    private static func keyframes(_ frames: SpriteFrames) -> CAKeyframeAnimation {
+        let animation = CAKeyframeAnimation(keyPath: "contents")
+        animation.values = frames.frames
+        animation.keyTimes = SpriteRendering.keyTimes(for: frames.durations).map { NSNumber(value: $0) }
+        animation.calculationMode = .discrete
+        animation.duration = frames.totalDuration
+        return animation
+    }
+
+    /// Frames that do not face the requested way face left; mirroring turns
+    /// them right.
+    private func setMirrored(_ mirrored: Bool) {
+        guard mirrored != self.mirrored else { return }
+        self.mirrored = mirrored
+        image.setAffineTransform(mirrored ? CGAffineTransform(scaleX: -1, y: 1) : .identity)
     }
 
     /// Asleep, the creature ducks up behind the notch; any input pops it out.
@@ -97,10 +177,9 @@ final class SpriteLayer: CALayer {
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: tucked ? .easeInEaseOut : .easeOut))
         body.position = CGPoint(x: bounds.midX, y: bounds.midY + (tucked ? tuckDistance : 0))
         CATransaction.commit()
-        if !tucked { hop(height: 6) }
     }
 
-    func hop(height: CGFloat = 8) {
+    private func hop(height: CGFloat) {
         guard !tucked else { return }
         let hop = CAKeyframeAnimation(keyPath: "transform.translation.y")
         hop.values = [0, height, 0, height * 0.3, 0]
@@ -110,7 +189,7 @@ final class SpriteLayer: CALayer {
         image.add(hop, forKey: "hop")
     }
 
-    func celebrate() {
+    private func celebrate() {
         let jumps = CAKeyframeAnimation(keyPath: "transform.translation.y")
         jumps.values = [0, 10, 0, 10, 0, 10, 0]
         jumps.duration = 2
