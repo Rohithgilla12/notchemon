@@ -35,10 +35,7 @@ struct OneShot: Sendable {
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
     var facing: Facing
-    /// The species' idle frames facing the viewer. Every anim of the species
-    /// is scaled and anchored against them, so switching anims never changes
-    /// the creature's size or where it stands.
-    var reference: SpriteFrames
+    var bounds: SpriteBounds
     var oneShot: OneShot?
 }
 
@@ -82,6 +79,7 @@ actor CreatureEngine {
     private var snapshot = CompanionSnapshot()
     private var species: Species?
     private var spriteCache: [SpriteKey: SpriteFrames] = [:]
+    private var spriteBounds: SpriteBounds?
     private var oneShotSerial = 0
     private var timer = FocusTimer()
     private var cursorOffset: CursorOffset?
@@ -164,7 +162,7 @@ actor CreatureEngine {
         cancelFocus()
         state.progress = nil
         species = nil
-        spriteCache = [:]
+        forgetSprites()
         persist()
         snapshot.sprite = nil
         snapshot.phase = .choosingStarter(carryOver: nil)
@@ -252,7 +250,7 @@ actor CreatureEngine {
             guard let target = try? await provider.species(id: targetID) else { return }
             state.progress?.speciesId = targetID
             persist()
-            spriteCache = [:]
+            forgetSprites()
             await activate(target)
             snapshot.evolutionCount += 1
             let portrait = try? await provider.portrait(for: target)
@@ -424,14 +422,14 @@ actor CreatureEngine {
         guard let species else { return }
         let behaviour = snapshot.behaviour
         let state = SpriteChoreography.loop(for: behaviour)
-        guard let reference = await frames(.idle, facing: .down, of: species),
+        guard let bounds = await bounds(of: species),
               let loop = await frames(state, facing: behaviour.facing, of: species),
               snapshot.behaviour == behaviour
         else { return }
         snapshot.sprite = SpriteShow(
             loop: loop,
             facing: behaviour.facing,
-            reference: reference,
+            bounds: bounds,
             oneShot: snapshot.sprite?.oneShot
         )
     }
@@ -457,6 +455,30 @@ actor CreatureEngine {
             spriteCache[SpriteKey(state: state, facing: cached)] = frames
         }
         return frames
+    }
+
+    /// Fetches every anim in every facing the creature shows, so the bounds
+    /// cover a hop before it first plays and its one-shots are cached ahead.
+    private func bounds(of species: Species) async -> SpriteBounds? {
+        if let spriteBounds { return spriteBounds }
+        guard let rest = await frames(.idle, facing: .down, of: species) else { return nil }
+        var shown: [CGImage] = []
+        var seen = Set<ObjectIdentifier>()
+        for state in SpriteState.allCases {
+            for facing in Facing.front {
+                guard let frames = await frames(state, facing: facing, of: species) else { continue }
+                shown += frames.frames.filter { seen.insert(ObjectIdentifier($0)).inserted }
+            }
+        }
+        guard self.species?.id == species.id else { return nil }
+        let measured = SpriteRendering.bounds(rest: rest.frames, shown: shown)
+        spriteBounds = measured
+        return measured
+    }
+
+    private func forgetSprites() {
+        spriteCache = [:]
+        spriteBounds = nil
     }
 
     private struct SpriteKey: Hashable {

@@ -45,7 +45,8 @@ struct FakeProvider: CreatureProvider {
     }
 }
 
-/// Serves directional frames and records every sprite request.
+/// Serves directional frames, credited to the row they came from, and
+/// records every sprite request.
 final class RecordingProvider: CreatureProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [String] = []
@@ -59,11 +60,44 @@ final class RecordingProvider: CreatureProvider, @unchecked Sendable {
 
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         lock.withLock { recorded.append("\(state)/\(facing)") }
-        return SpriteFrames(frames: [FakeProvider.image()], durations: [0.1], directional: true, loops: state == .idle || state == .sleeping)
+        return SpriteFrames(
+            frames: [FakeProvider.image()],
+            durations: [0.1],
+            directional: true,
+            loops: state == .idle || state == .sleeping,
+            credits: ["\(state)/\(facing)"]
+        )
     }
 
     func portrait(for species: Species) async throws -> CGImage {
         FakeProvider.image()
+    }
+}
+
+/// Idle frames 10 rows tall with rows 3...6 opaque; every other anim is a
+/// 30-row hop frame with its arc drawn in, rows 2...16 opaque.
+struct TallHopProvider: CreatureProvider {
+    let starterIDs = [904]
+
+    func species(id: Int) async throws -> Species {
+        try await FakeProvider().species(id: id)
+    }
+
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
+        let frame = state == .idle ? Self.frame(height: 10, opaque: 3...6) : Self.frame(height: 30, opaque: 2...16)
+        return SpriteFrames(frames: [frame], durations: [0.1], directional: true, loops: state.loops)
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        FakeProvider.image()
+    }
+
+    private static func frame(height: Int, opaque rows: ClosedRange<Int>) -> CGImage {
+        let context = CGContext(data: nil, width: 4, height: height, bitsPerComponent: 8, bytesPerRow: 16,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: height - rows.upperBound - 1, width: 4, height: rows.count))
+        return context.makeImage()!
     }
 }
 
@@ -185,10 +219,25 @@ struct EngineTests {
         let watching = await engine.currentSnapshot
         #expect(watching.behaviour == .watching(facing: .downLeft))
         #expect(watching.sprite?.facing == .downLeft)
+        #expect(watching.sprite?.loop.credits == ["idle/downLeft"])
         await engine.cursorMoved(offset: CursorOffset(dx: 60, dy: -60))
         await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
-        #expect(await engine.currentSnapshot.sprite?.facing == .downLeft)
-        #expect(provider.requests == ["idle/down", "idle/downLeft", "idle/downRight"])
+        #expect(await engine.currentSnapshot.sprite?.loop.credits == ["idle/downLeft"])
+        #expect(provider.requests.count == Set(provider.requests).count)
+    }
+
+    @Test func fetchesEveryAnimInEveryFrontFacingAndNoBackRows() async {
+        let provider = RecordingProvider()
+        _ = await started(engine(provider: provider), choosing: 904)
+        let expected = Set(SpriteState.allCases.flatMap { state in Facing.front.map { "\(state)/\($0)" } })
+        #expect(Set(provider.requests) == expected)
+    }
+
+    @Test func boundsReachCoversTheHopArcBeforeItPlays() async throws {
+        let engine = await started(engine(provider: TallHopProvider()), choosing: 904)
+        let bounds = try #require(await engine.currentSnapshot.sprite?.bounds)
+        #expect(bounds.rest == Footprint(left: -2, right: 2, top: -2, bottom: 2))
+        #expect(bounds.reach == Footprint(left: -2, right: 2, top: -13, bottom: 2))
     }
 
     @Test func cursorEnteringTheNotchPlaysHopOverTheLoop() async throws {
@@ -219,7 +268,7 @@ struct EngineTests {
         let asleep = await engine.currentSnapshot
         #expect(asleep.behaviour == .sleeping)
         #expect(asleep.sprite?.oneShot == nil)
-        #expect(provider.requests.last == "sleeping/down")
+        #expect(asleep.sprite?.loop.credits == ["sleeping/down"])
         idle.seconds = 0
         await engine.sample()
         #expect(await engine.currentSnapshot.sprite?.oneShot?.state == .wake)

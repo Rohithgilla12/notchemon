@@ -59,7 +59,13 @@ struct NotchRootView: View {
 
     private func pose(expanded: Bool) -> SpritePose {
         let tucked = model.snapshot.behaviour == .sleeping && !expanded
-        return SpritePose(show: model.snapshot.sprite, tucked: tucked, flashToken: model.snapshot.evolutionCount, fidgets: !tucked)
+        return SpritePose(
+            show: model.snapshot.sprite,
+            tucked: tucked,
+            flashToken: model.snapshot.evolutionCount,
+            fidgets: !tucked,
+            fit: expanded ? .contain : .peek
+        )
     }
 
     private func accept(_ urls: [URL]) -> Bool {

@@ -8,11 +8,12 @@ struct SpritePose: Equatable {
     var tucked = false
     var flashToken = 0
     var fidgets = true
+    var fit = SpriteFit.peek
 
     static func == (lhs: SpritePose, rhs: SpritePose) -> Bool {
         lhs.show?.loop.frames.first === rhs.show?.loop.frames.first
             && lhs.show?.facing == rhs.show?.facing
-            && lhs.show?.reference.frames.first === rhs.show?.reference.frames.first
+            && lhs.show?.bounds == rhs.show?.bounds && lhs.fit == rhs.fit
             && lhs.show?.oneShot?.serial == rhs.show?.oneShot?.serial
             && lhs.tucked == rhs.tucked && lhs.flashToken == rhs.flashToken && lhs.fidgets == rhs.fidgets
     }
@@ -79,6 +80,7 @@ final class SpriteHostView: NSView {
         let previous = pose
         pose = next
         sprite.setTucked(next.tucked)
+        sprite.fit = next.fit
         sprite.show(next.show, playOneShot: !initial)
         guard !initial else { return }
         if next.flashToken != previous.flashToken { sprite.flash() }

@@ -9,8 +9,7 @@ final class SpriteLayer: CALayer {
     private let flashGlow = CAGradientLayer()
     private var loop: SpriteFrames?
     private var loopStart: CFTimeInterval = 0
-    private var reference: SpriteFrames?
-    private var footprint = Footprint(top: -1, bottom: 0)
+    private var speciesBounds: SpriteBounds?
     private var oneShot: (animation: CAKeyframeAnimation, ends: CFTimeInterval)?
     private var playedOneShot: Int?
     private var tucked = false
@@ -20,14 +19,17 @@ final class SpriteLayer: CALayer {
         didSet { if backingScale != oldValue { setNeedsLayout() } }
     }
 
+    var fit = SpriteFit.peek {
+        didSet { if fit != oldValue { setNeedsLayout() } }
+    }
+
     override init() {
         super.init()
         masksToBounds = false
         addSublayer(body)
         body.addSublayer(image)
         // Contents keep their own size around the layer's centre, so frames
-        // of any size share the centre the sheets are drawn around, and tall
-        // ones (a hop with its arc drawn in) rise up behind the notch.
+        // of any size share the centre the sheets are drawn around.
         image.contentsGravity = .center
         flashGlow.type = .radial
         flashGlow.colors = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)]
@@ -59,18 +61,17 @@ final class SpriteLayer: CALayer {
 
     private var tuckDistance: CGFloat { bounds.height + 6 }
 
-    /// One scale and one anchor per species, both from its idle frames, so
-    /// switching anims never resizes or shifts the creature. The idle feet
-    /// rest on the bottom of the box and the idle body fits inside it.
     private func placeImage() {
-        let points = SpriteRendering.pointsPerPixel(
-            visibleHeight: footprint.height,
-            boxHeight: bounds.height,
+        guard let speciesBounds else { return }
+        let placement = SpriteRendering.placement(
+            speciesBounds,
+            fit: fit,
+            in: bounds.size,
             backingScale: backingScale,
             pixelated: loop?.pixelated ?? true
         )
-        image.contentsScale = 1 / points
-        image.position = CGPoint(x: bounds.midX, y: bounds.minY + CGFloat(footprint.bottom) * points)
+        image.contentsScale = 1 / placement.pointsPerPixel
+        image.position = CGPoint(x: bounds.midX, y: bounds.minY + placement.centreHeight)
     }
 
     /// `playOneShot` is false for the first pose a view sees, so a one-shot
@@ -84,17 +85,13 @@ final class SpriteLayer: CALayer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let newSpecies = show.reference.frames.first !== reference?.frames.first
-        let rescale = newSpecies || show.loop.pixelated != loop?.pixelated
-        if newSpecies {
-            reference = show.reference
-            footprint = SpriteRendering.footprint(of: show.reference.frames) ?? footprint
-        }
+        let rescale = show.bounds != speciesBounds || show.loop.pixelated != loop?.pixelated
+        speciesBounds = show.bounds
         setLoop(show.loop)
         if rescale { placeImage() }
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         CATransaction.commit()
-        body.setValue(CGFloat(show.facing.horizontal) * 3, forKeyPath: "transform.translation.x")
+        body.setValue(CGFloat(show.facing.horizontal) * SpriteRendering.facingLean, forKeyPath: "transform.translation.x")
 
         if let next = show.oneShot, next.serial != playedOneShot {
             playedOneShot = next.serial
@@ -123,7 +120,7 @@ final class SpriteLayer: CALayer {
             restoreOneShot()
         } else {
             let bob = CAKeyframeAnimation(keyPath: "transform.translation.y")
-            bob.values = [0, 2]
+            bob.values = [0, SpriteRendering.bobLift]
             bob.calculationMode = .discrete
             bob.duration = 1.0
             bob.repeatCount = .infinity
@@ -144,8 +141,8 @@ final class SpriteLayer: CALayer {
             return
         }
         switch oneShot.state {
-        case .hop: hop(height: 8)
-        case .wake: hop(height: 6)
+        case .hop: hop(height: SpriteRendering.hopLift)
+        case .wake: hop(height: SpriteRendering.wakeLift)
         case .celebrating: celebrate()
         case .idle, .sleeping: break
         }
@@ -197,7 +194,8 @@ final class SpriteLayer: CALayer {
 
     private func celebrate() {
         let jumps = CAKeyframeAnimation(keyPath: "transform.translation.y")
-        jumps.values = [0, 10, 0, 10, 0, 10, 0]
+        let lift = SpriteRendering.celebrationLift
+        jumps.values = [0, lift, 0, lift, 0, lift, 0]
         jumps.duration = 2
         jumps.isAdditive = true
         image.add(jumps, forKey: "celebrate")
@@ -212,7 +210,7 @@ final class SpriteLayer: CALayer {
             animation.values = [1, 0.9, 1]
         } else {
             animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
-            let step = CGFloat.random(in: 2...4) * (Bool.random() ? 1 : -1)
+            let step = CGFloat.random(in: SpriteRendering.sidestep) * (Bool.random() ? 1 : -1)
             animation.values = [0, step, step, 0]
             animation.isAdditive = true
         }
