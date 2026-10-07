@@ -398,6 +398,34 @@ struct StateStoreTests {
         #expect(decoded == Preferences())
     }
 
+    @Test func fileFromBeforeMotionSettingsKeepsItsLevelAndGetsMotionDefaults() throws {
+        try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"progress":{"speciesId":25,"level":12,"xp":40},"totalFocusMinutes":75,"stash":[],"preferences":{"focusMinutes":45,"sleepEnabled":false,"virtualNotchEnabled":true}}"#.utf8).write(to: store.url)
+        let loaded = store.load()
+        #expect(loaded.progress == Progress(speciesId: 25, level: 12, xp: 40))
+        #expect(loaded.totalFocusMinutes == 75)
+        #expect(loaded.preferences.focusMinutes == 45)
+        #expect(!loaded.preferences.sleepEnabled)
+        #expect(loaded.preferences.idleStyle == .calm)
+        #expect(loaded.preferences.hopsOnApproach)
+        #expect(loaded.preferences.fidgets)
+    }
+
+    @Test func unknownIdleStyleFallsBackWithoutLosingTheOtherPreferences() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"idleStyle": "dancing", "fidgets": false}"#.utf8))
+        #expect(decoded.idleStyle == .calm)
+        #expect(!decoded.fidgets)
+    }
+
+    @Test func motionPreferencesRoundTrip() throws {
+        var preferences = Preferences()
+        preferences.idleStyle = .sitting
+        preferences.hopsOnApproach = false
+        preferences.fidgets = false
+        try store.save(CompanionState(progress: .starter(4), totalFocusMinutes: 0, stash: [], preferences: preferences))
+        #expect(store.load().preferences == preferences)
+    }
+
     @Test func progressMissingFieldsTakeDefaults() throws {
         let decoded = try JSONDecoder().decode(Progress.self, from: Data(#"{"speciesId": 7, "level": 9}"#.utf8))
         #expect(decoded == Progress(speciesId: 7, level: 9, xp: 0))

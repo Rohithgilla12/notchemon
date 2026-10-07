@@ -31,6 +31,19 @@ struct Preferences: Codable, Sendable, Equatable {
     var focusMinutes = 25
     var sleepEnabled = true
     var virtualNotchEnabled = true
+    var idleStyle = IdleStyle.calm
+    var hopsOnApproach = true
+    var fidgets = true
+}
+
+/// How the creature passes the time between everything else it does.
+enum IdleStyle: String, Codable, Sendable, CaseIterable {
+    /// Stands still on its idle anim's rest frame.
+    case calm
+    /// Plays its idle anim on a loop, whatever motion that anim has.
+    case lively
+    /// Lies down where the species has the art for it, else stands calm.
+    case sitting
 }
 
 extension Preferences {
@@ -43,5 +56,9 @@ extension Preferences {
         focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes) ?? defaults.focusMinutes
         sleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .sleepEnabled) ?? defaults.sleepEnabled
         virtualNotchEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualNotchEnabled) ?? defaults.virtualNotchEnabled
+        // A style from a newer version reads as the default, not as a broken file.
+        idleStyle = (try? container.decodeIfPresent(IdleStyle.self, forKey: .idleStyle)) ?? defaults.idleStyle
+        hopsOnApproach = try container.decodeIfPresent(Bool.self, forKey: .hopsOnApproach) ?? defaults.hopsOnApproach
+        fidgets = try container.decodeIfPresent(Bool.self, forKey: .fidgets) ?? defaults.fidgets
     }
 }
