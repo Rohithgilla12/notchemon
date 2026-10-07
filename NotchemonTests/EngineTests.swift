@@ -452,6 +452,19 @@ struct StateStoreTests {
         #expect(loaded.preferences.idleStyle == .calm)
         #expect(loaded.preferences.hopsOnApproach)
         #expect(loaded.preferences.fidgets)
+        #expect(loaded.preferences.wander == .topEdge)
+    }
+
+    @Test(arguments: WanderRange.allCases)
+    func wanderDecodesEachRange(range: WanderRange) throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"wander": "\#(range.rawValue)"}"#.utf8))
+        #expect(decoded.wander == range)
+    }
+
+    @Test func unknownWanderFallsBackToTheTopEdgeWithoutLosingTheOtherPreferences() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"wander": "everywhere", "fidgets": false}"#.utf8))
+        #expect(decoded.wander == .topEdge)
+        #expect(!decoded.fidgets)
     }
 
     @Test func unknownIdleStyleFallsBackWithoutLosingTheOtherPreferences() throws {
@@ -465,6 +478,7 @@ struct StateStoreTests {
         preferences.idleStyle = .sitting
         preferences.hopsOnApproach = false
         preferences.fidgets = false
+        preferences.wander = .nearNotch
         try store.save(CompanionState(progress: .starter(4), totalFocusMinutes: 0, stash: [], preferences: preferences))
         #expect(store.load().preferences == preferences)
     }

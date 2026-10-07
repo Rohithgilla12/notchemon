@@ -34,6 +34,17 @@ struct Preferences: Codable, Sendable, Equatable {
     var idleStyle = IdleStyle.calm
     var hopsOnApproach = true
     var fidgets = true
+    var wander = WanderRange.topEdge
+}
+
+/// How far from the notch the creature may walk along the strip below the menu bar.
+enum WanderRange: String, Codable, Sendable, CaseIterable {
+    /// Stays under the notch.
+    case off
+    /// A short walk either side of the notch.
+    case nearNotch
+    /// Anywhere along the top edge of the screen.
+    case topEdge
 }
 
 /// How the creature passes the time between everything else it does.
@@ -60,5 +71,6 @@ extension Preferences {
         idleStyle = (try? container.decodeIfPresent(IdleStyle.self, forKey: .idleStyle)) ?? defaults.idleStyle
         hopsOnApproach = try container.decodeIfPresent(Bool.self, forKey: .hopsOnApproach) ?? defaults.hopsOnApproach
         fidgets = try container.decodeIfPresent(Bool.self, forKey: .fidgets) ?? defaults.fidgets
+        wander = (try? container.decodeIfPresent(WanderRange.self, forKey: .wander)) ?? defaults.wander
     }
 }
