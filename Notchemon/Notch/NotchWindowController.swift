@@ -103,6 +103,8 @@ final class NotchWindowController {
         withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
             presentation.mode = mode
         }
+        // The sprite moved, so the creature must look at the cursor again from where it now stands.
+        onCursorMoved?(NSEvent.mouseLocation)
     }
 
     private func installMouseMonitors() {
