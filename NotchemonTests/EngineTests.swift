@@ -317,6 +317,28 @@ struct StateStoreTests {
         #expect(loaded.preferences == Preferences())
     }
 
+    @Test func preferencesMissingFieldsTakeDefaults() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"focusMinutes": 25}"#.utf8))
+        #expect(decoded == Preferences())
+    }
+
+    @Test func progressMissingFieldsTakeDefaults() throws {
+        let decoded = try JSONDecoder().decode(Progress.self, from: Data(#"{"speciesId": 7, "level": 9}"#.utf8))
+        #expect(decoded == Progress(speciesId: 7, level: 9, xp: 0))
+    }
+
+    @Test func partialNestedObjectsKeepTheRestOfTheState() throws {
+        try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"progress":{"speciesId":7,"level":9},"totalFocusMinutes":300,"stash":["AQID"],"preferences":{"sleepEnabled":false}}"#.utf8).write(to: store.url)
+        let loaded = store.load()
+        #expect(loaded.progress == Progress(speciesId: 7, level: 9, xp: 0))
+        #expect(loaded.totalFocusMinutes == 300)
+        #expect(loaded.stash == [Data([1, 2, 3])])
+        #expect(loaded.preferences == Preferences(focusMinutes: 25, sleepEnabled: false, virtualNotchEnabled: true))
+        let siblings = try FileManager.default.contentsOfDirectory(atPath: store.url.deletingLastPathComponent().path)
+        #expect(!siblings.contains { $0.hasPrefix("state.corrupt-") })
+    }
+
     @Test func corruptFileIsSetAsideAndStartsFresh() throws {
         try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("{not json".utf8).write(to: store.url)

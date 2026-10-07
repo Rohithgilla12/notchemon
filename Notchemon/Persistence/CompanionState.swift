@@ -43,3 +43,16 @@ struct Preferences: Codable, Sendable, Equatable {
     var sleepEnabled = true
     var virtualNotchEnabled = true
 }
+
+extension Preferences {
+    /// Every field falls back to its default, so adding one never fails an
+    /// older file. Without this, synthesized Codable throws on the nested
+    /// object and `StateStore` sets the user's whole state aside.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Preferences()
+        focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes) ?? defaults.focusMinutes
+        sleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .sleepEnabled) ?? defaults.sleepEnabled
+        virtualNotchEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualNotchEnabled) ?? defaults.virtualNotchEnabled
+    }
+}
