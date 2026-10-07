@@ -46,7 +46,17 @@ struct BehaviourRulesTests {
         input.cursorOffset = CursorOffset(dx: 60, dy: -60)
         #expect(BehaviourRules.resolve(input) == .watching(facing: .downRight))
         input.cursorOffset = CursorOffset(dx: 0, dy: 80)
-        #expect(BehaviourRules.resolve(input) == .watching(facing: .up))
+        #expect(BehaviourRules.resolve(input) == .watching(facing: .down))
+    }
+
+    @Test func neverTurnsItsBackWhenTheCursorIsAbove() {
+        var input = calm
+        input.cursorOffset = CursorOffset(dx: -60, dy: 60)
+        #expect(BehaviourRules.resolve(input) == .watching(facing: .left))
+        input.cursorOffset = CursorOffset(dx: 60, dy: 60)
+        #expect(BehaviourRules.resolve(input) == .watching(facing: .right))
+        input.cursorOffset = CursorOffset(dx: 5, dy: 120)
+        #expect(BehaviourRules.resolve(input) == .watching(facing: .down))
     }
 
     @Test func keepsWatchingBrieflyAfterCursorLeaves() {
