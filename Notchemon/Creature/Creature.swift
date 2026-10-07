@@ -17,6 +17,8 @@ enum SpriteState: String, Codable, Sendable, CaseIterable {
 struct SpriteFrames: @unchecked Sendable {
     let frames: [CGImage]
     let frameDuration: TimeInterval
+    /// Pixel art scales with nearest-neighbour; smooth drawings do not.
+    var pixelated = true
 
     var isAnimated: Bool { frames.count > 1 }
 }

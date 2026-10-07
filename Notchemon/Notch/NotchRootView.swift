@@ -2,28 +2,106 @@ import SwiftUI
 
 struct NotchRootView: View {
     let presentation: NotchPresentation
+    let model: CompanionModel
 
     var body: some View {
         if let metrics = presentation.metrics {
             let expanded = presentation.isExpanded
-            let size = expanded ? metrics.panelSize : metrics.notchSize
+            let shapeSize = expanded ? metrics.panelSize : metrics.notchSize
+            let radius: CGFloat = expanded ? 22 : 9
+            let sprite = metrics.spriteFrame(expanded: expanded)
+
             ZStack(alignment: .topLeading) {
-                NotchShape(bottomRadius: expanded ? 22 : 9)
+                NotchShape(bottomRadius: radius)
                     .fill(.black)
-                    .frame(width: size.width, height: size.height)
+                    .frame(width: shapeSize.width, height: shapeSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
 
-                Circle()
-                    .fill(.orange)
-                    .frame(width: metrics.spriteFrame(expanded: expanded).width, height: metrics.spriteFrame(expanded: expanded).height)
-                    .offset(x: metrics.spriteFrame(expanded: expanded).minX, y: metrics.spriteFrame(expanded: expanded).minY)
+                if expanded {
+                    ExpandedView(model: model, metrics: metrics, focusNoteToken: presentation.focusNoteToken)
+                        .frame(width: metrics.panelSize.width, height: metrics.panelSize.height, alignment: .topLeading)
+                        .transition(.opacity.animation(.easeOut(duration: 0.15)))
+                }
+
+                if model.activeSpecies != nil {
+                    SpriteView(pose: pose(expanded: expanded))
+                        .frame(width: sprite.width, height: sprite.height)
+                        .offset(x: sprite.minX, y: sprite.minY)
+                }
 
                 NotchShape(bottomRadius: 9)
                     .fill(.black)
                     .frame(width: metrics.notchSize.width, height: metrics.notchSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
+
+                if let focus = model.snapshot.focus {
+                    FocusRing(session: focus, radius: radius)
+                        .frame(width: shapeSize.width + 4, height: shapeSize.height + 2)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                }
             }
             .frame(width: metrics.panelSize.width, height: metrics.panelSize.height, alignment: .topLeading)
+            .modifier(ShakeEffect(shakes: CGFloat(presentation.shakeToken)))
+            .animation(.linear(duration: 0.45), value: presentation.shakeToken)
+            .dropDestination(for: URL.self) { urls, _ in
+                accept(urls)
+            } isTargeted: { targeted in
+                presentation.isDropTargeted = targeted
+            }
         }
+    }
+
+    private func pose(expanded: Bool) -> SpritePose {
+        let behaviour = model.snapshot.behaviour
+        var pose = SpritePose(frames: model.snapshot.frames)
+        if case .watching(let gaze) = behaviour { pose.gaze = gaze }
+        if case .celebrating = behaviour { pose.celebrating = true }
+        pose.tucked = behaviour == .sleeping && !expanded
+        pose.hopToken = presentation.hopToken
+        pose.flashToken = model.snapshot.evolutionCount
+        pose.fidgets = !pose.tucked
+        return pose
+    }
+
+    private func accept(_ urls: [URL]) -> Bool {
+        let held = Set(model.snapshot.stash.map(\.url.standardizedFileURL))
+        let fresh = urls.filter { $0.isFileURL && !held.contains($0.standardizedFileURL) }
+        guard !fresh.isEmpty else { return false }
+        if model.snapshot.stash.count >= CompanionState.stashCapacity {
+            presentation.shakeToken += 1
+            return false
+        }
+        Task {
+            if await !model.addToStash(fresh) { presentation.shakeToken += 1 }
+        }
+        return true
+    }
+}
+
+struct ShakeEffect: GeometryEffect {
+    var shakes: CGFloat
+
+    var animatableData: CGFloat {
+        get { shakes }
+        set { shakes = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: 6 * sin(shakes * .pi * 6), y: 0))
+    }
+}
+
+struct FocusRing: View {
+    let session: FocusSession
+    let radius: CGFloat
+
+    var body: some View {
+        // One redraw a second, and only while a session runs.
+        TimelineView(.periodic(from: session.startedAt, by: 1)) { context in
+            NotchShape(bottomRadius: radius + 2, closed: false)
+                .trim(from: 0, to: session.remainingFraction(at: context.date))
+                .stroke(Color.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        }
+        .allowsHitTesting(false)
     }
 }

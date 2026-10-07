@@ -40,7 +40,7 @@ struct OriginalCreatureProvider: CreatureProvider {
         guard let design = Self.roster[species.id] else { throw CreatureError.unknownSpecies }
         let frames = [0.0, 1.0].compactMap { squash in Self.draw(design, state: state, squash: squash) }
         guard !frames.isEmpty else { throw CreatureError.missingSprite }
-        return SpriteFrames(frames: frames, frameDuration: state == .levelUp ? 0.2 : 0.45)
+        return SpriteFrames(frames: frames, frameDuration: state == .levelUp ? 0.2 : 0.45, pixelated: false)
     }
 
     static let canvas = 96

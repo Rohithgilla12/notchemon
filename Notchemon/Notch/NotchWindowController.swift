@@ -162,7 +162,10 @@ final class NotchWindowController {
         guard let layout = presentation.layout else { return }
         if pressPoll != nil, !isFileDragInProgress { return }
         let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout)
-        panel.ignoresMouseEvents = !decision.hitTestable
+        // Each assignment is a WindowServer round trip; mouse moves arrive at 120 Hz.
+        if panel.ignoresMouseEvents == decision.hitTestable {
+            panel.ignoresMouseEvents = !decision.hitTestable
+        }
         if decision.hop { presentation.hopToken += 1 }
         setMode(decision.mode)
         if decision.scheduleCollapse {

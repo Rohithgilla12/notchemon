@@ -6,7 +6,7 @@ struct NotchemonApp: App {
 
     var body: some Scene {
         MenuBarExtra("Notchemon", systemImage: "sparkles") {
-            Button("Quit") { NSApplication.shared.terminate(nil) }
+            MenuBarContent(app: delegate, model: delegate.model)
         }
     }
 }
