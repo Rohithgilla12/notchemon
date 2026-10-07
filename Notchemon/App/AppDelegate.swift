@@ -37,9 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let layout = presentation.layout, let metrics = presentation.metrics else { return }
             let frame = metrics.spriteFrame(expanded: presentation.isExpanded)
             let centre = metrics.screenPoint(CGPoint(x: frame.midX, y: frame.midY), panelFrame: layout.expanded)
-            model.cursorMoved(to: point, spriteCentre: centre)
+            model.cursorMoved(to: point, spriteCentre: centre, panelExpanded: presentation.isExpanded)
         }
-        controller.onCursorEnteredNotch = { [presentation, model] in model.cursorEnteredNotch(panelExpanded: presentation.isExpanded) }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
         }

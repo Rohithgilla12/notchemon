@@ -27,7 +27,6 @@ struct HoverDecision: Sendable, Equatable {
     /// not, so menu-bar icons beside the notch stay clickable.
     var hitTestable: Bool
     var collapse: CollapseAction
-    var hop: Bool
 }
 
 enum HoverPolicy {
@@ -37,18 +36,18 @@ enum HoverPolicy {
     static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false) -> HoverDecision {
         if buttonHeld {
             let hitTestable = mode.isExpanded && layout.expanded.contains(cursor)
-            return HoverDecision(mode: mode, hitTestable: hitTestable, collapse: .unchanged, hop: false)
+            return HoverDecision(mode: mode, hitTestable: hitTestable, collapse: .unchanged)
         }
         switch mode {
         case .collapsed:
             let inside = layout.collapsed.contains(cursor)
-            return HoverDecision(mode: inside ? .expanded(.hover) : .collapsed, hitTestable: inside, collapse: .cancel, hop: inside)
+            return HoverDecision(mode: inside ? .expanded(.hover) : .collapsed, hitTestable: inside, collapse: .cancel)
         case .expanded(.hover):
             let inside = layout.expanded.contains(cursor)
-            return HoverDecision(mode: mode, hitTestable: inside, collapse: inside ? .cancel : .schedule, hop: false)
+            return HoverDecision(mode: mode, hitTestable: inside, collapse: inside ? .cancel : .schedule)
         case .expanded(.pinned):
             let inside = layout.expanded.contains(cursor)
-            return HoverDecision(mode: inside ? .expanded(.hover) : mode, hitTestable: inside, collapse: .cancel, hop: false)
+            return HoverDecision(mode: inside ? .expanded(.hover) : mode, hitTestable: inside, collapse: .cancel)
         }
     }
 }

@@ -95,12 +95,11 @@ struct SpriteChoreographyTests {
         #expect(SpriteChoreography.loop(for: behaviour) == expected)
     }
 
-    @Test func cursorEnteringTheClosedNotchHops() {
-        #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch(panelExpanded: false)) == .hop)
+    @Test func noticingTheCursorHops() {
+        #expect(SpriteChoreography.oneShot(for: .cursorNoticed) == .hop)
     }
 
     @Test func theOpenPanelNeverHops() {
-        #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch(panelExpanded: true)) == nil)
         #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake])
     }
 
@@ -122,5 +121,31 @@ struct SpriteChoreographyTests {
     ])
     func oneShotOnBehaviourChange(from previous: Behaviour, to next: Behaviour, expected: SpriteState?) {
         #expect(SpriteChoreography.oneShot(for: .behaviourChanged(from: previous, to: next)) == expected)
+    }
+}
+
+struct HopCueTests {
+    private let far = CursorProximity(near: false, panelExpanded: false)
+    private let near = CursorProximity(near: true, panelExpanded: false)
+
+    @Test func cursorCrossingIntoTheRadiusWithThePanelClosedHops() {
+        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: .infinity))
+    }
+
+    @Test(arguments: [
+        (CursorProximity?.none, CursorProximity(near: true, panelExpanded: false)),
+        (CursorProximity(near: true, panelExpanded: false), CursorProximity(near: true, panelExpanded: false)),
+        (CursorProximity(near: true, panelExpanded: false), CursorProximity(near: false, panelExpanded: false)),
+        (CursorProximity(near: false, panelExpanded: true), CursorProximity(near: true, panelExpanded: true)),
+        (CursorProximity(near: false, panelExpanded: true), CursorProximity(near: true, panelExpanded: false)),
+        (CursorProximity(near: false, panelExpanded: false), CursorProximity(near: true, panelExpanded: true)),
+    ])
+    func noHopWithoutACrossingInWhileClosed(previous: CursorProximity?, current: CursorProximity) {
+        #expect(!HopCue.hops(from: previous, to: current, secondsSinceLastHop: .infinity))
+    }
+
+    @Test func aRecentHopHoldsTheNextOneOffUntilTheCooldownEnds() {
+        #expect(!HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown - 0.1))
+        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown))
     }
 }

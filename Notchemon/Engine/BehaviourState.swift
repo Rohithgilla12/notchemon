@@ -58,10 +58,32 @@ enum BehaviourRules {
     }
 }
 
+/// Whether the cursor was within `BehaviourRules.watchRadius` of the
+/// creature, and in which panel mode that was measured.
+struct CursorProximity: Sendable, Equatable {
+    var near: Bool
+    var panelExpanded: Bool
+}
+
+/// When the creature notices the cursor and hops.
+enum HopCue {
+    /// Jiggling the cursor across the radius's edge greets it once.
+    static let cooldown: TimeInterval = 4
+
+    /// The creature hops when the cursor crosses into the watch radius while
+    /// the panel is closed, before a hover over the notch can open it. A
+    /// panel opening or closing moves the creature, not the cursor, so the
+    /// creature notices nothing then.
+    static func hops(from previous: CursorProximity?, to current: CursorProximity, secondsSinceLastHop: TimeInterval) -> Bool {
+        guard let previous, previous.panelExpanded == current.panelExpanded else { return false }
+        return !current.panelExpanded && !previous.near && current.near && secondsSinceLastHop >= cooldown
+    }
+}
+
 /// Something that interrupts the loop with a one-shot animation.
 enum SpriteCue: Sendable, Equatable {
     case behaviourChanged(from: Behaviour, to: Behaviour)
-    case cursorEnteredNotch(panelExpanded: Bool)
+    case cursorNoticed
 }
 
 /// The single place that decides which animation plays when.
@@ -90,8 +112,8 @@ enum SpriteChoreography {
 
     static func oneShot(for cue: SpriteCue) -> SpriteState? {
         switch cue {
-        case .cursorEnteredNotch(let panelExpanded):
-            plays(.hop, panelExpanded: panelExpanded) ? .hop : nil
+        case .cursorNoticed:
+            .hop
         case .behaviourChanged(let previous, .celebrating(let celebration)) where previous != .celebrating(celebration):
             .celebrating
         case .behaviourChanged(.sleeping, let next) where next != .sleeping:

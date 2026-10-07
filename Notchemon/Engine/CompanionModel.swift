@@ -16,6 +16,8 @@ final class CompanionModel {
 
     @ObservationIgnored private let engine: CreatureEngine
     @ObservationIgnored private var lastSentFacing: Facing??
+    @ObservationIgnored private var proximity: CursorProximity?
+    @ObservationIgnored private var lastHop = Date.distantPast
 
     init(engine: CreatureEngine) {
         self.engine = engine
@@ -106,16 +108,18 @@ final class CompanionModel {
 
     /// Forwards the cursor only when the facing it implies changes, so mouse
     /// movement far from the notch costs no actor hops.
-    func cursorMoved(to point: CGPoint, spriteCentre: CGPoint) {
+    func cursorMoved(to point: CGPoint, spriteCentre: CGPoint, panelExpanded: Bool) {
         let offset = CursorOffset(dx: point.x - spriteCentre.x, dy: point.y - spriteCentre.y)
         let near = (offset.dx * offset.dx + offset.dy * offset.dy).squareRoot() <= BehaviourRules.watchRadius
+        let current = CursorProximity(near: near, panelExpanded: panelExpanded)
+        if HopCue.hops(from: proximity, to: current, secondsSinceLastHop: Date().timeIntervalSince(lastHop)) {
+            lastHop = Date()
+            Task { await engine.cursorNoticed() }
+        }
+        proximity = current
         let facing: Facing? = near ? BehaviourRules.facing(toward: offset) : nil
         guard lastSentFacing != .some(facing) else { return }
         lastSentFacing = .some(facing)
         Task { await engine.cursorMoved(offset: near ? offset : nil) }
-    }
-
-    func cursorEnteredNotch(panelExpanded: Bool) {
-        Task { await engine.cursorEnteredNotch(panelExpanded: panelExpanded) }
     }
 }

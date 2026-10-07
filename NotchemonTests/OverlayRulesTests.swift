@@ -42,12 +42,12 @@ struct HoverPolicyTests {
 
     @Test func cursorBesideNotchLeavesPanelClickThrough() {
         let decision = HoverPolicy.react(to: menuBarIcon, mode: .collapsed, layout: layout)
-        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .cancel, hop: false))
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .cancel))
     }
 
-    @Test func enteringNotchExpandsAndHops() {
+    @Test func enteringNotchExpands() {
         let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout)
-        #expect(decision == HoverDecision(mode: .expanded(.hover), hitTestable: true, collapse: .cancel, hop: true))
+        #expect(decision == HoverDecision(mode: .expanded(.hover), hitTestable: true, collapse: .cancel))
     }
 
     @Test func expandedPanelStaysWhileCursorIsInsideIt() {
@@ -76,13 +76,13 @@ struct HoverPolicyTests {
     @Test func heldButtonFreezesTheModeButKeepsHitTestingCurrent() {
         let outside = CGPoint(x: 100, y: 100)
         #expect(HoverPolicy.react(to: outside, mode: .expanded(.hover), layout: layout, buttonHeld: true)
-            == HoverDecision(mode: .expanded(.hover), hitTestable: false, collapse: .unchanged, hop: false))
+            == HoverDecision(mode: .expanded(.hover), hitTestable: false, collapse: .unchanged))
         #expect(HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.pinned), layout: layout, buttonHeld: true)
-            == HoverDecision(mode: .expanded(.pinned), hitTestable: true, collapse: .unchanged, hop: false))
+            == HoverDecision(mode: .expanded(.pinned), hitTestable: true, collapse: .unchanged))
     }
 
     @Test func heldButtonOverTheNotchNeitherExpandsNorCatchesClicks() {
         let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout, buttonHeld: true)
-        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .unchanged, hop: false))
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .unchanged))
     }
 }

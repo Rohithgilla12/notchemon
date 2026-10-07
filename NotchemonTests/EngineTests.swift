@@ -317,20 +317,14 @@ struct EngineTests {
         #expect(bounds.anims[.hop]?.footprint == Footprint(left: -2, right: 2, top: -15, bottom: 0))
     }
 
-    @Test func cursorEnteringTheNotchPlaysHopOverTheLoop() async throws {
+    @Test func noticingTheCursorPlaysHopOverTheLoop() async throws {
         let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
-        await engine.cursorEnteredNotch(panelExpanded: false)
+        await engine.cursorNoticed()
         let first = try #require(await engine.currentSnapshot.sprite?.oneShot)
         #expect(first.state == .hop)
         #expect(!first.frames.loops)
-        await engine.cursorEnteredNotch(panelExpanded: false)
+        await engine.cursorNoticed()
         #expect(await engine.currentSnapshot.sprite?.oneShot?.serial == first.serial + 1)
-    }
-
-    @Test func cursorEnteringTheNotchWithThePanelOpenPlaysNothing() async {
-        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
-        await engine.cursorEnteredNotch(panelExpanded: true)
-        #expect(await engine.currentSnapshot.sprite?.oneShot == nil)
     }
 
     @Test func fallingAsleepLoopsSleepAndWakingPlaysWake() async throws {
