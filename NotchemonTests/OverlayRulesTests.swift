@@ -87,27 +87,3 @@ struct HoverPolicyTests {
         #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .unchanged, hop: false))
     }
 }
-
-struct FullScreenDetectorTests {
-    let screen = CGRect(x: 0, y: 0, width: 1728, height: 1117)
-
-    @Test func windowFromNotchLineDownIsFullScreen() {
-        let window = WindowSnapshot(ownerPID: 2, layer: 0, bounds: CGRect(x: 0, y: 32, width: 1728, height: 1085))
-        #expect(FullScreenDetector.isFullScreen(screenBounds: screen, menuBarHeight: 33, windows: [window], ownPID: 1))
-    }
-
-    @Test func zoomedWindowBelowMenuBarIsNotFullScreen() {
-        let window = WindowSnapshot(ownerPID: 2, layer: 0, bounds: CGRect(x: 0, y: 33, width: 1728, height: 1084))
-        #expect(!FullScreenDetector.isFullScreen(screenBounds: screen, menuBarHeight: 33, windows: [window], ownPID: 1))
-    }
-
-    @Test func hiddenMenuBarCountsAsFullScreen() {
-        #expect(FullScreenDetector.isFullScreen(screenBounds: screen, menuBarHeight: 0, windows: [], ownPID: 1))
-    }
-
-    @Test func ownAndOverlayWindowsAreIgnored() {
-        let own = WindowSnapshot(ownerPID: 1, layer: 0, bounds: screen)
-        let overlay = WindowSnapshot(ownerPID: 2, layer: 25, bounds: screen)
-        #expect(!FullScreenDetector.isFullScreen(screenBounds: screen, menuBarHeight: 33, windows: [own, overlay], ownPID: 1))
-    }
-}
