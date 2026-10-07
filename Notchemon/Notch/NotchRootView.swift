@@ -31,7 +31,7 @@ struct NotchRootView: View {
                 }
 
                 if model.activeSpecies != nil {
-                    SpriteView(pose: pose(expanded: expanded))
+                    SpriteView(pose: SpritePose(model.snapshot, roam: roamer.phase, expanded: expanded, at: Date()))
                         .frame(width: sprite.width, height: sprite.height)
                         .offset(x: sprite.minX, y: sprite.minY)
                 }
@@ -57,36 +57,6 @@ struct NotchRootView: View {
             }
             .frame(width: metrics.windowSize.width, height: metrics.windowSize.height, alignment: .top)
         }
-    }
-
-    /// The open panel shows the creature in its own slot wherever it was
-    /// wandering; closed, it walks or rests along the strip.
-    private func pose(expanded: Bool) -> SpritePose {
-        let tucked = model.snapshot.behaviour == .sleeping && !expanded
-        let walk = expanded ? nil : roamer.phase.walk
-        var show = model.snapshot.sprite
-        if let walk, let cycle = show?.walk {
-            show?.loop = cycle.frames(toward: walk.direction)
-            show?.loopState = .walking
-            show?.playback = .cycle
-            show?.facing = walk.direction
-        }
-        let track: SpriteTrack = if expanded {
-            .still(0)
-        } else if let walk {
-            .walk(walk)
-        } else {
-            .still(roamer.phase.x(at: Date()))
-        }
-        return SpritePose(
-            show: show,
-            tucked: tucked,
-            flashToken: model.snapshot.evolutionCount,
-            fidgets: model.snapshot.preferences.fidgets && !tucked && walk == nil,
-            fit: expanded ? .contain : .peek,
-            idleStyle: model.snapshot.preferences.idleStyle,
-            track: track
-        )
     }
 
     private func accept(_ urls: [URL]) -> Bool {

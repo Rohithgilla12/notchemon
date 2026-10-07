@@ -28,6 +28,39 @@ struct SpritePose: Equatable {
     }
 }
 
+extension SpritePose {
+    /// The open panel shows the creature in its own slot wherever it was
+    /// wandering. Closed, it walks or rests along the strip, and asleep it
+    /// tucks up behind the notch only once it is home.
+    init(_ snapshot: CompanionSnapshot, roam: RoamPhase, expanded: Bool, at now: Date) {
+        let walk = expanded ? nil : roam.walk
+        var show = snapshot.sprite
+        if let walk, let cycle = show?.walk {
+            show?.loop = cycle.frames(toward: walk.direction)
+            show?.loopState = .walking
+            show?.playback = .cycle
+            show?.facing = walk.direction
+        }
+        let tucked = snapshot.behaviour == .sleeping && !expanded && roam == .home
+        let track: SpriteTrack = if expanded {
+            .still(0)
+        } else if let walk {
+            .walk(walk)
+        } else {
+            .still(roam.x(at: now))
+        }
+        self.init(
+            show: show,
+            tucked: tucked,
+            flashToken: snapshot.evolutionCount,
+            fidgets: snapshot.preferences.fidgets && !tucked && walk == nil,
+            fit: expanded ? .contain : .peek,
+            idleStyle: snapshot.preferences.idleStyle,
+            track: track
+        )
+    }
+}
+
 struct SpriteView: NSViewRepresentable {
     var pose: SpritePose
 

@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: CompanionModel
     private(set) var windowController: NotchWindowController?
     private var hotKey: HotKey?
+    private var cursorNearHome = false
 
     override init() {
         let defaults = UserDefaults.standard
@@ -35,13 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content: NotchRootView(presentation: presentation, model: model, roamer: roamer)
         )
         windowController = controller
-        controller.onCursorMoved = { [weak self, presentation, model] point in
-            self?.refreshRoam()
-            guard let layout = presentation.layout, let metrics = presentation.metrics else { return }
-            let frame = metrics.spriteFrame(expanded: presentation.isExpanded)
-            let centre = metrics.screenPoint(CGPoint(x: frame.midX, y: frame.midY), panelFrame: layout.expanded)
-            model.cursorMoved(to: point, spriteCentre: centre, panelExpanded: presentation.isExpanded)
-        }
+        controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
+        // Arriving or setting off moves the creature, not the cursor, so it looks again from where it is.
+        roamer.onPhaseChanged = { [weak self] in self?.cursorMoved(to: NSEvent.mouseLocation) }
         model.onSnapshot = { [weak self] in self?.refreshRoam() }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
@@ -55,14 +52,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await model.run() }
     }
 
+    /// Offsets are measured from where the creature is now, mid-walk too, so
+    /// it faces and hops at the cursor from its own spot. A cursor near home
+    /// calls it running back to greet it.
+    private func cursorMoved(to point: CGPoint) {
+        guard let layout = presentation.layout, let metrics = presentation.metrics else {
+            refreshRoam()
+            return
+        }
+        let home = metrics.spriteCentre(expanded: false, roamX: 0, panelFrame: layout.expanded)
+        cursorNearHome = hypot(point.x - home.x, point.y - home.y) <= BehaviourRules.watchRadius
+        refreshRoam()
+        let expanded = presentation.isExpanded
+        let centre = metrics.spriteCentre(expanded: expanded, roamX: roamer.phase.x(at: Date()), panelFrame: layout.expanded)
+        model.cursorMoved(to: point, spriteCentre: centre, panelExpanded: expanded)
+    }
+
     private func refreshRoam() {
+        let snapshot = model.snapshot
         let conditions = HomingConditions(
-            wander: model.snapshot.preferences.wander,
+            wander: snapshot.preferences.wander,
             panelOpen: presentation.isExpanded,
-            sleeping: false,
-            focusing: false,
+            sleeping: snapshot.behaviour == .sleeping,
+            focusing: snapshot.focus != nil,
             fullScreen: presentation.isFullScreen,
-            cursorNearHome: false,
+            cursorNearHome: cursorNearHome,
             hasCreature: model.activeSpecies != nil
         )
         let reach = Double(presentation.layout?.roamReach ?? 0)

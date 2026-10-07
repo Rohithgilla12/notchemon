@@ -62,6 +62,14 @@ struct PanelMetrics: Sendable, Equatable {
         expanded ? expandedSpriteFrame : collapsedSpriteFrame
     }
 
+    /// The creature's centre in global screen coordinates, `roamX` points
+    /// from home along the strip when the panel is closed.
+    func spriteCentre(expanded: Bool, roamX: Double, panelFrame: CGRect) -> CGPoint {
+        let frame = spriteFrame(expanded: expanded)
+        let centre = screenPoint(CGPoint(x: frame.midX, y: frame.midY), panelFrame: panelFrame)
+        return expanded ? centre : CGPoint(x: centre.x + roamX, y: centre.y)
+    }
+
     /// Converts a local sprite centre to global screen coordinates.
     func screenPoint(_ local: CGPoint, panelFrame: CGRect) -> CGPoint {
         CGPoint(x: panelFrame.minX + local.x, y: panelFrame.maxY - local.y)
