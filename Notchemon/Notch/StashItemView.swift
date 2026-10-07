@@ -38,6 +38,9 @@ final class StashItemNSView: NSView, NSDraggingSource {
         icon.draw(in: bounds)
     }
 
+    // The panel is rarely key; without this the first press only focuses it.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {
         mouseDownEvent = event
     }

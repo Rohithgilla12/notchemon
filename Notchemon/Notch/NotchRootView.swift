@@ -18,7 +18,7 @@ struct NotchRootView: View {
                     .frame(maxWidth: .infinity, alignment: .top)
 
                 if expanded {
-                    ExpandedView(model: model, metrics: metrics, focusNoteToken: presentation.focusNoteToken)
+                    ExpandedView(model: model, presentation: presentation, metrics: metrics)
                         .frame(width: metrics.panelSize.width, height: metrics.panelSize.height, alignment: .topLeading)
                         .transition(.opacity.animation(.easeOut(duration: 0.15)))
                 }

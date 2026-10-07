@@ -12,7 +12,8 @@ final class NotchPresentation {
     var isDropTargeted = false
     var hopToken = 0
     var shakeToken = 0
-    var focusNoteToken = 0
+    /// Set by the hotkey; the note field takes focus and clears it.
+    var noteFocusRequested = false
 
     var isExpanded: Bool { mode.isExpanded }
 

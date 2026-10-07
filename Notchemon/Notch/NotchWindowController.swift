@@ -76,7 +76,7 @@ final class NotchWindowController {
         setMode(.expanded(.pinned))
         if focusNote {
             panel.makeKeyAndOrderFront(nil)
-            presentation.focusNoteToken += 1
+            presentation.noteFocusRequested = true
         }
     }
 

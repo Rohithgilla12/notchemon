@@ -2,8 +2,8 @@ import SwiftUI
 
 struct ExpandedView: View {
     @Bindable var model: CompanionModel
+    let presentation: NotchPresentation
     let metrics: PanelMetrics
-    let focusNoteToken: Int
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,7 +41,7 @@ struct ExpandedView: View {
             HStack(alignment: .top, spacing: 14) {
                 CompanionColumn(species: species, progress: progress)
                     .frame(width: PanelMetrics.expandedSpriteSide + 16)
-                ToolsColumn(model: model, focusNoteToken: focusNoteToken)
+                ToolsColumn(model: model, presentation: presentation)
             }
         }
     }
@@ -67,7 +67,7 @@ private struct CompanionColumn: View {
 
 private struct ToolsColumn: View {
     @Bindable var model: CompanionModel
-    let focusNoteToken: Int
+    let presentation: NotchPresentation
     @FocusState private var noteFocused: Bool
 
     var body: some View {
@@ -83,7 +83,13 @@ private struct ToolsColumn: View {
                 .onSubmit { model.submitNote() }
             StashRow(model: model)
         }
-        .onChange(of: focusNoteToken) { noteFocused = true }
+        .task(id: presentation.noteFocusRequested) {
+            guard presentation.noteFocusRequested else { return }
+            // The field must be in a key window before it can take focus.
+            try? await Task.sleep(for: .milliseconds(60))
+            noteFocused = true
+            presentation.noteFocusRequested = false
+        }
     }
 }
 
