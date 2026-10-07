@@ -18,6 +18,17 @@ struct MenuBarContent: View {
         }
         Toggle("Sleep When Idle", isOn: preference(\.sleepEnabled))
         Toggle("Virtual Notch on Displays Without One", isOn: preference(\.virtualNotchEnabled))
+        Menu("Motion") {
+            Picker("Idle Style", selection: preference(\.idleStyle)) {
+                ForEach(IdleStyle.allCases, id: \.self) { style in
+                    Text(style.rawValue.capitalized).tag(style)
+                }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Toggle("Hop When Cursor Comes Near", isOn: preference(\.hopsOnApproach))
+            Toggle("Fidgets", isOn: preference(\.fidgets))
+        }
         Divider()
         Button("Open Notch") { app.windowController?.expandPinned(focusNote: true) }
             .keyboardShortcut("n", modifiers: [.control, .option])
