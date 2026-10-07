@@ -1,0 +1,57 @@
+name: Notchemon
+options:
+  bundleIdPrefix: com.rohithgilla
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+targets:
+  Notchemon:
+    type: application
+    platform: macOS
+    sources: [Notchemon]
+    info:
+      path: Notchemon/Info.plist
+      properties:
+        CFBundleDisplayName: Notchemon
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: "MIT licensed. Unaffiliated fan work."
+    entitlements:
+      path: Notchemon/Notchemon.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rohithgilla.Notchemon
+  NotchemonTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [NotchemonTests]
+    dependencies:
+      - target: Notchemon
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Notchemon.app/Contents/MacOS/Notchemon"
+schemes:
+  Notchemon:
+    build:
+      targets:
+        Notchemon: all
+        NotchemonTests: [test]
+    test:
+      targets: [NotchemonTests]
