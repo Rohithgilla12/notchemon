@@ -29,6 +29,12 @@ struct DiskCacheTests {
             try await DiskCache(root: Fixtures.temporaryDirectory()).data(for: url, using: fetcher)
         }
     }
+
+    @Test func networkFetcherKeepsNoSecondCopy() {
+        let configuration = URLSessionFetcher().session.configuration
+        #expect(configuration.urlCache == nil)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalCacheData)
+    }
 }
 
 struct PokeAPIParsingTests {
