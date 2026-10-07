@@ -5,6 +5,9 @@ import ImageIO
 struct SpriteCollabSprite: Sendable {
     let frames: [CGImage]
     let durations: [TimeInterval]
+    /// Each frame's ground point, or nil when the anim's shadow sheet could
+    /// not be read.
+    let groundPoints: [CGPoint]?
     /// The PMD anim that satisfied the request after fallbacks.
     let animName: String
     /// Display names where known, raw author ids otherwise. Never empty when
@@ -37,6 +40,7 @@ actor SpriteCollabClient {
     private let fetch: Fetch
     private var animData: [Int: Task<PMDAnimData, any Error>] = [:]
     private var sheets: [SheetKey: Task<PMDSheet, any Error>] = [:]
+    private var shadows: [SheetKey: Task<PMDShadowSheet, any Error>] = [:]
     private var credits: [Int: Task<PMDCredits, any Error>] = [:]
     private var creditNames: Task<PMDCreditNames?, Never>?
 
@@ -50,10 +54,12 @@ actor SpriteCollabClient {
             throw SpriteCollabError.noAnimation(dex: dex, animation: animation)
         }
         let sheet = try await sheet(dex: dex, spec: resolved.spec)
+        let shadow = try? await shadow(dex: dex, spec: resolved.spec)
         let authors = try await authors(dex: dex, sheetName: resolved.spec.sheetName)
         return SpriteCollabSprite(
             frames: sheet.frames(facing: facing),
             durations: sheet.durations,
+            groundPoints: shadow?.groundPoints(facing: facing),
             animName: resolved.name,
             authors: authors
         )
@@ -83,6 +89,23 @@ actor SpriteCollabClient {
             return try await task.value
         } catch {
             if sheets[key] == task { sheets[key] = nil }
+            throw error
+        }
+    }
+
+    /// A missing shadow costs only the registration, not the sprite, and the
+    /// next request tries again.
+    private func shadow(dex: Int, spec: PMDAnimSpec) async throws -> PMDShadowSheet {
+        let key = SheetKey(dex: dex, sheetName: spec.sheetName)
+        let task = shadows[key] ?? Task { [fetch] in
+            let url = SpriteCollabEndpoint.shadow(dex: dex, name: spec.sheetName)
+            return try PMDShadowSheet(image: try Self.decodeImage(try await fetch(url), from: url), spec: spec)
+        }
+        shadows[key] = task
+        do {
+            return try await task.value
+        } catch {
+            if shadows[key] == task { shadows[key] = nil }
             throw error
         }
     }

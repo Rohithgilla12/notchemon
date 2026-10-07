@@ -11,6 +11,10 @@ enum SpriteCollabEndpoint {
         spriteDirectory(dex: dex).appending(path: "\(name)-Anim.png")
     }
 
+    static func shadow(dex: Int, name: String) -> URL {
+        spriteDirectory(dex: dex).appending(path: "\(name)-Shadow.png")
+    }
+
     static func credits(dex: Int) -> URL {
         spriteDirectory(dex: dex).appending(path: "credits.txt")
     }

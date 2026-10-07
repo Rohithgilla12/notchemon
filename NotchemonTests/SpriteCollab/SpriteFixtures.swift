@@ -40,6 +40,36 @@ enum SpriteFixtures {
         return context.makeImage()!
     }
 
+    /// A shadow sheet whose every cell holds a blue `shadow` rect, plus a
+    /// white pixel wherever `white` says, in frame pixels from the top left.
+    static func shadowSheet(
+        frameWidth: Int, frameHeight: Int, columns: Int, rows: Int,
+        shadow: CGRect, white: (Cell) -> CGPoint?
+    ) -> CGImage {
+        let height = frameHeight * rows
+        let context = bitmap(width: frameWidth * columns, height: height)
+        // CGContext's origin is bottom-left; sheet rows count from the top.
+        func fill(_ rect: CGRect, column: Int, row: Int) {
+            context.fill(CGRect(
+                x: CGFloat(column * frameWidth) + rect.minX,
+                y: CGFloat(height - row * frameHeight) - rect.maxY,
+                width: rect.width,
+                height: rect.height
+            ))
+        }
+        for row in 0..<rows {
+            for column in 0..<columns {
+                context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+                fill(shadow, column: column, row: row)
+                if let point = white(Cell(column: column, row: row)) {
+                    context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+                    fill(CGRect(origin: point, size: CGSize(width: 1, height: 1)), column: column, row: row)
+                }
+            }
+        }
+        return context.makeImage()!
+    }
+
     static func cell(of frame: CGImage) -> Cell {
         let context = bitmap(width: 1, height: 1)
         context.interpolationQuality = .none

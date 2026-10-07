@@ -15,6 +15,21 @@ struct PMDSheet: Sendable {
     private let rows: [[CGImage]]
 
     init(image: CGImage, spec: PMDAnimSpec) throws {
+        rows = try Self.cells(of: image, spec: spec).map { row in
+            try row.map { rect in
+                guard let frame = image.cropping(to: rect) else { throw PMDSheetError.cropFailed }
+                return frame
+            }
+        }
+        durations = spec.durations.map { TimeInterval($0) / 60 }
+    }
+
+    func frames(facing: Facing) -> [CGImage] {
+        rows.count == 1 ? rows[0] : rows[facing.rawValue]
+    }
+
+    /// The frame rects of a sheet laid out by `spec`, by row then column.
+    static func cells(of image: CGImage, spec: PMDAnimSpec) throws -> [[CGRect]] {
         let columns = spec.durations.count
         let expectedWidth = spec.frameWidth * columns
         guard image.width == expectedWidth else {
@@ -27,23 +42,74 @@ struct PMDSheet: Sendable {
         guard rowCount == 1 || rowCount == Facing.allCases.count else {
             throw PMDSheetError.unsupportedRowCount(rowCount)
         }
-
-        rows = try (0..<rowCount).map { row in
-            try (0..<columns).map { column in
-                let rect = CGRect(
-                    x: column * spec.frameWidth,
-                    y: row * spec.frameHeight,
-                    width: spec.frameWidth,
-                    height: spec.frameHeight
-                )
-                guard let frame = image.cropping(to: rect) else { throw PMDSheetError.cropFailed }
-                return frame
+        return (0..<rowCount).map { row in
+            (0..<columns).map { column in
+                CGRect(x: column * spec.frameWidth, y: row * spec.frameHeight, width: spec.frameWidth, height: spec.frameHeight)
             }
         }
-        durations = spec.durations.map { TimeInterval($0) / 60 }
+    }
+}
+
+/// An anim's `{Name}-Shadow.png`, laid out on the same grid as its anim
+/// sheet. Each cell holds a shadow whose white centre pixel is the frame's
+/// ground point: the spot the game puts on the creature's position.
+struct PMDShadowSheet: Sendable {
+    private let rows: [[CGPoint]]
+
+    init(image: CGImage, spec: PMDAnimSpec) throws {
+        let cells = try PMDSheet.cells(of: image, spec: spec)
+        let pixels = RGBAPixels(image)
+        rows = cells.map { row in row.map { pixels.groundPoint(in: $0) } }
     }
 
-    func frames(facing: Facing) -> [CGImage] {
+    /// Pixel coordinates within each frame, from its top-left corner, y down.
+    func groundPoints(facing: Facing) -> [CGPoint] {
         rows.count == 1 ? rows[0] : rows[facing.rawValue]
+    }
+}
+
+private struct RGBAPixels {
+    let width: Int
+    let bytes: [UInt8]
+
+    init(_ image: CGImage) {
+        width = image.width
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(
+                data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+            context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        self.bytes = bytes
+    }
+
+    /// The white pixel if the cell has one, else the centre of whatever
+    /// shadow it holds, else the cell's centre. Whole pixels, so frames
+    /// registered on it stay on the screen's pixel grid.
+    func groundPoint(in cell: CGRect) -> CGPoint {
+        var white: (x: Int, y: Int)?
+        var opaque = (x: 0, y: 0, count: 0)
+        // Memory row 0 is the image's top row, the same as the sheet's.
+        for y in Int(cell.minY)..<Int(cell.maxY) {
+            for x in Int(cell.minX)..<Int(cell.maxX) {
+                let offset = (y * width + x) * 4
+                guard bytes[offset + 3] > 0 else { continue }
+                if white == nil, bytes[offset + 3] == 255, bytes[offset] == 255, bytes[offset + 1] == 255, bytes[offset + 2] == 255 {
+                    white = (x, y)
+                }
+                opaque = (opaque.x + x, opaque.y + y, opaque.count + 1)
+            }
+        }
+        let point: CGPoint
+        if let white {
+            point = CGPoint(x: white.x, y: white.y)
+        } else if opaque.count > 0 {
+            point = CGPoint(x: opaque.x / opaque.count, y: opaque.y / opaque.count)
+        } else {
+            point = CGPoint(x: Int(cell.midX), y: Int(cell.midY))
+        }
+        return CGPoint(x: point.x - cell.minX, y: point.y - cell.minY)
     }
 }

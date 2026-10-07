@@ -22,8 +22,16 @@ private actor FakeServer {
         files[SpriteCollabEndpoint.sheet(dex: dex, name: "Laying")] = SpriteFixtures.png(
             SpriteFixtures.sheet(frameWidth: 8, frameHeight: 8, columns: 2, rows: 1)
         )
+        files[SpriteCollabEndpoint.shadow(dex: dex, name: "Idle")] = SpriteFixtures.png(SpriteFixtures.shadowSheet(
+            frameWidth: 10, frameHeight: 12, columns: 3, rows: 8, shadow: CGRect(x: 2, y: 8, width: 6, height: 3)
+        ) { cell in CGPoint(x: 2 + cell.column, y: 8 + cell.row % 3) })
+        files[SpriteCollabEndpoint.shadow(dex: dex, name: "Laying")] = SpriteFixtures.png(SpriteFixtures.shadowSheet(
+            frameWidth: 8, frameHeight: 8, columns: 2, rows: 1, shadow: CGRect(x: 1, y: 5, width: 6, height: 2)
+        ) { cell in CGPoint(x: 3 + cell.column, y: 6) })
         files[SpriteCollabEndpoint.credits(dex: dex)] = Data(credits.utf8)
     }
+
+    func remove(_ url: URL) { files[url] = nil }
 
     func fetch(_ url: URL) throws -> Data {
         fetched.append(url)
@@ -51,7 +59,22 @@ struct SpriteCollabClientTests {
         #expect(sprite.animName == "Idle")
         #expect(sprite.frames.map(SpriteFixtures.cell) == (0..<3).map { Cell(column: $0, row: 5) })
         #expect(sprite.durations == [0.1, 0.2, 0.3])
+        #expect(sprite.groundPoints == [CGPoint(x: 2, y: 10), CGPoint(x: 3, y: 10), CGPoint(x: 4, y: 10)])
         #expect(sprite.authors == ["STUDIO"])
+    }
+
+    @Test func missingShadowKeepsTheSpriteWithoutGroundPointsAndIsRetried() async throws {
+        let server = FakeServer()
+        await server.addSpecies(dex: 11)
+        await server.remove(SpriteCollabEndpoint.shadow(dex: 11, name: "Idle"))
+        let client = server.client()
+
+        let sprite = try await client.sprite(dex: 11, animation: .idle, facing: .down)
+        _ = try await client.sprite(dex: 11, animation: .idle, facing: .left)
+
+        #expect(sprite.frames.count == 3)
+        #expect(sprite.groundPoints == nil)
+        #expect(await server.count(SpriteCollabEndpoint.shadow(dex: 11, name: "Idle")) == 2)
     }
 
     @Test func fetchesAnimDataOncePerDex() async throws {
@@ -92,8 +115,11 @@ struct SpriteCollabClientTests {
 
         #expect(sprite.animName == "Sleep")
         #expect(sprite.frames.map(SpriteFixtures.cell) == [Cell(column: 0, row: 0), Cell(column: 1, row: 0)])
+        #expect(sprite.groundPoints == [CGPoint(x: 3, y: 6), CGPoint(x: 4, y: 6)])
         #expect(await server.count(SpriteCollabEndpoint.sheet(dex: 4, name: "Laying")) == 1)
         #expect(await server.count(SpriteCollabEndpoint.sheet(dex: 4, name: "Sleep")) == 0)
+        #expect(await server.count(SpriteCollabEndpoint.shadow(dex: 4, name: "Laying")) == 1)
+        #expect(await server.count(SpriteCollabEndpoint.shadow(dex: 4, name: "Sleep")) == 0)
     }
 
     @Test func fallsBackToAnotherAnimWhenTheFirstChoiceIsMissing() async throws {

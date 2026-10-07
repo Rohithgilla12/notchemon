@@ -99,6 +99,12 @@ enum Fixtures {
             SpriteCollabEndpoint.sheet(dex: dex, name: "Hop"): SpriteFixtures.png(
                 SpriteFixtures.sheet(frameWidth: 10, frameHeight: 30, columns: 2, rows: 8)
             ),
+            SpriteCollabEndpoint.shadow(dex: dex, name: "Idle"): SpriteFixtures.png(SpriteFixtures.shadowSheet(
+                frameWidth: 10, frameHeight: 12, columns: 3, rows: 8, shadow: CGRect(x: 2, y: 8, width: 6, height: 3)
+            ) { cell in CGPoint(x: 3 + cell.column, y: 9) }),
+            SpriteCollabEndpoint.shadow(dex: dex, name: "Hop"): SpriteFixtures.png(SpriteFixtures.shadowSheet(
+                frameWidth: 10, frameHeight: 30, columns: 2, rows: 8, shadow: CGRect(x: 2, y: 24, width: 6, height: 3)
+            ) { _ in CGPoint(x: 5, y: 25) }),
             SpriteCollabEndpoint.credits(dex: dex): Data("t\tSTUDIO\tCUR\tU\tIdle\nt\tHOPPER\tCUR\tU\tHop".utf8),
         ]
     }
