@@ -40,6 +40,18 @@ struct SpriteShow: Sendable {
     var facing: Facing
     var bounds: SpriteBounds
     var oneShot: OneShot?
+    /// Nil only when the provider has no frames for walking at all.
+    var walk: WalkCycle?
+}
+
+/// The walk in each direction the creature travels along the strip.
+struct WalkCycle: Sendable {
+    let left: SpriteFrames
+    let right: SpriteFrames
+
+    func frames(toward facing: Facing) -> SpriteFrames {
+        facing.horizontal < 0 ? left : right
+    }
 }
 
 /// Everything the views render, published by the engine as one value.
@@ -426,6 +438,10 @@ actor CreatureEngine {
         let behaviour = snapshot.behaviour
         let style = state.preferences.idleStyle
         guard let bounds = await bounds(of: species) else { return }
+        var walk: WalkCycle?
+        if let left = await frames(.walking, facing: .left, of: species), let right = await frames(.walking, facing: .right, of: species) {
+            walk = WalkCycle(left: left, right: right)
+        }
         for choice in SpriteChoreography.loops(for: behaviour, style: style) {
             guard let loop = await frames(choice.state, facing: behaviour.facing, of: species) else { continue }
             guard snapshot.behaviour == behaviour, state.preferences.idleStyle == style else { return }
@@ -435,7 +451,8 @@ actor CreatureEngine {
                 playback: choice.playback,
                 facing: behaviour.facing,
                 bounds: bounds,
-                oneShot: snapshot.sprite?.oneShot
+                oneShot: snapshot.sprite?.oneShot,
+                walk: walk
             )
             return
         }

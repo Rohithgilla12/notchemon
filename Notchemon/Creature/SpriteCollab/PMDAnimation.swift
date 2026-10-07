@@ -3,7 +3,7 @@ import Foundation
 /// The animations Notchemon plays. Each maps onto PMD anim names in order of
 /// preference, because many species ship only a subset of the full anim set.
 enum PMDAnimation: String, Sendable, CaseIterable {
-    case idle, sleep, hop, pose, wake, sit
+    case idle, sleep, hop, pose, wake, sit, walk
 
     init(_ state: SpriteState) {
         switch state {
@@ -13,6 +13,7 @@ enum PMDAnimation: String, Sendable, CaseIterable {
         case .hop: self = .hop
         case .wake: self = .wake
         case .sitting: self = .sit
+        case .walking: self = .walk
         }
     }
 
@@ -27,6 +28,7 @@ enum PMDAnimation: String, Sendable, CaseIterable {
         case .pose: ["Pose", "Charge", "Nod", "Idle", "Walk"]
         case .wake: ["Wake", "LookUp", "Idle", "Walk"]
         case .sit: ["Laying"]
+        case .walk: ["Walk", "Idle"]
         }
     }
 }

@@ -159,7 +159,7 @@ enum SpriteRendering {
         case .hop: hopLift
         case .wake: wakeLift
         case .celebrating: celebrationLift
-        case .idle, .sleeping, .sitting: 0
+        case .idle, .sleeping, .sitting, .walking: 0
         }
         guard frames.loops else { return 0 }
         return motion + (frames.frames.count == 1 ? bobLift : 0)

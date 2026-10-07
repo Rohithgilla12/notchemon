@@ -313,6 +313,16 @@ struct EngineTests {
         #expect(sprite.playback == .hold)
     }
 
+    @Test func everyLoopCarriesTheWalkInBothDirections() async throws {
+        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
+        let walk = try #require(await engine.currentSnapshot.sprite?.walk)
+        #expect(walk.frames(toward: .left).attribution?.authors == ["walking/left"])
+        #expect(walk.frames(toward: .downLeft).attribution?.authors == ["walking/left"])
+        #expect(walk.frames(toward: .right).attribution?.authors == ["walking/right"])
+        await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
+        #expect(await engine.currentSnapshot.sprite?.walk?.right.attribution?.authors == ["walking/right"])
+    }
+
     @Test func changingTheIdleStyleSwapsTheLoopLiveAndPersists() async throws {
         let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
         var preferences = await engine.currentSnapshot.preferences

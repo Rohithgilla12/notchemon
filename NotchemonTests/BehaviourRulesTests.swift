@@ -130,7 +130,7 @@ struct SpriteChoreographyTests {
     }
 
     @Test func belowTheNotchTheCreatureNeverPlaysWakeOrSleepInSight() {
-        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false, style: .calm) } == [.idle, .celebrating, .hop])
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false, style: .calm) } == [.idle, .celebrating, .hop, .walking])
     }
 
     @Test(arguments: [true, false])

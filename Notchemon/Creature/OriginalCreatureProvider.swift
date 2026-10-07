@@ -137,7 +137,7 @@ struct OriginalCreatureProvider: CreatureProvider {
             case .celebrating:
                 context.addArc(center: CGPoint(x: centre.x, y: centre.y - 2), radius: 4, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
                 context.strokePath()
-            case .idle, .hop, .wake, .sitting:
+            case .idle, .hop, .wake, .sitting, .walking:
                 context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
                 context.fillEllipse(in: CGRect(x: centre.x - 5, y: centre.y - 5, width: 10, height: 10))
                 context.setFillColor(ink)

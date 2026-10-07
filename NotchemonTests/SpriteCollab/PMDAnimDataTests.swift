@@ -120,6 +120,18 @@ struct PMDAnimDataTests {
         #expect(withoutLaying.resolve(.sit) == nil)
     }
 
+    @Test func walkingPlaysWalkElseIdle() throws {
+        let withWalk = try PMDAnimData(xml: F.animData("""
+        \(F.anim("Walk", width: 8, height: 8, durations: [4, 4]))
+        \(F.anim("Idle", width: 8, height: 8, durations: [1]))
+        """))
+        let withoutWalk = try PMDAnimData(xml: F.animData(F.anim("Idle", width: 8, height: 8, durations: [1])))
+
+        #expect(PMDAnimation(.walking) == .walk)
+        #expect(withWalk.resolve(.walk)?.name == "Walk")
+        #expect(withoutWalk.resolve(.walk)?.name == "Idle")
+    }
+
     @Test func resolveIsNilWhenNoFallbackExists() throws {
         let data = try PMDAnimData(xml: F.animData(F.anim("Attack", width: 8, height: 8, durations: [1])))
 
