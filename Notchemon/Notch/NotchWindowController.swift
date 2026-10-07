@@ -159,8 +159,8 @@ final class NotchWindowController {
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable
         }
-        if decision.hop { onCursorEnteredNotch?() }
         setMode(decision.mode)
+        if decision.hop { onCursorEnteredNotch?() }
         if decision.scheduleCollapse {
             scheduleCollapse()
         } else {

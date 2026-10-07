@@ -61,7 +61,7 @@ enum BehaviourRules {
 /// Something that interrupts the loop with a one-shot animation.
 enum SpriteCue: Sendable, Equatable {
     case behaviourChanged(from: Behaviour, to: Behaviour)
-    case cursorEnteredNotch
+    case cursorEnteredNotch(panelExpanded: Bool)
 }
 
 /// The single place that decides which animation plays when.
@@ -75,10 +75,17 @@ enum SpriteChoreography {
         }
     }
 
+    /// The hop greets a cursor arriving at the closed notch; with the panel
+    /// open there is nothing to greet, and the panel sizes the creature
+    /// without the hop's tall arc.
+    static func plays(_ state: SpriteState, panelExpanded: Bool) -> Bool {
+        !(panelExpanded && state == .hop)
+    }
+
     static func oneShot(for cue: SpriteCue) -> SpriteState? {
         switch cue {
-        case .cursorEnteredNotch:
-            .hop
+        case .cursorEnteredNotch(let panelExpanded):
+            plays(.hop, panelExpanded: panelExpanded) ? .hop : nil
         case .behaviourChanged(let previous, .celebrating(let celebration)) where previous != .celebrating(celebration):
             .celebrating
         case .behaviourChanged(.sleeping, let next) where next != .sleeping:

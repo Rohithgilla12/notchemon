@@ -175,8 +175,8 @@ actor CreatureEngine {
         await sample()
     }
 
-    func cursorEnteredNotch() async {
-        await play(.cursorEnteredNotch)
+    func cursorEnteredNotch(panelExpanded: Bool) async {
+        await play(.cursorEnteredNotch(panelExpanded: panelExpanded))
     }
 
     func setPreferences(_ preferences: Preferences) {

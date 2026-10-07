@@ -115,7 +115,7 @@ final class CompanionModel {
         Task { await engine.cursorMoved(offset: near ? offset : nil) }
     }
 
-    func cursorEnteredNotch() {
-        Task { await engine.cursorEnteredNotch() }
+    func cursorEnteredNotch(panelExpanded: Bool) {
+        Task { await engine.cursorEnteredNotch(panelExpanded: panelExpanded) }
     }
 }

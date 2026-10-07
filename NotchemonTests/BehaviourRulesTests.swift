@@ -95,8 +95,15 @@ struct SpriteChoreographyTests {
         #expect(SpriteChoreography.loop(for: behaviour) == expected)
     }
 
-    @Test func cursorEnteringTheNotchHops() {
-        #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch) == .hop)
+    @Test func cursorEnteringTheClosedNotchHops() {
+        #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch(panelExpanded: false)) == .hop)
+    }
+
+    @Test func theOpenPanelNeverHops() {
+        #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch(panelExpanded: true)) == nil)
+        #expect(!SpriteChoreography.plays(.hop, panelExpanded: true))
+        #expect(SpriteState.allCases.allSatisfy { SpriteChoreography.plays($0, panelExpanded: false) })
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake])
     }
 
     @Test(arguments: [
