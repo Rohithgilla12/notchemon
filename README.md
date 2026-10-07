@@ -10,11 +10,16 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 
 - **A creature in the notch.** On first launch the notch opens and offers four starters, shown as large portraits. The app fetches species data live from [PokéAPI](https://pokeapi.co) and animated sprites from [SpriteCollab](https://github.com/PMDCollab/SpriteCollab), and caches both in `~/Library/Application Support/Notchemon/Cache/`. Later launches work offline. A species or animation that SpriteCollab lacks falls back to PokéAPI's own animated sprite.
 - **Behaviour.** The creature fidgets every 5 to 15 seconds. When the cursor is within 150 pt, it turns to face it in any of eight directions. It hops when the cursor comes within that distance of the closed notch, at most once every 4 seconds, and strikes a pose when it levels up. After 10 minutes without input it ducks up into the notch to sleep, and any input wakes it and brings it back out.
+- **Motion settings.** Use the menu bar's Motion submenu to choose how much the creature moves. Changes apply at once and persist.
+  - **Calm** (the default): the creature stands still on its idle pose. Each fidget plays its idle animation once.
+  - **Lively**: the creature loops its idle animation. For some species, that animation is a hop about once a second.
+  - **Sitting**: the creature lies down where its sprite set has a lying pose. Otherwise it stands calm.
+  - **Hop When Cursor Comes Near** and **Fidgets** turn those motions off.
 - **Expanding notch.** Hover the notch, or press ⌃⌥N anywhere, and the notch springs open. It closes 0.5 seconds after the cursor leaves. ⌃⌥N toggles it, and Escape closes it while the note field has focus. While the notch is closed, menu-bar icons beside it stay clickable.
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger.
 - **Quick note.** Type in the panel and press Enter to append `- [YYYY-MM-DD HH:mm] text` to `~/Documents/Notchemon/notes.md`.
 - **File stash.** Drop up to five files on the notch, closed or open. The creature holds them as bookmarks, so a stashed file survives a rename or move. Drag an icon out of the panel to drop the file elsewhere, which also removes it from the stash. Click an icon to open the file. When the stash is full, the notch shakes and refuses the drop.
-- **Menu bar.** The menu bar item offers start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, choose creature (this resets progress, after confirmation), open notes folder, and quit.
+- **Menu bar.** The menu bar item offers start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, choose creature (this resets progress, after confirmation), open notes folder, and quit.
 - **Macs without a notch.** The app draws a black virtual notch at the top centre of the built-in display, or of the main display in clamshell mode. You can turn this off.
 
 ## Permissions
