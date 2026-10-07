@@ -308,11 +308,13 @@ struct EngineTests {
     }
 
     @Test func boundsMeasureTheHopArcBeforeItPlays() async throws {
+        // No ground points: every frame stands where idle's lowest row does.
         let engine = await started(engine(provider: TallHopProvider()), choosing: 904)
         let bounds = try #require(await engine.currentSnapshot.sprite?.bounds)
-        #expect(bounds.rest == Footprint(left: -2, right: 2, top: -2, bottom: 2))
-        #expect(bounds.anims[.idle]?.footprint == Footprint(left: -2, right: 2, top: -2, bottom: 2))
-        #expect(bounds.anims[.hop]?.footprint == Footprint(left: -2, right: 2, top: -13, bottom: 2))
+        #expect(bounds.baseline == 2)
+        #expect(bounds.rest == Footprint(left: -2, right: 2, top: -4, bottom: 0))
+        #expect(bounds.anims[.idle]?.footprint == Footprint(left: -2, right: 2, top: -4, bottom: 0))
+        #expect(bounds.anims[.hop]?.footprint == Footprint(left: -2, right: 2, top: -15, bottom: 0))
     }
 
     @Test func cursorEnteringTheNotchPlaysHopOverTheLoop() async throws {

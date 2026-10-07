@@ -84,15 +84,25 @@ struct SpriteFrames: Sendable {
     let loops: Bool
     /// Shown wherever these frames are; nil when the provider owes no credit.
     let attribution: Attribution?
+    /// The point in each frame, in pixels from its top-left corner, that
+    /// stands on the ground. Every frame of every anim of a species is drawn
+    /// with its ground point on one shared line, as the original game does.
+    /// Nil when the source has no such data.
+    let groundPoints: [CGPoint]?
 
-    init(frames: [CGImage], durations: [TimeInterval], pixelated: Bool = true, directional: Bool = false, loops: Bool = true, attribution: Attribution? = nil) {
+    init(
+        frames: [CGImage], durations: [TimeInterval], pixelated: Bool = true, directional: Bool = false, loops: Bool = true,
+        attribution: Attribution? = nil, groundPoints: [CGPoint]? = nil
+    ) {
         precondition(!frames.isEmpty && frames.count == durations.count, "one duration per frame")
+        precondition(groundPoints.map { $0.count == frames.count } ?? true, "one ground point per frame")
         self.frames = frames
         self.durations = durations
         self.pixelated = pixelated
         self.directional = directional
         self.loops = loops
         self.attribution = attribution
+        self.groundPoints = groundPoints
     }
 
     var totalDuration: TimeInterval { durations.reduce(0, +) }

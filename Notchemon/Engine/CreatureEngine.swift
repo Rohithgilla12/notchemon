@@ -34,7 +34,6 @@ struct OneShot: Sendable {
 /// What the sprite view plays.
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
-    var loopState: SpriteState
     var facing: Facing
     var bounds: SpriteBounds
     var oneShot: OneShot?
@@ -427,7 +426,6 @@ actor CreatureEngine {
         else { return }
         snapshot.sprite = SpriteShow(
             loop: loop,
-            loopState: state,
             facing: behaviour.facing,
             bounds: bounds,
             oneShot: snapshot.sprite?.oneShot
@@ -469,7 +467,7 @@ actor CreatureEngine {
             }
         }
         guard self.species?.id == species.id else { return nil }
-        let measured = SpriteRendering.bounds(rest: rest.frames, anims: anims)
+        let measured = SpriteRendering.bounds(rest: rest, anims: anims)
         spriteBounds = measured
         return measured
     }

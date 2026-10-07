@@ -2,8 +2,9 @@ import CoreGraphics
 import Foundation
 
 /// The box a creature's opaque pixels cover, in pixels from its frame's
-/// centre, x rightwards and y downwards. `right` and `bottom` are the edges
-/// past the last opaque column and row, so `bottom - top` is the visible height.
+/// ground point, x rightwards and y downwards. `right` and `bottom` are the
+/// edges past the last opaque column and row, so `bottom - top` is the
+/// visible height and a positive `bottom` reaches below the ground line.
 struct Footprint: Sendable, Equatable {
     let left: Int
     let right: Int
@@ -12,8 +13,8 @@ struct Footprint: Sendable, Equatable {
 
     var height: Int { bottom - top }
 
-    /// Half the width of a box centred on the frame that holds the creature
-    /// facing either way, since the renderer mirrors frames to face right.
+    /// Half the width of a box centred on the ground point that holds the
+    /// creature facing either way, since the renderer mirrors frames to face right.
     var halfWidth: Int { max(-left, right) }
 
     func union(_ other: Footprint) -> Footprint {
@@ -26,17 +27,18 @@ struct Footprint: Sendable, Equatable {
 struct AnimBounds: Sendable, Equatable {
     let footprint: Footprint
     let lift: CGFloat
-    /// The edge below each facing's lowest opaque row. Sheets draw some
-    /// facings a pixel or two lower, so each one stands on its own.
-    var bottoms: [Facing: Int] = [:]
 }
 
-/// Where a species' pixels fall, measured once per species. Each mode has
-/// one scale for every anim, so switching anims never resizes the creature.
+/// Where a species' pixels fall once every frame stands on the ground line,
+/// measured once per species. Each mode has one scale and one ground line
+/// for every anim, so switching anims or facings never resizes or moves it.
 struct SpriteBounds: Sendable, Equatable {
     /// The idle frames facing the viewer.
     let rest: Footprint
     let anims: [SpriteState: AnimBounds]
+    /// For frames without ground points: how far below the frame centre the
+    /// ground lies, in pixels. It is where idle facing the viewer stands.
+    let baseline: Int
 }
 
 enum SpriteFit: Sendable, Equatable {
@@ -49,14 +51,21 @@ enum SpriteFit: Sendable, Equatable {
 }
 
 struct SpritePlacement: Equatable {
-    let bounds: SpriteBounds
     let pointsPerPixel: CGFloat
+    /// How far the ground line sits above the box's bottom edge, in points.
+    let groundHeight: CGFloat
+    let baseline: Int
 
-    /// How far the anim's frame centre sits above the box's bottom edge, in
-    /// points, so that its lowest opaque row rests on that edge.
-    func centreHeight(of state: SpriteState, facing: Facing) -> CGFloat {
-        let anim = bounds.anims[state]
-        return CGFloat(anim?.bottoms[facing] ?? anim?.footprint.bottom ?? bounds.rest.bottom) * pointsPerPixel
+    /// Where each frame's centre goes so its ground point lands on the ground
+    /// line midway across the box: points from that spot, y up.
+    func centres(of frames: SpriteFrames, mirrored: Bool) -> [CGPoint] {
+        zip(frames.frames, SpriteRendering.groundPoints(of: frames, baseline: baseline)).map { frame, ground in
+            let across = (CGFloat(frame.width) / 2 - ground.x) * pointsPerPixel
+            return CGPoint(
+                x: mirrored ? -across : across,
+                y: groundHeight + (ground.y - CGFloat(frame.height) / 2) * pointsPerPixel
+            )
+        }
     }
 }
 
@@ -77,34 +86,37 @@ enum SpriteRendering {
         return times + [1]
     }
 
-    /// The union of every frame's opaque pixels. Sprite sheets centre each
-    /// frame on the creature whatever the frame's size (a tall hop frame has
-    /// room above for the jump, not below the feet), so measuring from the
-    /// centre keeps the frames of one anim in step with each other.
-    static func footprint(of frames: [CGImage]) -> Footprint? {
-        frames.compactMap(opaqueFootprint).reduce(nil) { union, next in union?.union(next) ?? next }
+    /// Frames without ground points stand where idle facing the viewer does,
+    /// the frame's centre `baseline` pixels above the ground.
+    static func groundPoints(of frames: SpriteFrames, baseline: Int) -> [CGPoint] {
+        frames.groundPoints ?? frames.frames.map { CGPoint(x: CGFloat($0.width) / 2, y: CGFloat($0.height / 2 + baseline)) }
     }
 
-    /// `rest` must not be empty. A species with nothing opaque at rest is
-    /// measured by its whole idle frame, so it still gets a sensible scale.
-    /// `anims` holds each anim's frames in every front facing.
-    static func bounds(rest: [CGImage], anims: [SpriteState: [Facing: SpriteFrames]]) -> SpriteBounds {
-        let first = rest[0]
-        let resting = footprint(of: rest) ?? Footprint(
-            left: -first.width / 2, right: first.width - first.width / 2,
-            top: -first.height / 2, bottom: first.height - first.height / 2
-        )
+    /// The union of every frame's opaque pixels, each frame measured from
+    /// its own ground point.
+    static func footprint(of frames: SpriteFrames, baseline: Int) -> Footprint? {
+        zip(frames.frames, groundPoints(of: frames, baseline: baseline))
+            .compactMap { frame, ground in opaqueBox(frame).map { registered($0, on: ground) } }
+            .reduce(nil) { union, next in union?.union(next) ?? next }
+    }
+
+    /// A species with nothing opaque at rest is measured by its whole idle
+    /// frame, so it still gets a sensible scale. `anims` holds each anim's
+    /// frames in every front facing.
+    static func bounds(rest: SpriteFrames, anims: [SpriteState: [Facing: SpriteFrames]]) -> SpriteBounds {
+        let first = rest.frames[0]
+        let whole = PixelBox(left: 0, right: first.width, top: 0, bottom: first.height)
+        let lowest = rest.frames.compactMap { frame in opaqueBox(frame).map { $0.bottom - frame.height / 2 } }.max()
+        let baseline = lowest ?? first.height - first.height / 2
+        let resting = footprint(of: rest, baseline: baseline)
+            ?? registered(whole, on: groundPoints(of: rest, baseline: baseline)[0])
         var measured: [SpriteState: AnimBounds] = [:]
         for (state, facings) in anims {
-            let footprints = facings.compactMapValues { footprint(of: $0.frames) }
-            guard let union = footprints.values.reduce(nil, { union, next in union?.union(next) ?? next }) else { continue }
-            measured[state] = AnimBounds(
-                footprint: union,
-                lift: facings.values.map { lift(state, $0) }.max() ?? 0,
-                bottoms: footprints.mapValues(\.bottom)
-            )
+            let footprints = facings.values.compactMap { footprint(of: $0, baseline: baseline) }
+            guard let union = footprints.reduce(nil, { union, next in union?.union(next) ?? next }) else { continue }
+            measured[state] = AnimBounds(footprint: union, lift: facings.values.map { lift(state, $0) }.max() ?? 0)
         }
-        return SpriteBounds(rest: resting, anims: measured)
+        return SpriteBounds(rest: resting, anims: measured, baseline: baseline)
     }
 
     /// The renderer's own motion, in points, added on top of the frames.
@@ -131,16 +143,17 @@ enum SpriteRendering {
     }
 
     static func placement(_ bounds: SpriteBounds, fit: SpriteFit, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> SpritePlacement {
-        let points: CGFloat
         switch fit {
         case .peek:
-            points = pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
+            let points = pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
+            return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(bounds.rest.bottom) * points, baseline: bounds.baseline)
         case .contain:
             let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: true) }.values
             let anims = played.isEmpty ? [AnimBounds(footprint: bounds.rest, lift: 0)] : Array(played)
-            points = pointsPerPixel(containing: anims, in: box, backingScale: backingScale, pixelated: pixelated)
+            let lowest = anims.map(\.footprint.bottom).max() ?? bounds.rest.bottom
+            let points = pointsPerPixel(containing: anims, above: lowest, in: box, backingScale: backingScale, pixelated: pixelated)
+            return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(lowest) * points, baseline: bounds.baseline)
         }
-        return SpritePlacement(bounds: bounds, pointsPerPixel: points)
     }
 
     /// How far the visible creature stops short of the top of its box, and
@@ -163,14 +176,14 @@ enum SpriteRendering {
         return screenPixels / backingScale
     }
 
-    /// The largest scale at which each anim, standing on the box's bottom
-    /// edge and centred across it, stays inside the box with room for its
-    /// lift above and the renderer's sway either side. Pixel art rounds down
-    /// to whole screen pixels, never below one.
-    static func pointsPerPixel(containing anims: [AnimBounds], in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> CGFloat {
+    /// The largest scale at which every anim, with the ground line `lowest`
+    /// pixels above the box's bottom edge and centred across it, stays inside
+    /// the box with room for its lift above and the renderer's sway either
+    /// side. Pixel art rounds down to whole screen pixels, never below one.
+    static func pointsPerPixel(containing anims: [AnimBounds], above lowest: Int, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> CGFloat {
         let fit = anims.map { anim in
             min(
-                (box.height - anim.lift) / CGFloat(max(1, anim.footprint.height)),
+                (box.height - anim.lift) / CGFloat(max(1, lowest - anim.footprint.top)),
                 (box.width / 2 - maxSway) / CGFloat(max(1, anim.footprint.halfWidth))
             )
         }.min() ?? 1
@@ -181,7 +194,26 @@ enum SpriteRendering {
     /// Fainter pixels, like a soft shadow, are not the creature's body.
     static let opaqueAlpha: UInt8 = 64
 
-    private static func opaqueFootprint(_ image: CGImage) -> Footprint? {
+    /// Edges in pixels from the frame's top-left corner.
+    private struct PixelBox {
+        let left: Int
+        let right: Int
+        let top: Int
+        let bottom: Int
+    }
+
+    /// Whole pixels outward, so a ground point between two pixels still
+    /// counts the full width of the creature.
+    private static func registered(_ box: PixelBox, on ground: CGPoint) -> Footprint {
+        Footprint(
+            left: Int((CGFloat(box.left) - ground.x).rounded(.down)),
+            right: Int((CGFloat(box.right) - ground.x).rounded(.up)),
+            top: Int((CGFloat(box.top) - ground.y).rounded(.down)),
+            bottom: Int((CGFloat(box.bottom) - ground.y).rounded(.up))
+        )
+    }
+
+    private static func opaqueBox(_ image: CGImage) -> PixelBox? {
         let width = image.width
         let height = image.height
         guard let context = CGContext(
@@ -201,8 +233,6 @@ enum SpriteRendering {
             }
         }
         guard top <= bottom else { return nil }
-        let centreX = width / 2
-        let centreY = height / 2
-        return Footprint(left: left - centreX, right: right + 1 - centreX, top: top - centreY, bottom: bottom + 1 - centreY)
+        return PixelBox(left: left, right: right + 1, top: top, bottom: bottom + 1)
     }
 }

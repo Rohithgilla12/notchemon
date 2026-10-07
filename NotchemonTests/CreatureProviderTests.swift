@@ -102,6 +102,7 @@ struct PokeAPICreatureProviderTests {
         let frames = try await provider(fetcher).sprite(for: testmon, state: .idle, facing: .left)
         #expect(frames.frames.map(SpriteFixtures.cell) == (0..<3).map { Cell(column: $0, row: Facing.left.rawValue) })
         #expect(frames.durations == [0.1, 0.2, 0.3])
+        #expect(frames.groundPoints == [CGPoint(x: 3, y: 9), CGPoint(x: 4, y: 9), CGPoint(x: 5, y: 9)])
         #expect(frames.directional)
         #expect(frames.pixelated)
         #expect(frames.loops)
@@ -140,6 +141,7 @@ struct PokeAPICreatureProviderTests {
         #expect(!frames.directional)
         #expect(frames.loops)
         #expect(frames.attribution == nil)
+        #expect(frames.groundPoints == nil)
         #expect(!fetcher.requests.contains(gif))
     }
 
