@@ -17,8 +17,16 @@ enum SpriteState: String, Codable, Sendable, CaseIterable {
 struct SpriteFrames: @unchecked Sendable {
     let frames: [CGImage]
     let frameDuration: TimeInterval
+    /// Pixel art scales with nearest-neighbour; smooth drawings do not.
+    var pixelated = true
 
     var isAnimated: Bool { frames.count > 1 }
+}
+
+enum CreatureError: Error, Equatable {
+    /// The provider has no such species, for example after switching providers.
+    case unknownSpecies
+    case missingSprite
 }
 
 /// The only seam between app logic and any creature IP. App code must never
