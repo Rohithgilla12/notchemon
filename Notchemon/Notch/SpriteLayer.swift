@@ -187,7 +187,7 @@ final class SpriteLayer: CALayer {
         case .hop: hop(height: SpriteRendering.hopLift)
         case .wake: hop(height: SpriteRendering.wakeLift)
         case .celebrating: celebrate()
-        case .idle, .sleeping: 0.0
+        case .idle, .sleeping, .sitting: 0.0
         }
         playing = (oneShot.state, CACurrentMediaTime() + duration)
     }

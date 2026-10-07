@@ -38,9 +38,11 @@ struct OriginalCreatureProvider: CreatureProvider {
 
     /// The eyes follow the facing; the body is symmetric, so nothing else
     /// changes. Every state is a gentle two-frame squash that loops, and the
-    /// renderer adds the hop, wake, and celebration motion.
+    /// renderer adds the hop, wake, and celebration motion. There is no
+    /// sitting pose.
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         guard let design = Self.roster[species.id] else { throw CreatureError.unknownSpecies }
+        guard state != .sitting else { throw CreatureError.missingSprite }
         let frames = [0.0, 1.0].compactMap { squash in
             Self.draw(design, state: state, facing: facing, squash: squash, pixels: Self.canvas)
         }
@@ -135,7 +137,7 @@ struct OriginalCreatureProvider: CreatureProvider {
             case .celebrating:
                 context.addArc(center: CGPoint(x: centre.x, y: centre.y - 2), radius: 4, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: false)
                 context.strokePath()
-            case .idle, .hop, .wake:
+            case .idle, .hop, .wake, .sitting:
                 context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
                 context.fillEllipse(in: CGRect(x: centre.x - 5, y: centre.y - 5, width: 10, height: 10))
                 context.setFillColor(ink)

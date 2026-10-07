@@ -112,7 +112,10 @@ final class CompanionModel {
         let offset = CursorOffset(dx: point.x - spriteCentre.x, dy: point.y - spriteCentre.y)
         let near = (offset.dx * offset.dx + offset.dy * offset.dy).squareRoot() <= BehaviourRules.watchRadius
         let current = CursorProximity(near: near, panelExpanded: panelExpanded)
-        if HopCue.hops(from: proximity, to: current, secondsSinceLastHop: Date().timeIntervalSince(lastHop)) {
+        if HopCue.hops(
+            from: proximity, to: current, secondsSinceLastHop: Date().timeIntervalSince(lastHop),
+            enabled: snapshot.preferences.hopsOnApproach
+        ) {
             lastHop = Date()
             Task { await engine.cursorNoticed() }
         }

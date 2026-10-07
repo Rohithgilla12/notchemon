@@ -25,7 +25,8 @@ struct PokeAPICreatureProvider: CreatureProvider {
     }
 
     /// SpriteCollab has a sheet per anim and facing. Species or anims it lacks
-    /// fall back to one left-facing loop that serves every state.
+    /// fall back to one left-facing loop that serves every state but sitting,
+    /// which nothing else draws.
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         if let sprite = try? await spriteCollab.sprite(dex: species.id, animation: PMDAnimation(state), facing: facing) {
             // A one-shot that fell back to the idle anim has no motion of its own.
@@ -39,6 +40,7 @@ struct PokeAPICreatureProvider: CreatureProvider {
                 groundPoints: sprite.groundPoints
             )
         }
+        guard state != .sitting else { throw CreatureError.missingSprite }
         for url in try await sources(of: species).animations {
             if let data = try? await cache.data(for: url, using: fetcher), let frames = SpriteDecoder.decode(data) {
                 return frames

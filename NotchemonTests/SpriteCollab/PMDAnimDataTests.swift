@@ -105,6 +105,21 @@ struct PMDAnimDataTests {
         #expect(resolved.spec.sheetName == "Laying")
     }
 
+    @Test func sittingLiesDownAndNeverUsesTheSitAnimOrIdle() throws {
+        let withLaying = try PMDAnimData(xml: F.animData("""
+        \(F.anim("Sit", width: 8, height: 8, durations: [8, 8, 8]))
+        \(F.anim("Laying", width: 8, height: 8, durations: [12]))
+        \(F.anim("Idle", width: 8, height: 8, durations: [1]))
+        """))
+        let withoutLaying = try PMDAnimData(xml: F.animData("""
+        \(F.anim("Sit", width: 8, height: 8, durations: [8, 8, 8]))
+        \(F.anim("Idle", width: 8, height: 8, durations: [1]))
+        """))
+
+        #expect(withLaying.resolve(.sit)?.name == "Laying")
+        #expect(withoutLaying.resolve(.sit) == nil)
+    }
+
     @Test func resolveIsNilWhenNoFallbackExists() throws {
         let data = try PMDAnimData(xml: F.animData(F.anim("Attack", width: 8, height: 8, durations: [1])))
 

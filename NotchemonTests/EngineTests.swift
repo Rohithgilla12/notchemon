@@ -50,7 +50,12 @@ struct FakeProvider: CreatureProvider {
 final class RecordingProvider: CreatureProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [String] = []
+    private let sits: Bool
     let starterIDs = [904]
+
+    init(sits: Bool = true) {
+        self.sits = sits
+    }
 
     var requests: [String] { lock.withLock { recorded } }
 
@@ -60,6 +65,7 @@ final class RecordingProvider: CreatureProvider, @unchecked Sendable {
 
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
         lock.withLock { recorded.append("\(state)/\(facing)") }
+        if state == .sitting, !sits { throw CreatureError.missingSprite }
         return SpriteFrames(
             frames: [FakeProvider.image()],
             durations: [0.1],
@@ -298,6 +304,43 @@ struct EngineTests {
         await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
         #expect(await engine.currentSnapshot.sprite?.loop.attribution?.authors == ["idle/downLeft"])
         #expect(provider.requests.count == Set(provider.requests).count)
+    }
+
+    @Test func aFreshCompanionStandsCalmOnItsIdleRestFrame() async throws {
+        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
+        let sprite = try #require(await engine.currentSnapshot.sprite)
+        #expect(sprite.loop.attribution?.authors == ["idle/down"])
+        #expect(sprite.playback == .hold)
+    }
+
+    @Test func changingTheIdleStyleSwapsTheLoopLiveAndPersists() async throws {
+        let engine = await started(engine(provider: RecordingProvider()), choosing: 904)
+        var preferences = await engine.currentSnapshot.preferences
+        preferences.idleStyle = .lively
+        await engine.setPreferences(preferences)
+        let lively = try #require(await engine.currentSnapshot.sprite)
+        #expect(lively.loop.attribution?.authors == ["idle/down"])
+        #expect(lively.playback == .cycle)
+        preferences.idleStyle = .sitting
+        await engine.setPreferences(preferences)
+        let sitting = try #require(await engine.currentSnapshot.sprite)
+        #expect(sitting.loop.attribution?.authors == ["sitting/down"])
+        #expect(sitting.playback == .hold)
+        #expect(store.load().preferences.idleStyle == .sitting)
+    }
+
+    @Test func sittingWithoutTheArtStandsCalmAndWatchesInTheRightFacing() async throws {
+        let engine = await started(engine(provider: RecordingProvider(sits: false)), choosing: 904)
+        var preferences = await engine.currentSnapshot.preferences
+        preferences.idleStyle = .sitting
+        await engine.setPreferences(preferences)
+        let sprite = try #require(await engine.currentSnapshot.sprite)
+        #expect(sprite.loop.attribution?.authors == ["idle/down"])
+        #expect(sprite.playback == .hold)
+        await engine.cursorMoved(offset: CursorOffset(dx: -60, dy: -60))
+        let watching = try #require(await engine.currentSnapshot.sprite)
+        #expect(watching.loop.attribution?.authors == ["idle/downLeft"])
+        #expect(watching.playback == .hold)
     }
 
     @Test func fetchesEveryAnimInEveryFrontFacingAndNoBackRows() async {

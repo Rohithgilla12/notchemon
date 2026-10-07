@@ -34,6 +34,7 @@ struct OneShot: Sendable {
 /// What the sprite view plays.
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
+    var playback: LoopPlayback
     var facing: Facing
     var bounds: SpriteBounds
     var oneShot: OneShot?
@@ -179,11 +180,13 @@ actor CreatureEngine {
         await play(.cursorNoticed)
     }
 
-    func setPreferences(_ preferences: Preferences) {
+    func setPreferences(_ preferences: Preferences) async {
         guard preferences != state.preferences else { return }
+        let restyled = preferences.idleStyle != state.preferences.idleStyle
         state.preferences = preferences
         snapshot.preferences = preferences
         persist()
+        if restyled { await refreshLoop() }
         publish()
     }
 
@@ -419,17 +422,20 @@ actor CreatureEngine {
     private func refreshLoop() async {
         guard let species else { return }
         let behaviour = snapshot.behaviour
-        let state = SpriteChoreography.loop(for: behaviour)
-        guard let bounds = await bounds(of: species),
-              let loop = await frames(state, facing: behaviour.facing, of: species),
-              snapshot.behaviour == behaviour
-        else { return }
-        snapshot.sprite = SpriteShow(
-            loop: loop,
-            facing: behaviour.facing,
-            bounds: bounds,
-            oneShot: snapshot.sprite?.oneShot
-        )
+        let style = state.preferences.idleStyle
+        guard let bounds = await bounds(of: species) else { return }
+        for choice in SpriteChoreography.loops(for: behaviour, style: style) {
+            guard let loop = await frames(choice.state, facing: behaviour.facing, of: species) else { continue }
+            guard snapshot.behaviour == behaviour, state.preferences.idleStyle == style else { return }
+            snapshot.sprite = SpriteShow(
+                loop: loop,
+                playback: choice.playback,
+                facing: behaviour.facing,
+                bounds: bounds,
+                oneShot: snapshot.sprite?.oneShot
+            )
+            return
+        }
     }
 
     /// Without the cue's own frames, the loop stands in and the renderer

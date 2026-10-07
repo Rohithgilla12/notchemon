@@ -145,6 +145,19 @@ struct PokeAPICreatureProviderTests {
         #expect(!fetcher.requests.contains(gif))
     }
 
+    @Test func sittingWithoutItsOwnArtHasNoStandIn() async throws {
+        let fetcher = StubFetcher(Fixtures.spriteCollab(dex: 901).merging([
+            pokemonURL: Fixtures.pokemonJSON(id: 901, showdown: showdown, still: png),
+            showdown: Fixtures.image(.gif, frames: 4, delay: 0.05),
+            png: Fixtures.image(.png, frames: 1),
+        ]) { first, _ in first })
+        await #expect(throws: CreatureError.missingSprite) {
+            try await provider(fetcher).sprite(for: testmon, state: .sitting, facing: .down)
+        }
+        #expect(!fetcher.requests.contains(showdown))
+        #expect(!fetcher.requests.contains(png))
+    }
+
     @Test func missingShowdownFallsBackToGen5() async throws {
         let fetcher = StubFetcher([
             pokemonURL: Fixtures.pokemonJSON(id: 901, animated: gif, still: png),
@@ -211,9 +224,10 @@ struct OriginalCreatureProviderTests {
         }
     }
 
-    @Test func drawsTwoFrameSpritesForEveryStateAndFacing() async throws {
+    @Test func drawsTwoFrameSpritesForEveryStateButSittingAndFacing() async throws {
         let species = try await provider.species(id: provider.starterIDs[0])
-        for state in SpriteState.allCases {
+        await #expect(throws: CreatureError.missingSprite) { try await provider.sprite(for: species, state: .sitting, facing: .down) }
+        for state in SpriteState.allCases where state != .sitting {
             for facing in Facing.allCases {
                 let frames = try await provider.sprite(for: species, state: state, facing: facing)
                 #expect(frames.frames.count == 2)

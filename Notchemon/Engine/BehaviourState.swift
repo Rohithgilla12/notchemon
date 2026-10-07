@@ -74,8 +74,10 @@ enum HopCue {
     /// the panel is closed, before a hover over the notch can open it. A
     /// panel opening or closing moves the creature, not the cursor, so the
     /// creature notices nothing then.
-    static func hops(from previous: CursorProximity?, to current: CursorProximity, secondsSinceLastHop: TimeInterval) -> Bool {
-        guard let previous, previous.panelExpanded == current.panelExpanded else { return false }
+    static func hops(
+        from previous: CursorProximity?, to current: CursorProximity, secondsSinceLastHop: TimeInterval, enabled: Bool
+    ) -> Bool {
+        guard enabled, let previous, previous.panelExpanded == current.panelExpanded else { return false }
         return !current.panelExpanded && !previous.near && current.near && secondsSinceLastHop >= cooldown
     }
 }
@@ -86,15 +88,44 @@ enum SpriteCue: Sendable, Equatable {
     case cursorNoticed
 }
 
+/// How the renderer plays a loop's frames.
+enum LoopPlayback: Sendable, Equatable {
+    /// Every frame in turn, forever.
+    case cycle
+    /// The rest frame alone, so the creature stays put. A fidget plays the
+    /// whole loop once.
+    case hold
+}
+
+/// A loop anim and how it plays.
+struct LoopChoice: Sendable, Equatable {
+    let state: SpriteState
+    let playback: LoopPlayback
+}
+
 /// The single place that decides which animation plays when.
 enum SpriteChoreography {
-    static func loop(for behaviour: Behaviour) -> SpriteState {
-        switch behaviour {
-        case .sleeping: .sleeping
-        // Stash icons already show holding, and celebrating is a one-shot
-        // over whatever loop the creature returns to.
-        case .idle, .watching, .holding, .celebrating: .idle
+    /// The loops that can show a behaviour in a style, best first. The
+    /// creature plays the first its provider has art for; the last always
+    /// exists. Stash icons already show holding, and celebrating is a
+    /// one-shot over whatever loop the creature returns to, so both pass the
+    /// time like idle.
+    static func loops(for behaviour: Behaviour, style: IdleStyle) -> [LoopChoice] {
+        if behaviour == .sleeping { return [LoopChoice(state: .sleeping, playback: .cycle)] }
+        let calm = LoopChoice(state: .idle, playback: .hold)
+        return switch style {
+        case .calm: [calm]
+        case .lively: [LoopChoice(state: .idle, playback: .cycle)]
+        // Lying down is one still frame where the art exists; holding it
+        // keeps a busier lying anim just as still.
+        case .sitting: [LoopChoice(state: .sitting, playback: .hold), calm]
         }
+    }
+
+    /// The frame a held loop shows: the one the anim lingers on longest,
+    /// the earliest of those on a tie.
+    static func restFrame(_ durations: [TimeInterval]) -> Int {
+        durations.max().flatMap { durations.firstIndex(of: $0) } ?? 0
     }
 
     /// Which anims are seen in each panel mode, so each mode sizes and stands
@@ -104,7 +135,7 @@ enum SpriteChoreography {
     /// out to show it woke, so Sleep and Wake are never seen there.
     static func plays(_ state: SpriteState, panelExpanded: Bool) -> Bool {
         switch state {
-        case .idle, .celebrating: true
+        case .idle, .celebrating, .sitting: true
         case .hop: !panelExpanded
         case .sleeping, .wake: panelExpanded
         }

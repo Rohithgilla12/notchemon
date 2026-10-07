@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Notchemon
 
@@ -84,15 +85,40 @@ struct BehaviourRulesTests {
 }
 
 struct SpriteChoreographyTests {
+    private static let awake: [Behaviour] = [.idle, .watching(facing: .left), .holding, .celebrating(.levelUp(3))]
+
+    @Test(arguments: awake)
+    func calmHoldsTheIdleRestFrame(behaviour: Behaviour) {
+        #expect(SpriteChoreography.loops(for: behaviour, style: .calm) == [LoopChoice(state: .idle, playback: .hold)])
+    }
+
+    @Test(arguments: awake)
+    func livelyCyclesTheIdleLoop(behaviour: Behaviour) {
+        #expect(SpriteChoreography.loops(for: behaviour, style: .lively) == [LoopChoice(state: .idle, playback: .cycle)])
+    }
+
+    @Test(arguments: awake)
+    func sittingLiesStillAndOtherwiseStandsCalm(behaviour: Behaviour) {
+        #expect(SpriteChoreography.loops(for: behaviour, style: .sitting) == [
+            LoopChoice(state: .sitting, playback: .hold),
+            LoopChoice(state: .idle, playback: .hold),
+        ])
+    }
+
+    @Test(arguments: IdleStyle.allCases)
+    func sleepCyclesWhateverTheStyle(style: IdleStyle) {
+        #expect(SpriteChoreography.loops(for: .sleeping, style: style) == [LoopChoice(state: .sleeping, playback: .cycle)])
+    }
+
     @Test(arguments: [
-        (Behaviour.idle, SpriteState.idle),
-        (.watching(facing: .left), .idle),
-        (.holding, .idle),
-        (.celebrating(.levelUp(3)), .idle),
-        (.sleeping, .sleeping),
+        ([40, 2, 3, 3, 3, 2] as [TimeInterval], 0),
+        ([12, 30, 8], 1),
+        ([8, 8, 8], 0),
+        ([2, 6, 6], 1),
+        ([5], 0),
     ])
-    func loopForEachBehaviour(behaviour: Behaviour, expected: SpriteState) {
-        #expect(SpriteChoreography.loop(for: behaviour) == expected)
+    func restFrameIsTheLongestEarliestOnATie(durations: [TimeInterval], expected: Int) {
+        #expect(SpriteChoreography.restFrame(durations) == expected)
     }
 
     @Test func noticingTheCursorHops() {
@@ -100,11 +126,11 @@ struct SpriteChoreographyTests {
     }
 
     @Test func theOpenPanelNeverHops() {
-        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake])
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake, .sitting])
     }
 
     @Test func belowTheNotchTheCreatureNeverPlaysWakeOrSleepInSight() {
-        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false) } == [.idle, .celebrating, .hop])
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false) } == [.idle, .celebrating, .hop, .sitting])
     }
 
     @Test(arguments: [
@@ -129,7 +155,11 @@ struct HopCueTests {
     private let near = CursorProximity(near: true, panelExpanded: false)
 
     @Test func cursorCrossingIntoTheRadiusWithThePanelClosedHops() {
-        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: .infinity))
+        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: .infinity, enabled: true))
+    }
+
+    @Test func turningHopsOffStopsEveryHop() {
+        #expect(!HopCue.hops(from: far, to: near, secondsSinceLastHop: .infinity, enabled: false))
     }
 
     @Test(arguments: [
@@ -141,11 +171,11 @@ struct HopCueTests {
         (CursorProximity(near: false, panelExpanded: false), CursorProximity(near: true, panelExpanded: true)),
     ])
     func noHopWithoutACrossingInWhileClosed(previous: CursorProximity?, current: CursorProximity) {
-        #expect(!HopCue.hops(from: previous, to: current, secondsSinceLastHop: .infinity))
+        #expect(!HopCue.hops(from: previous, to: current, secondsSinceLastHop: .infinity, enabled: true))
     }
 
     @Test func aRecentHopHoldsTheNextOneOffUntilTheCooldownEnds() {
-        #expect(!HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown - 0.1))
-        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown))
+        #expect(!HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown - 0.1, enabled: true))
+        #expect(HopCue.hops(from: far, to: near, secondsSinceLastHop: HopCue.cooldown, enabled: true))
     }
 }
