@@ -11,6 +11,7 @@ final class NotchWindowController {
 
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
+    private var wander: WanderRange
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
     private var pressPoll: Timer?
@@ -19,9 +20,10 @@ final class NotchWindowController {
 
     static let collapseDelay: Duration = .milliseconds(500)
 
-    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, content: Content) {
+    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, wander: WanderRange, content: Content) {
         self.presentation = presentation
         self.virtualNotchEnabled = virtualNotchEnabled
+        self.wander = wander
         panel = NotchPanel(frame: .zero)
         let hosting = NSHostingView(rootView: content)
         hosting.sizingOptions = []
@@ -51,6 +53,12 @@ final class NotchWindowController {
         relayout()
     }
 
+    func setWander(_ wander: WanderRange) {
+        guard wander != self.wander else { return }
+        self.wander = wander
+        relayout()
+    }
+
     func relayout() {
         guard let screen = NSScreen.notchHost else {
             apply(layout: nil)
@@ -58,7 +66,7 @@ final class NotchWindowController {
         }
         let fullScreen = FullScreenDetector.isFullScreen(screen)
         presentation.isFullScreen = fullScreen
-        apply(layout: NotchGeometry.layout(for: screen.metrics, virtualNotchEnabled: virtualNotchEnabled, fullScreen: fullScreen))
+        apply(layout: NotchGeometry.layout(for: screen.metrics, virtualNotchEnabled: virtualNotchEnabled, fullScreen: fullScreen, wander: wander))
     }
 
     func toggleFromHotkey() {
@@ -95,7 +103,7 @@ final class NotchWindowController {
             panel.orderOut(nil)
             return
         }
-        panel.setFrame(layout.expanded, display: true)
+        panel.setFrame(layout.panel, display: true)
         panel.orderFrontRegardless()
         handleCursor(NSEvent.mouseLocation)
     }

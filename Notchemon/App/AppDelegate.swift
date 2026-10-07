@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = NotchWindowController(
             presentation: presentation,
             virtualNotchEnabled: model.snapshot.preferences.virtualNotchEnabled,
+            wander: model.snapshot.preferences.wander,
             content: NotchRootView(presentation: presentation, model: model)
         )
         windowController = controller
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
+            controller?.setWander(preferences.wander)
         }
         model.onChoosingStarter = { [weak controller] in
             controller?.expandPinned(focusNote: false)

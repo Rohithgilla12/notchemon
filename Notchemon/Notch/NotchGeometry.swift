@@ -15,9 +15,15 @@ struct NotchLayout: Sendable, Equatable {
     let kind: NotchKind
     /// The notch cut-out in global screen coordinates (origin bottom-left).
     let notch: CGRect
-    /// Notch plus the strip below it where the sprite peeks out.
+    /// Notch plus the strip below it where the sprite peeks out. The only
+    /// part of the closed panel that takes the mouse.
     let collapsed: CGRect
     let expanded: CGRect
+    /// How far either side of home the creature's centre may wander, in points.
+    let roamReach: CGFloat
+    /// The window: the expanded panel and the strip below the menu bar the
+    /// creature wanders along, which it never leaves.
+    let panel: CGRect
 }
 
 enum NotchGeometry {
@@ -26,9 +32,26 @@ enum NotchGeometry {
     static let peekHeight: CGFloat = 44
     static let fullScreenPeekHeight: CGFloat = 20
     static let expandedSize = CGSize(width: 440, height: 180)
+    static let nearNotchReach: CGFloat = 200
+    /// How far the creature's centre stays from the screen's side edges:
+    /// room for the widest creature at its collapsed scale, turned sideways.
+    static let roamEdgeInset: CGFloat = 60
+
+    /// How far either side of the notch centre the creature may walk on a
+    /// screen this wide. The notch is centred on its screen, so one reach
+    /// keeps both sides on it.
+    static func roamReach(_ wander: WanderRange, screenWidth: CGFloat) -> CGFloat {
+        let edge = max(0, screenWidth / 2 - roamEdgeInset)
+        return switch wander {
+        case .off: 0
+        case .nearNotch: min(nearNotchReach, edge)
+        case .topEdge: edge
+        }
+    }
 
     /// Returns nil when the screen has no notch and the virtual notch is off.
-    static func layout(for screen: ScreenMetrics, virtualNotchEnabled: Bool, fullScreen: Bool = false) -> NotchLayout? {
+    /// Full screen keeps the creature home, so the strip shrinks to the notch.
+    static func layout(for screen: ScreenMetrics, virtualNotchEnabled: Bool, fullScreen: Bool = false, wander: WanderRange) -> NotchLayout? {
         let kind: NotchKind
         let size: CGSize
         if screen.safeAreaTop > 0 {
@@ -58,6 +81,10 @@ enum NotchGeometry {
             width: expandedWidth,
             height: expandedHeight
         )
-        return NotchLayout(kind: kind, notch: notch, collapsed: collapsed, expanded: expanded)
+        let reach = fullScreen ? 0 : roamReach(wander, screenWidth: screen.frame.width)
+        let halfStrip = reach + roamEdgeInset
+        let strip = CGRect(x: notch.midX - halfStrip, y: collapsed.minY, width: 2 * halfStrip, height: collapsed.height)
+        let panel = expanded.union(strip.intersection(screen.frame))
+        return NotchLayout(kind: kind, notch: notch, collapsed: collapsed, expanded: expanded, roamReach: reach, panel: panel)
     }
 }

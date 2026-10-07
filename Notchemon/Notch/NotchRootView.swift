@@ -54,6 +54,7 @@ struct NotchRootView: View {
             } isTargeted: { targeted in
                 presentation.isDropTargeted = targeted
             }
+            .frame(width: metrics.windowSize.width, height: metrics.windowSize.height, alignment: .top)
         }
     }
 

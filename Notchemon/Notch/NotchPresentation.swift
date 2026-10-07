@@ -21,15 +21,18 @@ final class NotchPresentation {
     }
 }
 
-/// Local, top-left-origin geometry of the panel content. The panel window is
-/// always the expanded rect, so collapse and expand animate inside a window
-/// that never resizes.
+/// Local, top-left-origin geometry of the panel content, which fills the
+/// expanded rect. The window is that rect widened to the strip the creature
+/// wanders along, so collapse and expand animate inside a window that never
+/// resizes.
 struct PanelMetrics: Sendable, Equatable {
+    let windowSize: CGSize
     let panelSize: CGSize
     let notchSize: CGSize
     let peekHeight: CGFloat
 
     init(layout: NotchLayout) {
+        windowSize = layout.panel.size
         panelSize = layout.expanded.size
         notchSize = layout.notch.size
         peekHeight = layout.collapsed.height - layout.notch.height

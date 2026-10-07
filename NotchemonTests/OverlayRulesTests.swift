@@ -34,11 +34,25 @@ struct HoverPolicyTests {
             auxiliaryTopLeftWidth: 764,
             auxiliaryTopRightWidth: 764
         ),
-        virtualNotchEnabled: false
+        virtualNotchEnabled: false,
+        wander: .topEdge
     )!
     let menuBarIcon = CGPoint(x: 1000, y: 1100)
     let onNotch = CGPoint(x: 864, y: 1100)
     let inExpandedOnly = CGPoint(x: 700, y: 1000)
+
+    @Test(arguments: [
+        CGPoint(x: 100, y: 1060),
+        CGPoint(x: 1700, y: 1045),
+        CGPoint(x: 700, y: 1050),
+        CGPoint(x: 1000, y: 1100),
+    ])
+    func theWanderStripBesideTheNotchColumnNeverTakesClicks(point: CGPoint) {
+        #expect(layout.panel.contains(point))
+        #expect(!layout.collapsed.contains(point))
+        #expect(HoverPolicy.react(to: point, mode: .collapsed, layout: layout) == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .cancel))
+        #expect(!HoverPolicy.react(to: point, mode: .collapsed, layout: layout, buttonHeld: true).hitTestable)
+    }
 
     @Test func cursorBesideNotchLeavesPanelClickThrough() {
         let decision = HoverPolicy.react(to: menuBarIcon, mode: .collapsed, layout: layout)
