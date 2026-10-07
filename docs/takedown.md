@@ -4,7 +4,7 @@ Use this plan if a rights holder asks for the creature content to be removed. On
 
 ## Why one release is enough
 
-- The app bundles no third-party creature assets. Sprites and names are downloaded at runtime and cached on each user's Mac, so there is nothing to scrub from past releases.
+- The app bundles no third-party creature assets. Names and data come from PokéAPI and sprites from SpriteCollab, all downloaded at runtime and cached on each user's Mac, so there is nothing to scrub from past releases.
 - All app logic uses the `CreatureProvider` protocol. `Notchemon/Creature/CreatureProviderFactory.swift` is the only file that names a concrete provider.
 - `OriginalCreatureProvider` draws its own creatures with Core Graphics. It needs no network and has its own starters and evolution levels.
 - When the saved species is unknown to the active provider, the app opens the starter picker. The new starter inherits the saved level and XP.
@@ -13,7 +13,7 @@ Use this plan if a rights holder asks for the creature content to be removed. On
 
 1. Reply to the notice and confirm that you will comply. Do not argue the merits.
 2. In `CreatureProviderFactory.swift`, make `OriginalCreatureProvider()` the default branch.
-3. Delete `PokeAPICreatureProvider.swift` and `PokeAPIModels.swift`, and delete any README text that names the service. Delete the `DataFetcher` and `DiskCache` files only if nothing else uses them.
+3. Delete `PokeAPICreatureProvider.swift`, `PokeAPIModels.swift`, and the `Notchemon/Creature/SpriteCollab/` folder with its tests, and delete any README text that names either service, including the Credits section and the sprite credit line in `ExpandedView.swift`. Delete the `DataFetcher`, `DiskCache`, and `SpriteDecoder` files only if nothing else uses them.
 4. To remove downloaded content from users' Macs, delete `AppPaths.cache` once at launch, for example in `AppDelegate.applicationDidFinishLaunching`.
 5. If the notice covers the name, rename the app. Update `project.yml`, the bundle display name, `README.md`, and `Casks/notchemon.rb`.
 6. Add an entry to `CHANGELOG.md`, bump the version, tag it, and let CI publish the release. Update the cask's `sha256`.

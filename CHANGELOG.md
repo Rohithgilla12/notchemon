@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Animated SpriteCollab sprites, fetched at runtime and cached, with idle, sleep, hop, wake, and pose animations in eight facings. The creature turns to face the cursor.
+- Fallback to PokéAPI's Showdown, Gen 5, and still sprites for species or animations that SpriteCollab lacks.
+- Large portraits in the starter picker and an evolution reveal.
+- Sprite artist credit line in the expanded notch, and a Credits section in the README.
+- `NotchemonDebugSleepSeconds` debug default for a short sleep threshold.
+
+### Changed
+
+- Sprites scale by the creature's visible size to about 40 pt in the collapsed notch, in whole screen pixels, and stand on the bottom of the peek, which grows from 40 pt to 44 pt.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added
