@@ -10,7 +10,7 @@ struct ExpandedView: View {
             Color.clear.frame(height: metrics.notchSize.height)
             content
                 .padding(.horizontal, PanelMetrics.expandedInset)
-                .padding(.vertical, 12)
+                .padding(.vertical, PanelMetrics.expandedVerticalPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .overlay(alignment: .bottom) {
@@ -53,7 +53,7 @@ private struct CompanionColumn: View {
 
     var body: some View {
         VStack(spacing: 3) {
-            Color.clear.frame(height: PanelMetrics.expandedSpriteSide + 6)
+            Color.clear.frame(height: PanelMetrics.expandedSpriteSide + 2)
             Text(species.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
             HStack(spacing: 4) {
                 Text("Lv \(progress.level)").font(.system(size: 10, weight: .medium)).monospacedDigit()

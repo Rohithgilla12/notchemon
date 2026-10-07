@@ -9,7 +9,8 @@ final class SpriteLayer: CALayer {
     private let flashGlow = CAGradientLayer()
     private var loop: SpriteFrames?
     private var loopStart: CFTimeInterval = 0
-    private var referenceHeight = 1
+    private var reference: SpriteFrames?
+    private var footprint = Footprint(top: -1, bottom: 0)
     private var oneShot: (animation: CAKeyframeAnimation, ends: CFTimeInterval)?
     private var playedOneShot: Int?
     private var tucked = false
@@ -24,10 +25,10 @@ final class SpriteLayer: CALayer {
         masksToBounds = false
         addSublayer(body)
         body.addSublayer(image)
-        // Frames of any size stand on the same spot, and tall ones (a hop
-        // with its arc drawn in) rise up behind the notch.
-        image.anchorPoint = CGPoint(x: 0.5, y: 0)
-        image.contentsGravity = .bottom
+        // Contents keep their own size around the layer's centre, so frames
+        // of any size share the centre the sheets are drawn around, and tall
+        // ones (a hop with its arc drawn in) rise up behind the notch.
+        image.contentsGravity = .center
         flashGlow.type = .radial
         flashGlow.colors = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)]
         flashGlow.startPoint = CGPoint(x: 0.5, y: 0.5)
@@ -51,24 +52,25 @@ final class SpriteLayer: CALayer {
         body.bounds = bounds
         body.position = CGPoint(x: bounds.midX, y: bounds.midY + (tucked ? tuckDistance : 0))
         image.bounds = body.bounds
-        image.position = CGPoint(x: body.bounds.midX, y: body.bounds.minY)
-        applyScale()
+        placeImage()
         flashGlow.frame = bounds.insetBy(dx: -bounds.width * 0.4, dy: -bounds.height * 0.4)
         CATransaction.commit()
     }
 
     private var tuckDistance: CGFloat { bounds.height + 6 }
 
-    /// One scale per species, from its idle height, so switching anims never
-    /// resizes the creature.
-    private func applyScale() {
+    /// One scale and one anchor per species, both from its idle frames, so
+    /// switching anims never resizes or shifts the creature. The idle feet
+    /// rest on the bottom of the box and the idle body fits inside it.
+    private func placeImage() {
         let points = SpriteRendering.pointsPerPixel(
-            referenceHeight: referenceHeight,
+            visibleHeight: footprint.height,
             boxHeight: bounds.height,
             backingScale: backingScale,
             pixelated: loop?.pixelated ?? true
         )
         image.contentsScale = 1 / points
+        image.position = CGPoint(x: bounds.midX, y: bounds.minY + CGFloat(footprint.bottom) * points)
     }
 
     /// `playOneShot` is false for the first pose a view sees, so a one-shot
@@ -82,10 +84,14 @@ final class SpriteLayer: CALayer {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let rescale = show.referenceHeight != referenceHeight || show.loop.pixelated != loop?.pixelated
-        referenceHeight = show.referenceHeight
+        let newSpecies = show.reference.frames.first !== reference?.frames.first
+        let replace = newSpecies || show.loop.pixelated != loop?.pixelated
+        if newSpecies {
+            reference = show.reference
+            footprint = SpriteRendering.footprint(of: show.reference.frames) ?? footprint
+        }
         setLoop(show.loop)
-        if rescale { applyScale() }
+        if replace { placeImage() }
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         CATransaction.commit()
         body.setValue(CGFloat(show.facing.horizontal) * 3, forKeyPath: "transform.translation.x")

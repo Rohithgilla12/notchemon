@@ -34,9 +34,10 @@ struct OneShot: Sendable {
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
     var facing: Facing
-    /// Pixel height of the species' idle frames. Every anim of the species
-    /// scales against it, so switching anims never changes the creature's size.
-    var referenceHeight: Int
+    /// The species' idle frames facing the viewer. Every anim of the species
+    /// is scaled and anchored against them, so switching anims never changes
+    /// the creature's size or where it stands.
+    var reference: SpriteFrames
     var oneShot: OneShot?
 }
 
@@ -428,7 +429,7 @@ actor CreatureEngine {
         snapshot.sprite = SpriteShow(
             loop: loop,
             facing: behaviour.facing,
-            referenceHeight: reference.frames.map(\.height).max() ?? 1,
+            reference: reference,
             oneShot: snapshot.sprite?.oneShot
         )
     }

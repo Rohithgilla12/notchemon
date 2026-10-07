@@ -26,7 +26,7 @@ struct NotchGeometryTests {
 
     @Test func collapsedExtendsPeekBelowNotch() throws {
         let layout = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false))
-        #expect(layout.collapsed == CGRect(x: 764, y: 1045, width: 200, height: 72))
+        #expect(layout.collapsed == CGRect(x: 764, y: 1041, width: 200, height: 76))
     }
 
     @Test func fullScreenUsesSmallerPeek() throws {

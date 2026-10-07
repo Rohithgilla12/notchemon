@@ -23,7 +23,8 @@ struct NotchLayout: Sendable, Equatable {
 
 enum NotchGeometry {
     static let virtualSize = CGSize(width: 180, height: 32)
-    static let peekHeight: CGFloat = 40
+    /// Room for a creature about 40 pt tall below the notch.
+    static let peekHeight: CGFloat = 44
     static let fullScreenPeekHeight: CGFloat = 20
     static let expandedSize = CGSize(width: 420, height: 160)
 

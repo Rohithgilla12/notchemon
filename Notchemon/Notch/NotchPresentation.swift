@@ -35,12 +35,13 @@ struct PanelMetrics: Sendable, Equatable {
         peekHeight = layout.collapsed.height - layout.notch.height
     }
 
-    static let expandedSpriteSide: CGFloat = 84
+    static let expandedSpriteSide: CGFloat = 100
     static let expandedInset: CGFloat = 16
+    static let expandedVerticalPadding: CGFloat = 12
 
-    var collapsedSpriteSide: CGFloat { peekHeight + 8 }
+    var collapsedSpriteSide: CGFloat { peekHeight }
 
-    /// Bottom-aligned to the peek strip, top tucked behind the notch.
+    /// The peek strip below the notch. Taller frames rise behind the notch.
     var collapsedSpriteFrame: CGRect {
         let side = collapsedSpriteSide
         return CGRect(x: (panelSize.width - side) / 2, y: notchSize.height + peekHeight - side, width: side, height: side)
@@ -48,7 +49,7 @@ struct PanelMetrics: Sendable, Equatable {
 
     var expandedSpriteFrame: CGRect {
         let side = Self.expandedSpriteSide
-        return CGRect(x: Self.expandedInset + 8, y: notchSize.height + Self.expandedInset, width: side, height: side)
+        return CGRect(x: Self.expandedInset + 8, y: notchSize.height + Self.expandedVerticalPadding, width: side, height: side)
     }
 
     func spriteFrame(expanded: Bool) -> CGRect {

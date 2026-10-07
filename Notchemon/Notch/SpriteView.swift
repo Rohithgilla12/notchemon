@@ -12,7 +12,7 @@ struct SpritePose: Equatable {
     static func == (lhs: SpritePose, rhs: SpritePose) -> Bool {
         lhs.show?.loop.frames.first === rhs.show?.loop.frames.first
             && lhs.show?.facing == rhs.show?.facing
-            && lhs.show?.referenceHeight == rhs.show?.referenceHeight
+            && lhs.show?.reference.frames.first === rhs.show?.reference.frames.first
             && lhs.show?.oneShot?.serial == rhs.show?.oneShot?.serial
             && lhs.tucked == rhs.tucked && lhs.flashToken == rhs.flashToken && lhs.fidgets == rhs.fidgets
     }
