@@ -101,6 +101,41 @@ struct TallHopProvider: CreatureProvider {
     }
 }
 
+/// Holds every lookup of `gatedID` until the test releases it, oldest first.
+final class GatedProvider: CreatureProvider, @unchecked Sendable {
+    let starterIDs = [901]
+    private let gatedID: Int
+    private let lock = NSLock()
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    init(gating id: Int) {
+        gatedID = id
+    }
+
+    var waiting: Int { lock.withLock { held.count } }
+
+    func releaseOldest() {
+        lock.withLock { held.removeFirst() }.resume()
+    }
+
+    func species(id: Int) async throws -> Species {
+        if id == gatedID {
+            await withCheckedContinuation { continuation in
+                lock.withLock { held.append(continuation) }
+            }
+        }
+        return try await FakeProvider().species(id: id)
+    }
+
+    func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames {
+        try await FakeProvider().sprite(for: species, state: state, facing: facing)
+    }
+
+    func portrait(for species: Species) async throws -> CGImage {
+        FakeProvider.image()
+    }
+}
+
 final class IdleClock: @unchecked Sendable {
     private let lock = NSLock()
     private var current: TimeInterval = 0
@@ -193,6 +228,31 @@ struct EngineTests {
         }
         #expect(name == "Testmax")
         #expect(portrait != nil)
+    }
+
+    /// Loading and an award both find the same stage pending and both wait on
+    /// the fetch. The loser must not evolve it again or roll the winner back.
+    @Test func concurrentEntrantsEvolveEachStageOnce() async throws {
+        try store.save(CompanionState(progress: Progress(speciesId: 901, level: 7, xp: 0), totalFocusMinutes: 0, stash: []))
+        let provider = GatedProvider(gating: 902)
+        let engine = engine(provider: provider)
+        let loading = Task { await engine.start() }
+        try await until { provider.waiting == 1 }
+        let awarding = Task { await engine.award(0) }
+        try await until { provider.waiting == 2 }
+        provider.releaseOldest()
+        await loading.value
+        provider.releaseOldest()
+        await awarding.value
+        #expect(store.load().progress?.speciesId == 903)
+        #expect(await engine.currentSnapshot.evolutionCount == 2)
+    }
+
+    private func until(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(condition())
     }
 
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {

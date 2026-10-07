@@ -248,6 +248,8 @@ actor CreatureEngine {
         while let species, let progress = state.progress,
               case .evolves(_, let targetID)? = XPRules.pendingEvolution(level: progress.level, species: species) {
             guard let target = try? await provider.species(id: targetID) else { return }
+            // Another entrant may have evolved, or reset, during the fetch.
+            guard state.progress?.speciesId == species.id else { continue }
             state.progress?.speciesId = targetID
             persist()
             forgetSprites()
