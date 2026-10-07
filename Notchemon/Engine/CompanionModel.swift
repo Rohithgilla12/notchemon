@@ -109,7 +109,7 @@ final class CompanionModel {
     func cursorMoved(to point: CGPoint, spriteCentre: CGPoint) {
         let offset = CursorOffset(dx: point.x - spriteCentre.x, dy: point.y - spriteCentre.y)
         let near = (offset.dx * offset.dx + offset.dy * offset.dy).squareRoot() <= BehaviourRules.watchRadius
-        let facing: Facing? = near ? .toward(dx: offset.dx, dy: offset.dy) : nil
+        let facing: Facing? = near ? BehaviourRules.facing(toward: offset) : nil
         guard lastSentFacing != .some(facing) else { return }
         lastSentFacing = .some(facing)
         Task { await engine.cursorMoved(offset: near ? offset : nil) }

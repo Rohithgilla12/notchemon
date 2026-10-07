@@ -28,6 +28,24 @@ struct FacingTests {
         #expect(Facing.toward(dx: -0.1, dy: 0.2) == .down)
     }
 
+    @Test(arguments: [
+        (Facing.down, Facing.down),
+        (.downRight, .downRight),
+        (.right, .right),
+        (.upRight, .right),
+        (.up, .down),
+        (.upLeft, .left),
+        (.left, .left),
+        (.downLeft, .downLeft),
+    ])
+    func frontFacingNeverShowsTheBack(facing: Facing, expected: Facing) {
+        #expect(facing.frontFacing == expected)
+    }
+
+    @Test func frontIsTheFiveFacingsThatShowTheFace() {
+        #expect(Facing.front == [.down, .downRight, .right, .left, .downLeft])
+    }
+
     @Test func rowOrderMatchesSheetLayout() {
         #expect(Facing.allCases == [.down, .downRight, .right, .upRight, .up, .upLeft, .left, .downLeft])
         #expect(Facing.allCases.map(\.rawValue) == Array(0..<8))

@@ -35,6 +35,20 @@ enum Facing: Int, Sendable, CaseIterable {
         return Facing(rawValue: row) ?? .down
     }
 
+    /// The nearest facing that shows the creature's face. A companion never
+    /// turns its back: a target above it is looked at from the front.
+    var frontFacing: Facing {
+        switch self {
+        case .up: .down
+        case .upLeft: .left
+        case .upRight: .right
+        case .down, .downRight, .right, .left, .downLeft: self
+        }
+    }
+
+    /// Every facing the creature can show, in sheet row order.
+    static let front = allCases.filter { $0.frontFacing == $0 }
+
     /// -1 for facings with a leftward component, 1 for rightward, 0 otherwise.
     var horizontal: Int {
         switch self {

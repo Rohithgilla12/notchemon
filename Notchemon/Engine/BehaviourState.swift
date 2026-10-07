@@ -46,11 +46,15 @@ enum BehaviourRules {
         if let celebration = input.celebration { return .celebrating(celebration) }
         if input.sleepEnabled, input.secondsSinceInput >= input.sleepAfter { return .sleeping }
         if let offset = input.cursorOffset {
-            return .watching(facing: .toward(dx: offset.dx, dy: offset.dy))
+            return .watching(facing: facing(toward: offset))
         }
         if input.secondsSinceCursorNear < watchLinger { return .watching(facing: .down) }
         if input.stashCount > 0 { return .holding }
         return .idle
+    }
+
+    static func facing(toward offset: CursorOffset) -> Facing {
+        Facing.toward(dx: offset.dx, dy: offset.dy).frontFacing
     }
 }
 
