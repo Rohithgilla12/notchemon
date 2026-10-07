@@ -36,8 +36,10 @@ struct PanelMetrics: Sendable, Equatable {
     }
 
     /// Wide enough for a creature turned sideways at about twice its
-    /// collapsed size; the slot fills the panel's left column.
-    static let expandedSpriteSize = CGSize(width: 136, height: 100)
+    /// collapsed size, and tall enough for the panel's anims standing on one
+    /// ground line, a wake curled below it included. The slot fills the
+    /// panel's left column.
+    static let expandedSpriteSize = CGSize(width: 136, height: 120)
     static let expandedInset: CGFloat = 16
     static let expandedVerticalPadding: CGFloat = 12
 

@@ -142,18 +142,20 @@ enum SpriteRendering {
         return motion + (frames.frames.count == 1 ? bobLift : 0)
     }
 
+    /// The ground line sits as far above the box's bottom edge as the lowest
+    /// pixel of any anim the mode plays reaches below it, so that pixel
+    /// touches the edge and nothing the mode plays drops out of the box.
     static func placement(_ bounds: SpriteBounds, fit: SpriteFit, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> SpritePlacement {
-        switch fit {
+        let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: fit == .contain) }.values
+        let anims = [AnimBounds(footprint: bounds.rest, lift: 0)] + played
+        let lowest = anims.map(\.footprint.bottom).max() ?? bounds.rest.bottom
+        let points = switch fit {
         case .peek:
-            let points = pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
-            return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(bounds.rest.bottom) * points, baseline: bounds.baseline)
+            pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
         case .contain:
-            let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: true) }.values
-            let anims = played.isEmpty ? [AnimBounds(footprint: bounds.rest, lift: 0)] : Array(played)
-            let lowest = anims.map(\.footprint.bottom).max() ?? bounds.rest.bottom
-            let points = pointsPerPixel(containing: anims, above: lowest, in: box, backingScale: backingScale, pixelated: pixelated)
-            return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(lowest) * points, baseline: bounds.baseline)
+            pointsPerPixel(containing: anims, above: lowest, in: box, backingScale: backingScale, pixelated: pixelated)
         }
+        return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(lowest) * points, baseline: bounds.baseline)
     }
 
     /// How far the visible creature stops short of the top of its box, and

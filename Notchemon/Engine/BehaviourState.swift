@@ -75,11 +75,17 @@ enum SpriteChoreography {
         }
     }
 
-    /// The hop greets a cursor arriving at the closed notch; with the panel
-    /// open there is nothing to greet, and the panel sizes the creature
-    /// without the hop's tall arc.
+    /// Which anims are seen in each panel mode, so each mode sizes and stands
+    /// the creature for those alone. The hop greets a cursor arriving at the
+    /// closed notch, and its tall arc would shrink the creature in the panel.
+    /// Below the notch a sleeping creature is tucked out of sight and pops
+    /// out to show it woke, so Sleep and Wake are never seen there.
     static func plays(_ state: SpriteState, panelExpanded: Bool) -> Bool {
-        !(panelExpanded && state == .hop)
+        switch state {
+        case .idle, .celebrating: true
+        case .hop: !panelExpanded
+        case .sleeping, .wake: panelExpanded
+        }
     }
 
     static func oneShot(for cue: SpriteCue) -> SpriteState? {

@@ -147,19 +147,21 @@ struct SpriteRenderingTests {
         baseline: 0
     )
 
-    @Test func peekSizesTheRestingCreatureAndStandsItsLowestRowOnTheBottomEdge() {
+    @Test func peekSizesTheRestingCreatureAndStandsTheLowestRowItPlaysOnTheBottomEdge() {
         let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
         let placement = SpriteRendering.placement(Self.measured, fit: .peek, in: box, backingScale: 2, pixelated: true)
         #expect(placement.pointsPerPixel == 1.5)
-        #expect(placement.groundHeight == 1.5)
+        // Idle and hop turned sideways reach 3 rows down; wake's 11 never plays here.
+        #expect(placement.groundHeight == 4.5)
     }
 
     @Test func containRaisesTheGroundOverTheDeepestDipAndLeavesTheHopOut() {
         let box = PanelMetrics.expandedSpriteSize
         let placement = SpriteRendering.placement(Self.measured, fit: .contain, in: box, backingScale: 2, pixelated: true)
-        // Idle's head 29 rows up and wake's tail 11 rows down: 40 rows in 100 pt.
-        #expect(placement.pointsPerPixel == 2.5)
-        #expect(placement.groundHeight == 27.5)
+        // Idle's head 29 rows up and wake's tail 11 rows down: 40 rows in 120 pt.
+        // The 59 rows from the hop's arc down to that tail would allow only 2.
+        #expect(placement.pointsPerPixel == 3)
+        #expect(placement.groundHeight == 33)
     }
 
     @Test(arguments: [

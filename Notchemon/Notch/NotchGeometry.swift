@@ -25,7 +25,7 @@ enum NotchGeometry {
     /// Room for a creature about 40 pt tall below the notch.
     static let peekHeight: CGFloat = 44
     static let fullScreenPeekHeight: CGFloat = 20
-    static let expandedSize = CGSize(width: 440, height: 160)
+    static let expandedSize = CGSize(width: 440, height: 180)
 
     /// Returns nil when the screen has no notch and the virtual notch is off.
     static func layout(for screen: ScreenMetrics, virtualNotchEnabled: Bool, fullScreen: Bool = false) -> NotchLayout? {

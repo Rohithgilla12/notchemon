@@ -37,7 +37,7 @@ struct NotchGeometryTests {
         #expect(layout.expanded.midX == macBookPro.frame.midX)
         #expect(layout.expanded.maxY == macBookPro.frame.maxY)
         #expect(layout.expanded.width == 440)
-        #expect(layout.expanded.height == CGFloat(192))
+        #expect(layout.expanded.height == CGFloat(212))
     }
 
     @Test func noNotchWithVirtualDisabledHasNoLayout() {

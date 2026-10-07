@@ -101,9 +101,11 @@ struct SpriteChoreographyTests {
 
     @Test func theOpenPanelNeverHops() {
         #expect(SpriteChoreography.oneShot(for: .cursorEnteredNotch(panelExpanded: true)) == nil)
-        #expect(!SpriteChoreography.plays(.hop, panelExpanded: true))
-        #expect(SpriteState.allCases.allSatisfy { SpriteChoreography.plays($0, panelExpanded: false) })
         #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true) } == [.idle, .sleeping, .celebrating, .wake])
+    }
+
+    @Test func belowTheNotchTheCreatureNeverPlaysWakeOrSleepInSight() {
+        #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false) } == [.idle, .celebrating, .hop])
     }
 
     @Test(arguments: [

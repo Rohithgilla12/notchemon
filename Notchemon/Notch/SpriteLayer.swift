@@ -12,6 +12,8 @@ final class SpriteLayer: CALayer {
     private var speciesBounds: SpriteBounds?
     private var placement: SpritePlacement?
     private var oneShot: (animation: CAKeyframeAnimation, frames: SpriteFrames, ends: CFTimeInterval)?
+    /// Whichever one-shot plays, drawn in its own frames or moved by the renderer.
+    private var playing: (state: SpriteState, ends: CFTimeInterval)?
     private var playedOneShot: Int?
     private var tucked = false
     private var mirrored = false
@@ -21,7 +23,11 @@ final class SpriteLayer: CALayer {
     }
 
     var fit = SpriteFit.peek {
-        didSet { if fit != oldValue { setNeedsLayout() } }
+        didSet {
+            guard fit != oldValue else { return }
+            if let playing, playing.ends > CACurrentMediaTime(), !plays(playing.state) { stopOneShot() }
+            setNeedsLayout()
+        }
     }
 
     override init() {
@@ -167,19 +173,36 @@ final class SpriteLayer: CALayer {
     /// last, so a one-shot added after the loop covers it, and the loop shows
     /// through again once the one-shot is removed on completion.
     private func play(_ oneShot: OneShot) {
+        guard plays(oneShot.state) else { return }
         guard oneShot.frames.loops else {
             let animation = Self.keyframes(oneShot.frames)
             animation.beginTime = CACurrentMediaTime()
             image.add(animation, forKey: "oneShot")
             self.oneShot = (animation, oneShot.frames, animation.beginTime + animation.duration)
+            playing = (oneShot.state, animation.beginTime + animation.duration)
             standOneShot()
             return
         }
-        switch oneShot.state {
+        let duration = switch oneShot.state {
         case .hop: hop(height: SpriteRendering.hopLift)
         case .wake: hop(height: SpriteRendering.wakeLift)
         case .celebrating: celebrate()
-        case .idle, .sleeping: break
+        case .idle, .sleeping: 0.0
+        }
+        playing = (oneShot.state, CACurrentMediaTime() + duration)
+    }
+
+    private func plays(_ state: SpriteState) -> Bool {
+        SpriteChoreography.plays(state, panelExpanded: fit == .contain)
+    }
+
+    /// A one-shot this mode never plays would leave its box when the panel
+    /// opens or closes under it, so it ends there.
+    private func stopOneShot() {
+        oneShot = nil
+        playing = nil
+        for key in ["oneShot", "oneShotStand", "hop"] {
+            image.removeAnimation(forKey: key)
         }
     }
 
@@ -217,23 +240,25 @@ final class SpriteLayer: CALayer {
         CATransaction.commit()
     }
 
-    private func hop(height: CGFloat) {
-        guard !tucked else { return }
+    private func hop(height: CGFloat) -> CFTimeInterval {
+        guard !tucked else { return 0 }
         let hop = CAKeyframeAnimation(keyPath: "transform.translation.y")
         hop.values = [0, height, 0, height * 0.3, 0]
         hop.keyTimes = [0, 0.35, 0.7, 0.85, 1]
         hop.duration = 0.45
         hop.isAdditive = true
         image.add(hop, forKey: "hop")
+        return hop.duration
     }
 
-    private func celebrate() {
+    private func celebrate() -> CFTimeInterval {
         let jumps = CAKeyframeAnimation(keyPath: "transform.translation.y")
         let lift = SpriteRendering.celebrationLift
         jumps.values = [0, lift, 0, lift, 0, lift, 0]
         jumps.duration = 2
         jumps.isAdditive = true
         image.add(jumps, forKey: "celebrate")
+        return jumps.duration
     }
 
     /// The idle blink-or-shift: a quick squash or a small sidestep.
