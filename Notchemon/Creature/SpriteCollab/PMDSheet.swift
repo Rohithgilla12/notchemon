@@ -6,6 +6,8 @@ enum PMDSheetError: Error, Equatable {
     case heightNotDivisible(sheetHeight: Int, frameHeight: Int)
     case unsupportedRowCount(Int)
     case cropFailed
+    /// The sheet's pixels could not be read back.
+    case undrawable
 }
 
 /// One anim sheet sliced into frames. Columns are frames; rows are facings,
@@ -56,9 +58,9 @@ struct PMDSheet: Sendable {
 struct PMDShadowSheet: Sendable {
     private let rows: [[CGPoint]]
 
-    init(image: CGImage, spec: PMDAnimSpec) throws {
+    init(image: CGImage, spec: PMDAnimSpec, context: RGBAPixels.MakeContext = RGBAPixels.sRGBContext) throws {
         let cells = try PMDSheet.cells(of: image, spec: spec)
-        let pixels = RGBAPixels(image)
+        let pixels = try RGBAPixels(image, context: context)
         rows = cells.map { row in row.map { pixels.groundPoint(in: $0) } }
     }
 
@@ -68,21 +70,32 @@ struct PMDShadowSheet: Sendable {
     }
 }
 
-private struct RGBAPixels {
+struct RGBAPixels {
+    /// A context drawing 8-bit premultiplied RGBA into `data`, `width` pixels a row.
+    typealias MakeContext = (_ data: UnsafeMutableRawPointer?, _ width: Int, _ height: Int) -> CGContext?
+
     let width: Int
     let bytes: [UInt8]
 
-    init(_ image: CGImage) {
+    /// Throws rather than leave the bytes blank, which would read as a
+    /// sheet of empty cells.
+    init(_ image: CGImage, context makeContext: MakeContext) throws {
         width = image.width
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
-        bytes.withUnsafeMutableBytes { buffer in
-            let context = CGContext(
-                data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-            context?.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let drawn = bytes.withUnsafeMutableBytes { buffer in
+            guard let context = makeContext(buffer.baseAddress, image.width, image.height) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            return true
         }
+        guard drawn else { throw PMDSheetError.undrawable }
         self.bytes = bytes
+    }
+
+    static func sRGBContext(data: UnsafeMutableRawPointer?, width: Int, height: Int) -> CGContext? {
+        CGContext(
+            data: data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
     }
 
     /// The white pixel if the cell has one, else the centre of whatever

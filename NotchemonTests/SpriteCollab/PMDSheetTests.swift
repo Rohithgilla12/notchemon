@@ -102,6 +102,15 @@ struct PMDShadowSheetTests {
         #expect(try PMDShadowSheet(image: image, spec: spec).groundPoints(facing: .left) == [CGPoint(x: 8, y: 10), CGPoint(x: 8, y: 10)])
     }
 
+    @Test func aShadowThatCannotBeDrawnIsNoShadowRatherThanCentredPoints() {
+        let image = SpriteFixtures.shadowSheet(frameWidth: 16, frameHeight: 20, columns: 2, rows: 1, shadow: Self.shadow) { _ in CGPoint(x: 5, y: 11) }
+        let spec = PMDAnimSpec(sheetName: "Idle", frameWidth: 16, frameHeight: 20, durations: [1, 1])
+
+        #expect(throws: PMDSheetError.undrawable) {
+            try PMDShadowSheet(image: image, spec: spec, context: { _, _, _ in nil })
+        }
+    }
+
     @Test func rejectsAGridThatDoesNotMatchTheAnim() {
         let image = SpriteFixtures.shadowSheet(frameWidth: 16, frameHeight: 20, columns: 3, rows: 1, shadow: Self.shadow) { _ in nil }
         let spec = PMDAnimSpec(sheetName: "Idle", frameWidth: 16, frameHeight: 20, durations: [1, 1])
