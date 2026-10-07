@@ -11,8 +11,9 @@ final class SpriteLayer: CALayer {
     private var loopStart: CFTimeInterval = 0
     private var speciesBounds: SpriteBounds?
     private var loopState = SpriteState.idle
+    private var facing = Facing.down
     private var placement: SpritePlacement?
-    private var oneShot: (animation: CAKeyframeAnimation, state: SpriteState, ends: CFTimeInterval)?
+    private var oneShot: (animation: CAKeyframeAnimation, state: SpriteState, facing: Facing, ends: CFTimeInterval)?
     private var playedOneShot: Int?
     private var tucked = false
     private var mirrored = false
@@ -74,7 +75,7 @@ final class SpriteLayer: CALayer {
         )
         self.placement = placement
         image.contentsScale = 1 / placement.pointsPerPixel
-        image.position = CGPoint(x: bounds.midX, y: bounds.minY + placement.centreHeight(of: loopState))
+        image.position = CGPoint(x: bounds.midX, y: bounds.minY + placement.centreHeight(of: loopState, facing: facing))
         standOneShot()
     }
 
@@ -84,7 +85,7 @@ final class SpriteLayer: CALayer {
         image.removeAnimation(forKey: "oneShotStand")
         guard let oneShot, oneShot.ends > CACurrentMediaTime(), let placement else { return }
         let stand = CABasicAnimation(keyPath: "position.y")
-        stand.fromValue = bounds.minY + placement.centreHeight(of: oneShot.state)
+        stand.fromValue = bounds.minY + placement.centreHeight(of: oneShot.state, facing: oneShot.facing)
         stand.toValue = stand.fromValue
         stand.beginTime = oneShot.animation.beginTime
         stand.duration = oneShot.animation.duration
@@ -104,6 +105,7 @@ final class SpriteLayer: CALayer {
         CATransaction.setDisableActions(true)
         speciesBounds = show.bounds
         loopState = show.loopState
+        facing = show.facing
         setLoop(show.loop)
         placeImage()
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
@@ -154,7 +156,7 @@ final class SpriteLayer: CALayer {
             let animation = Self.keyframes(oneShot.frames)
             animation.beginTime = CACurrentMediaTime()
             image.add(animation, forKey: "oneShot")
-            self.oneShot = (animation, oneShot.state, animation.beginTime + animation.duration)
+            self.oneShot = (animation, oneShot.state, facing, animation.beginTime + animation.duration)
             standOneShot()
             return
         }

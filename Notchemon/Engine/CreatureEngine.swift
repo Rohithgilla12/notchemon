@@ -464,14 +464,10 @@ actor CreatureEngine {
     private func bounds(of species: Species) async -> SpriteBounds? {
         if let spriteBounds { return spriteBounds }
         guard let rest = await frames(.idle, facing: .down, of: species) else { return nil }
-        var anims: [SpriteState: [SpriteFrames]] = [:]
+        var anims: [SpriteState: [Facing: SpriteFrames]] = [:]
         for state in SpriteState.allCases {
-            var seen = Set<ObjectIdentifier>()
             for facing in Facing.front {
-                guard let frames = await frames(state, facing: facing, of: species),
-                      seen.insert(ObjectIdentifier(frames.frames[0])).inserted
-                else { continue }
-                anims[state, default: []].append(frames)
+                anims[state, default: [:]][facing] = await frames(state, facing: facing, of: species)
             }
         }
         guard self.species?.id == species.id else { return nil }

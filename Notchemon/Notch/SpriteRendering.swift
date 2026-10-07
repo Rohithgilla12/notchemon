@@ -26,6 +26,9 @@ struct Footprint: Sendable, Equatable {
 struct AnimBounds: Sendable, Equatable {
     let footprint: Footprint
     let lift: CGFloat
+    /// The edge below each facing's lowest opaque row. Sheets draw some
+    /// facings a pixel or two lower, so each one stands on its own.
+    var bottoms: [Facing: Int] = [:]
 }
 
 /// Where a species' pixels fall, measured once per species. Each mode has
@@ -51,8 +54,9 @@ struct SpritePlacement: Equatable {
 
     /// How far the anim's frame centre sits above the box's bottom edge, in
     /// points, so that its lowest opaque row rests on that edge.
-    func centreHeight(of state: SpriteState) -> CGFloat {
-        CGFloat((bounds.anims[state]?.footprint ?? bounds.rest).bottom) * pointsPerPixel
+    func centreHeight(of state: SpriteState, facing: Facing) -> CGFloat {
+        let anim = bounds.anims[state]
+        return CGFloat(anim?.bottoms[facing] ?? anim?.footprint.bottom ?? bounds.rest.bottom) * pointsPerPixel
     }
 }
 
@@ -84,7 +88,7 @@ enum SpriteRendering {
     /// `rest` must not be empty. A species with nothing opaque at rest is
     /// measured by its whole idle frame, so it still gets a sensible scale.
     /// `anims` holds each anim's frames in every front facing.
-    static func bounds(rest: [CGImage], anims: [SpriteState: [SpriteFrames]]) -> SpriteBounds {
+    static func bounds(rest: [CGImage], anims: [SpriteState: [Facing: SpriteFrames]]) -> SpriteBounds {
         let first = rest[0]
         let resting = footprint(of: rest) ?? Footprint(
             left: -first.width / 2, right: first.width - first.width / 2,
@@ -92,8 +96,13 @@ enum SpriteRendering {
         )
         var measured: [SpriteState: AnimBounds] = [:]
         for (state, facings) in anims {
-            guard let union = footprint(of: facings.flatMap(\.frames)) else { continue }
-            measured[state] = AnimBounds(footprint: union, lift: facings.map { lift(state, $0) }.max() ?? 0)
+            let footprints = facings.compactMapValues { footprint(of: $0.frames) }
+            guard let union = footprints.values.reduce(nil, { union, next in union?.union(next) ?? next }) else { continue }
+            measured[state] = AnimBounds(
+                footprint: union,
+                lift: facings.values.map { lift(state, $0) }.max() ?? 0,
+                bottoms: footprints.mapValues(\.bottom)
+            )
         }
         return SpriteBounds(rest: resting, anims: measured)
     }
