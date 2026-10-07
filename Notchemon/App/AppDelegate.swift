@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let debugSleepSecondsKey = "NotchemonDebugSleepSeconds"
 
     let presentation = NotchPresentation()
+    let roamer = Roamer()
     let model: CompanionModel
     private(set) var windowController: NotchWindowController?
     private var hotKey: HotKey?
@@ -31,15 +32,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentation: presentation,
             virtualNotchEnabled: model.snapshot.preferences.virtualNotchEnabled,
             wander: model.snapshot.preferences.wander,
-            content: NotchRootView(presentation: presentation, model: model)
+            content: NotchRootView(presentation: presentation, model: model, roamer: roamer)
         )
         windowController = controller
-        controller.onCursorMoved = { [presentation, model] point in
+        controller.onCursorMoved = { [weak self, presentation, model] point in
+            self?.refreshRoam()
             guard let layout = presentation.layout, let metrics = presentation.metrics else { return }
             let frame = metrics.spriteFrame(expanded: presentation.isExpanded)
             let centre = metrics.screenPoint(CGPoint(x: frame.midX, y: frame.midY), panelFrame: layout.expanded)
             model.cursorMoved(to: point, spriteCentre: centre, panelExpanded: presentation.isExpanded)
         }
+        model.onSnapshot = { [weak self] in self?.refreshRoam() }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
             controller?.setWander(preferences.wander)
@@ -50,6 +53,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.start()
         hotKey = HotKey.controlOptionN { [weak controller] in controller?.toggleFromHotkey() }
         Task { await model.run() }
+    }
+
+    private func refreshRoam() {
+        let conditions = HomingConditions(
+            wander: model.snapshot.preferences.wander,
+            panelOpen: presentation.isExpanded,
+            sleeping: false,
+            focusing: false,
+            fullScreen: presentation.isFullScreen,
+            cursorNearHome: false,
+            hasCreature: model.activeSpecies != nil
+        )
+        let reach = Double(presentation.layout?.roamReach ?? 0)
+        roamer.update(range: -reach...reach, homing: RoamRules.homing(conditions))
     }
 
     func confirmNewStarter() {

@@ -12,6 +12,7 @@ final class CompanionModel {
     private(set) var isLoadingStarters = false
     var noteDraft = ""
     @ObservationIgnored var onPreferencesChanged: ((Preferences) -> Void)?
+    @ObservationIgnored var onSnapshot: (() -> Void)?
     @ObservationIgnored var onChoosingStarter: (() -> Void)?
 
     @ObservationIgnored private let engine: CreatureEngine
@@ -36,6 +37,7 @@ final class CompanionModel {
         let wasChoosing = isChoosing(snapshot.phase)
         snapshot = next
         if preferencesChanged { onPreferencesChanged?(next.preferences) }
+        onSnapshot?()
         if isChoosing(next.phase), !wasChoosing {
             onChoosingStarter?()
             if starterOptions.isEmpty, !isLoadingStarters {
