@@ -34,6 +34,8 @@ struct OneShot: Sendable {
 /// What the sprite view plays.
 struct SpriteShow: Sendable {
     var loop: SpriteFrames
+    /// The anim `loop` was drawn for, which decides the ground line it stands on.
+    var loopState: SpriteState
     var playback: LoopPlayback
     var facing: Facing
     var bounds: SpriteBounds
@@ -429,6 +431,7 @@ actor CreatureEngine {
             guard snapshot.behaviour == behaviour, state.preferences.idleStyle == style else { return }
             snapshot.sprite = SpriteShow(
                 loop: loop,
+                loopState: choice.state,
                 playback: choice.playback,
                 facing: behaviour.facing,
                 bounds: bounds,

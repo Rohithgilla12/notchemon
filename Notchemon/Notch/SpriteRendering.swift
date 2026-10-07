@@ -52,18 +52,27 @@ enum SpriteFit: Sendable, Equatable {
 
 struct SpritePlacement: Equatable {
     let pointsPerPixel: CGFloat
-    /// How far the ground line sits above the box's bottom edge, in points.
+    /// How far the ground line every standing anim shares sits above the
+    /// box's bottom edge, in points.
     let groundHeight: CGFloat
     let baseline: Int
+    /// The lying loop's own ground line, which puts its lowest pixel on the
+    /// box's bottom edge. Nil when the mode does not play it.
+    var lyingGroundHeight: CGFloat? = nil
+
+    func groundHeight(of state: SpriteState) -> CGFloat {
+        state == .sitting ? lyingGroundHeight ?? groundHeight : groundHeight
+    }
 
     /// Where each frame's centre goes so its ground point lands on the ground
-    /// line midway across the box: points from that spot, y up.
-    func centres(of frames: SpriteFrames, mirrored: Bool) -> [CGPoint] {
-        zip(frames.frames, SpriteRendering.groundPoints(of: frames, baseline: baseline)).map { frame, ground in
-            let across = (CGFloat(frame.width) / 2 - ground.x) * pointsPerPixel
+    /// line of `state` midway across the box: points from that spot, y up.
+    func centres(of frames: SpriteFrames, as state: SpriteState, mirrored: Bool) -> [CGPoint] {
+        let ground = groundHeight(of: state)
+        return zip(frames.frames, SpriteRendering.groundPoints(of: frames, baseline: baseline)).map { frame, point in
+            let across = (CGFloat(frame.width) / 2 - point.x) * pointsPerPixel
             return CGPoint(
                 x: mirrored ? -across : across,
-                y: groundHeight + (ground.y - CGFloat(frame.height) / 2) * pointsPerPixel
+                y: ground + (point.y - CGFloat(frame.height) / 2) * pointsPerPixel
             )
         }
     }
@@ -156,22 +165,34 @@ enum SpriteRendering {
         return motion + (frames.frames.count == 1 ? bobLift : 0)
     }
 
-    /// The ground line sits as far above the box's bottom edge as the lowest
-    /// pixel of any anim the mode plays reaches below it, so that pixel
-    /// touches the edge and nothing the mode plays drops out of the box.
+    /// The shared ground line sits as far above the box's bottom edge as the
+    /// lowest pixel of any standing anim the mode plays reaches below it, so
+    /// that pixel touches the edge and nothing drops out of the box. A lying
+    /// creature's tail can hang well below its ground point, so the lying
+    /// loop stands on a line of its own and the standing anims keep theirs.
     static func placement(
         _ bounds: SpriteBounds, fit: SpriteFit, style: IdleStyle, in box: CGSize, backingScale: CGFloat, pixelated: Bool
     ) -> SpritePlacement {
-        let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: fit == .contain, style: style) }.values
-        let anims = [AnimBounds(footprint: bounds.rest, lift: 0)] + played
-        let lowest = anims.map(\.footprint.bottom).max() ?? bounds.rest.bottom
+        let played = bounds.anims.filter { SpriteChoreography.plays($0.key, panelExpanded: fit == .contain, style: style) }
+        let lying = played[.sitting]
+        let standing = [AnimBounds(footprint: bounds.rest, lift: 0)] + played.filter { $0.key != .sitting }.values
+        let lowest = standing.map(\.footprint.bottom).max() ?? bounds.rest.bottom
         let points = switch fit {
         case .peek:
             pointsPerPixel(visibleHeight: bounds.rest.height, boxHeight: box.height, backingScale: backingScale, pixelated: pixelated)
         case .contain:
-            pointsPerPixel(containing: anims, above: lowest, in: box, backingScale: backingScale, pixelated: pixelated)
+            min(
+                pointsPerPixel(containing: standing, above: lowest, in: box, backingScale: backingScale, pixelated: pixelated),
+                lying.map { pointsPerPixel(containing: [$0], above: $0.footprint.bottom, in: box, backingScale: backingScale, pixelated: pixelated) }
+                    ?? .infinity
+            )
         }
-        return SpritePlacement(pointsPerPixel: points, groundHeight: CGFloat(lowest) * points, baseline: bounds.baseline)
+        return SpritePlacement(
+            pointsPerPixel: points,
+            groundHeight: CGFloat(lowest) * points,
+            baseline: bounds.baseline,
+            lyingGroundHeight: lying.map { CGFloat($0.footprint.bottom) * points }
+        )
     }
 
     /// How far the visible creature stops short of the top of its box, and

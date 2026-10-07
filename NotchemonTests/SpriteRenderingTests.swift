@@ -120,10 +120,10 @@ struct SpriteRenderingTests {
             durations: [1, 1],
             groundPoints: [CGPoint(x: 20, y: 24), CGPoint(x: 18, y: 31)]
         )
-        #expect(placement.centres(of: frames, mirrored: false) == [CGPoint(x: 0, y: 42), CGPoint(x: 6, y: 63)])
-        #expect(placement.centres(of: frames, mirrored: true) == [CGPoint(x: 0, y: 42), CGPoint(x: -6, y: 63)])
+        #expect(placement.centres(of: frames, as: .idle, mirrored: false) == [CGPoint(x: 0, y: 42), CGPoint(x: 6, y: 63)])
+        #expect(placement.centres(of: frames, as: .idle, mirrored: true) == [CGPoint(x: 0, y: 42), CGPoint(x: -6, y: 63)])
         let tall = SpriteFrames(frames: [Self.frame(width: 40, height: 88, opaque: nil)], durations: [1], groundPoints: [CGPoint(x: 20, y: 48)])
-        #expect(placement.centres(of: tall, mirrored: false) == [CGPoint(x: 0, y: 42)])
+        #expect(placement.centres(of: tall, as: .idle, mirrored: false) == [CGPoint(x: 0, y: 42)])
     }
 
     @Test func wakeHandsOverToIdleWithoutAJump() throws {
@@ -138,7 +138,7 @@ struct SpriteRenderingTests {
         let bounds = SpriteRendering.bounds(rest: idle, anims: [.idle: [.down: idle], .wake: [.down: wake]])
         let placement = SpriteRendering.placement(bounds, fit: .contain, style: .calm, in: PanelMetrics.expandedSpriteSize, backingScale: 2, pixelated: true)
         let feet = { (frames: SpriteFrames, index: Int, lowestRow: Int) -> CGFloat in
-            placement.centres(of: frames, mirrored: false)[index].y - (CGFloat(lowestRow + 1) - CGFloat(frames.frames[index].height) / 2) * placement.pointsPerPixel
+            placement.centres(of: frames, as: .idle, mirrored: false)[index].y - (CGFloat(lowestRow + 1) - CGFloat(frames.frames[index].height) / 2) * placement.pointsPerPixel
         }
         #expect(feet(wake, 0, 34) == 0)
         #expect(feet(wake, 1, 25) == placement.groundHeight - 2 * placement.pointsPerPixel)
@@ -169,17 +169,41 @@ struct SpriteRenderingTests {
         #expect(placement.groundHeight == 4.5)
     }
 
-    @Test func aLyingTailBelowTheGroundMovesTheGroundLineOnlyWhenSitting() {
-        var anims = Self.measured.anims
+    static let lying: SpriteBounds = {
+        var anims = measured.anims
         anims[.sitting] = AnimBounds(footprint: Footprint(left: -12, right: 12, top: -14, bottom: 10), lift: 0)
-        let bounds = SpriteBounds(rest: Self.measured.rest, anims: anims, baseline: 0)
+        return SpriteBounds(rest: measured.rest, anims: anims, baseline: 0)
+    }()
+
+    @Test(arguments: IdleStyle.allCases)
+    func aLyingTailBelowTheGroundNeverMovesTheStandingGroundLine(style: IdleStyle) {
         let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
-        let ground = { (style: IdleStyle) in
-            SpriteRendering.placement(bounds, fit: .peek, style: style, in: box, backingScale: 2, pixelated: true).groundHeight
+        let placement = SpriteRendering.placement(Self.lying, fit: .peek, style: style, in: box, backingScale: 2, pixelated: true)
+        #expect(placement.pointsPerPixel == 1.5)
+        for state in SpriteState.allCases where state != .sitting {
+            #expect(placement.groundHeight(of: state) == 4.5)
         }
-        #expect(ground(.calm) == 4.5)
-        #expect(ground(.lively) == 4.5)
-        #expect(ground(.sitting) == 15)
+    }
+
+    @Test func theLyingLoopStandsItsLowestPixelOnTheBottomEdge() throws {
+        let box = CGSize(width: NotchGeometry.peekHeight, height: NotchGeometry.peekHeight)
+        let sitting = SpriteRendering.placement(Self.lying, fit: .peek, style: .sitting, in: box, backingScale: 2, pixelated: true)
+        // The tail hangs 10 rows below the ground point at 1.5 pt a row.
+        #expect(sitting.groundHeight(of: .sitting) == 15)
+        let calm = SpriteRendering.placement(Self.lying, fit: .peek, style: .calm, in: box, backingScale: 2, pixelated: true)
+        #expect(calm.lyingGroundHeight == nil)
+    }
+
+    @Test func containFitsTheLyingLoopOnItsOwnGroundLine() throws {
+        // A lying tail 30 rows below the ground: on the shared line, idle's
+        // head 29 rows up and that tail would need 59 rows and allow only 2.
+        var anims = Self.measured.anims
+        anims[.sitting] = AnimBounds(footprint: Footprint(left: -12, right: 12, top: -10, bottom: 30), lift: 0)
+        let bounds = SpriteBounds(rest: Self.measured.rest, anims: anims, baseline: 0)
+        let placement = SpriteRendering.placement(bounds, fit: .contain, style: .sitting, in: PanelMetrics.expandedSpriteSize, backingScale: 2, pixelated: true)
+        #expect(placement.pointsPerPixel == 3)
+        #expect(placement.groundHeight == 33)
+        #expect(placement.groundHeight(of: .sitting) == 90)
     }
 
     @Test func containRaisesTheGroundOverTheDeepestDipAndLeavesTheHopOut() {

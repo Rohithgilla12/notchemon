@@ -8,11 +8,12 @@ final class SpriteLayer: CALayer {
     private let image = CALayer()
     private let flashGlow = CAGradientLayer()
     private var loop: SpriteFrames?
+    private var loopState = SpriteState.idle
     private var playback = LoopPlayback.cycle
     private var loopStart: CFTimeInterval = 0
     private var speciesBounds: SpriteBounds?
     private var placement: SpritePlacement?
-    private var oneShot: (animation: CAKeyframeAnimation, frames: SpriteFrames, ends: CFTimeInterval)?
+    private var oneShot: (animation: CAKeyframeAnimation, frames: SpriteFrames, state: SpriteState, ends: CFTimeInterval)?
     /// Whichever one-shot plays, drawn in its own frames or moved by the renderer.
     private var playing: (state: SpriteState, ends: CFTimeInterval)?
     private var playedOneShot: Int?
@@ -85,7 +86,7 @@ final class SpriteLayer: CALayer {
         )
         self.placement = placement
         image.contentsScale = 1 / placement.pointsPerPixel
-        let centres = placement.centres(of: loop, mirrored: mirrored)
+        let centres = placement.centres(of: loop, as: loopState, mirrored: mirrored)
         image.removeAnimation(forKey: "loopStand")
         image.position = position(centres[playback == .hold ? SpriteChoreography.restFrame(loop.durations) : 0])
         if playback == .cycle, centres.contains(where: { $0 != centres[0] }) {
@@ -116,7 +117,7 @@ final class SpriteLayer: CALayer {
     private func standOneShot() {
         image.removeAnimation(forKey: "oneShotStand")
         guard let oneShot, oneShot.ends > CACurrentMediaTime(), let placement else { return }
-        let stand = stand(oneShot.frames, at: placement.centres(of: oneShot.frames, mirrored: mirrored))
+        let stand = stand(oneShot.frames, at: placement.centres(of: oneShot.frames, as: oneShot.state, mirrored: mirrored))
         stand.beginTime = oneShot.animation.beginTime
         image.add(stand, forKey: "oneShotStand")
     }
@@ -133,6 +134,7 @@ final class SpriteLayer: CALayer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         speciesBounds = show.bounds
+        loopState = show.loopState
         setLoop(show.loop, playback: show.playback)
         setMirrored(!show.loop.directional && show.facing.horizontal > 0)
         placeImage()
@@ -203,7 +205,7 @@ final class SpriteLayer: CALayer {
         let animation = Self.keyframes(frames)
         animation.beginTime = CACurrentMediaTime()
         image.add(animation, forKey: "oneShot")
-        oneShot = (animation, frames, animation.beginTime + animation.duration)
+        oneShot = (animation, frames, state, animation.beginTime + animation.duration)
         playing = (state, animation.beginTime + animation.duration)
         standOneShot()
     }
@@ -284,7 +286,7 @@ final class SpriteLayer: CALayer {
         guard !tucked else { return }
         if playback == .hold, let loop, loop.frames.count > 1 {
             guard (playing?.ends ?? 0) <= CACurrentMediaTime() else { return }
-            playOnce(loop.starting(at: SpriteChoreography.restFrame(loop.durations)), as: .idle)
+            playOnce(loop.starting(at: SpriteChoreography.restFrame(loop.durations)), as: loopState)
             return
         }
         let animation: CAKeyframeAnimation
