@@ -12,7 +12,8 @@ enum CompanionPhase: Sendable, Equatable {
 
 enum Banner: Sendable, Equatable {
     case levelUp(Int)
-    case evolved(into: String)
+    /// `portrait` is the new form's large art for the reveal, when it loaded.
+    case evolved(into: String, portrait: CGImage?)
     case stashFull
 }
 
@@ -254,7 +255,8 @@ actor CreatureEngine {
             spriteCache = [:]
             await activate(target)
             snapshot.evolutionCount += 1
-            await celebrate(.evolution(from: species.id, to: targetID), banner: .evolved(into: target.name))
+            let portrait = try? await provider.portrait(for: target)
+            await celebrate(.evolution(from: species.id, to: targetID), banner: .evolved(into: target.name, portrait: portrait))
             publish()
         }
     }

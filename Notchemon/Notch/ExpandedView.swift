@@ -13,6 +13,12 @@ struct ExpandedView: View {
                 .padding(.vertical, PanelMetrics.expandedVerticalPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .overlay {
+            if case .evolved(_, let portrait?) = model.snapshot.banner {
+                EvolutionReveal(portrait: portrait, topInset: metrics.notchSize.height)
+                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
         .overlay(alignment: .bottom) {
             if let banner = model.snapshot.banner {
                 BannerView(banner: banner)
@@ -82,6 +88,9 @@ private struct ToolsColumn: View {
                 .focused($noteFocused)
                 .onSubmit { model.submitNote() }
             StashRow(model: model)
+            if let credits = model.snapshot.sprite?.loop.credits, !credits.isEmpty {
+                SpriteCreditLine(authors: credits)
+            }
         }
         .task(id: presentation.noteFocusRequested) {
             guard presentation.noteFocusRequested else { return }
@@ -147,6 +156,47 @@ private struct StashRow: View {
     }
 }
 
+/// CC BY-NC requires attribution wherever the sprite is shown.
+private struct SpriteCreditLine: View {
+    static let source = URL(string: "https://github.com/PMDCollab/SpriteCollab")!
+    let authors: [String]
+
+    var body: some View {
+        let names = authors.joined(separator: ", ")
+        Button {
+            NSWorkspace.shared.open(Self.source)
+        } label: {
+            HStack(spacing: 0) {
+                Text("Sprite by \(names)").lineLimit(1).truncationMode(.tail)
+                Text(" · SpriteCollab (CC BY-NC 4.0)").fixedSize()
+            }
+            .font(.system(size: 9))
+            .foregroundStyle(.white.opacity(0.4))
+        }
+        .buttonStyle(.plain)
+        .help("Sprite by \(names). Opens the SpriteCollab project page.")
+    }
+}
+
+private struct EvolutionReveal: View {
+    let portrait: CGImage
+    let topInset: CGFloat
+
+    var body: some View {
+        Image(decorative: portrait, scale: 1)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: 96, height: 96)
+            .shadow(color: .purple.opacity(0.9), radius: 18)
+            .padding(10)
+            .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 18))
+            .padding(.top, topInset)
+            .padding(.bottom, 24)
+            .allowsHitTesting(false)
+    }
+}
+
 private struct BannerView: View {
     let banner: Banner
 
@@ -161,7 +211,7 @@ private struct BannerView: View {
     private var text: String {
         switch banner {
         case .levelUp(let level): "Level up! Now level \(level)"
-        case .evolved(let name): "Evolved into \(name)!"
+        case .evolved(let name, _): "Evolved into \(name)!"
         case .stashFull: "Stash is full (\(CompanionState.stashCapacity) items)"
         }
     }

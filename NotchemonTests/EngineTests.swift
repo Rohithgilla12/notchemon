@@ -153,7 +153,12 @@ struct EngineTests {
         #expect(store.load().progress?.speciesId == 903)
         #expect(store.load().progress?.level == 7)
         #expect(snapshot.evolutionCount == 2)
-        #expect(snapshot.banner == .evolved(into: "Testmax"))
+        guard case .evolved(let name, let portrait) = snapshot.banner else {
+            Issue.record("expected an evolution banner, got \(String(describing: snapshot.banner))")
+            return
+        }
+        #expect(name == "Testmax")
+        #expect(portrait != nil)
     }
 
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
