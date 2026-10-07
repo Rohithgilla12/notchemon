@@ -68,8 +68,10 @@ struct HoverPolicyTests {
         let away = HoverPolicy.react(to: CGPoint(x: 100, y: 100), mode: .expanded(.pinned), layout: layout)
         #expect(away.mode == .expanded(.pinned))
         #expect(!away.scheduleCollapse)
+        #expect(!away.hitTestable)
         let visited = HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.pinned), layout: layout)
         #expect(visited.mode == .expanded(.hover))
+        #expect(visited.hitTestable)
     }
 }
 

@@ -78,6 +78,9 @@ final class NotchWindowController {
             panel.makeKeyAndOrderFront(nil)
             presentation.noteFocusRequested = true
         }
+        // collapse() left the panel click-through; a click without a mouse
+        // move first would otherwise land in the app underneath.
+        handleCursor(NSEvent.mouseLocation)
     }
 
     func collapse() {
