@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-08
+
 ### Added
 
 - Ways to remove files from the stash. Hover an icon and click its × badge, or right-click it and choose Remove from Stash. The context menu also has Open, Reveal in Finder, and Copy Path. Removing drops only the stash entry; the file stays where it is.
