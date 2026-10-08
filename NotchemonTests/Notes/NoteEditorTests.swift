@@ -98,6 +98,30 @@ struct NoteEditorTests {
         #expect(editor.storage.isEqual(to: editor.styledFromScratch))
     }
 
+    @Test func loadingANoteShowsTheMarkupOnTheCaretLine() {
+        let editor = EditorHarness("**a**\n**b**")
+        editor.moveCaret(to: 8)
+        editor.textView.string = "- [ ] call mum"
+        editor.moveCaret(to: 14)
+        #expect(!editor.isHidden(at: 0))
+        #expect(editor.highlighter.shownLines == [NSRange(location: 0, length: 14)])
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test func growingAndShrinkingASelectionRestylesTheLinesThatChange() {
+        let editor = EditorHarness("**a**\n**b**\n**c**\n**d**\n")
+        editor.moveCaret(to: 1)
+        editor.textView.setSelectedRange(NSRange(location: 1, length: 13))
+        #expect(!editor.isHidden(at: 12))
+        #expect(editor.isHidden(at: 18))
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+        editor.textView.setSelectedRange(NSRange(location: 7, length: 0))
+        #expect(editor.isHidden(at: 0))
+        #expect(!editor.isHidden(at: 6))
+        #expect(editor.isHidden(at: 12))
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
     @Test func typingKeepsTheCaretLineMarkupShowing() {
         let editor = EditorHarness("**a** b\n**c**\n")
         editor.type("x", at: 11)

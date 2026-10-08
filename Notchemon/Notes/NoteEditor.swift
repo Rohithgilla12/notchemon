@@ -64,8 +64,9 @@ struct MarkdownTheme {
     /// Restyles the whole lines `range` touches, and the line starting where it
     /// ends: typing Return mid-line edits only the newline, yet the text after
     /// it is now a new line. Markup on the `active` lines shows; elsewhere it
-    /// hides. Only attributes change.
-    func restyle(_ storage: NSTextStorage, range: NSRange, active: NSRange) {
+    /// hides. Only attributes change. Returns the lines it restyled.
+    @discardableResult
+    func restyle(_ storage: NSTextStorage, range: NSRange, active: NSRange) -> NSRange {
         let text = storage.mutableString
         let after = NSRange(location: NSMaxRange(range), length: 0)
         let lines = NSUnionRange(text.lineRange(for: range), text.lineRange(for: after))
@@ -73,6 +74,7 @@ struct MarkdownTheme {
         for span in MarkdownStyler.spans(in: text, range: lines) {
             apply(span, to: storage, hidden: span.isHidden(outside: active, textLength: text.length))
         }
+        return lines
     }
 
     private func apply(_ span: MarkdownSpan, to storage: NSTextStorage, hidden: Bool) {
@@ -153,10 +155,9 @@ struct MarkdownTheme {
 final class MarkdownHighlighter: NSObject, NSTextStorageDelegate {
     var theme = MarkdownTheme()
     /// Where the caret lands once the pending edit applies. Nil for an edit
-    /// away from the caret, such as loading a note or ticking a box.
+    /// that does not move the caret with it, such as loading a note.
     var caretAfterEdit: Int?
-    /// Every line styled with its markup showing, in current offsets. It may
-    /// cover more lines than that, never fewer.
+    /// Exactly the lines styled with their markup showing, in current offsets.
     private(set) var shownLines: [NSRange] = []
 
     func textStorage(
@@ -167,21 +168,28 @@ final class MarkdownHighlighter: NSObject, NSTextStorageDelegate {
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
         let length = textStorage.length
-        shownLines = shownLines.compactMap { Self.shift($0, past: editedRange, delta: delta, length: length) }
         let active = caretAfterEdit.map { textStorage.mutableString.lineRange(for: NSRange(location: min($0, length), length: 0)) }
         caretAfterEdit = nil
-        theme.restyle(textStorage, range: editedRange, active: active ?? NSRange(location: 0, length: 0))
-        if let active, active.length > 0 { shownLines = shownLines.filter { $0 != active } + [active] }
+        let restyled = theme.restyle(textStorage, range: editedRange, active: active ?? NSRange(location: 0, length: 0))
+        // The restyle settled every line it covered; lines outside it keep their state.
+        let kept: [NSRange] = shownLines
+            .compactMap { Self.shift($0, past: editedRange, delta: delta, length: length) }
+            .flatMap { Self.subtract(restyled, from: $0) }
+        let shown: [NSRange] = active.map { [$0] } ?? []
+        shownLines = kept + shown.filter { $0.length > 0 && NSIntersectionRange($0, restyled) == $0 }
     }
 
-    /// Shows the markup on `active` alone, restyling only the lines that change.
+    /// Shows the markup on `active` alone, restyling only the lines that
+    /// enter or leave it, so growing a long selection stays cheap.
     func show(_ active: NSRange, in storage: NSTextStorage) {
-        let wanted = active.length > 0 ? [active] : []
+        let wanted: [NSRange] = active.length > 0 ? [active] : []
         guard shownLines != wanted else { return }
-        let stale = shownLines.filter { $0 != active }
+        let leaving: [NSRange] = shownLines.flatMap { Self.subtract(active, from: $0) }
+        let entering: [NSRange] = shownLines.reduce(wanted) { parts, shown in parts.flatMap { Self.subtract(shown, from: $0) } }
         shownLines = wanted
+        guard !leaving.isEmpty || !entering.isEmpty else { return }
         storage.beginEditing()
-        for range in stale + wanted {
+        for range in leaving + entering {
             theme.restyle(storage, range: range, active: active)
         }
         storage.endEditing()
@@ -199,18 +207,31 @@ final class MarkdownHighlighter: NSObject, NSTextStorageDelegate {
     static func shift(_ range: NSRange, past edited: NSRange, delta: Int, length: Int) -> NSRange? {
         var lower = range.location
         var upper = NSMaxRange(range)
-        if upper <= edited.location {
-            // Before the edit: unchanged.
-        } else if lower >= NSMaxRange(edited) - delta {
-            lower += delta
-            upper += delta
-        } else {
-            lower = min(lower, edited.location)
-            upper = max(upper + delta, NSMaxRange(edited))
+        if upper > edited.location {
+            if lower >= NSMaxRange(edited) - delta {
+                lower += delta
+                upper += delta
+            } else {
+                lower = min(lower, edited.location)
+                upper = max(upper + delta, NSMaxRange(edited))
+            }
         }
         lower = max(0, min(lower, length))
         upper = max(lower, min(upper, length))
         return upper > lower ? NSRange(location: lower, length: upper - lower) : nil
+    }
+
+    /// The parts of `range` outside `cut`.
+    static func subtract(_ cut: NSRange, from range: NSRange) -> [NSRange] {
+        guard NSIntersectionRange(cut, range).length > 0 else { return [range] }
+        var parts: [NSRange] = []
+        if range.location < cut.location {
+            parts.append(NSRange(location: range.location, length: cut.location - range.location))
+        }
+        if NSMaxRange(cut) < NSMaxRange(range) {
+            parts.append(NSRange(location: NSMaxRange(cut), length: NSMaxRange(range) - NSMaxRange(cut)))
+        }
+        return parts
     }
 }
 
@@ -325,7 +346,7 @@ final class NotesTextView: NSTextView {
         pasteAsPlainText(sender)
     }
 
-    // NSTextView turns Esc into completion; here it closes the slash menu or hides the window.
+    // NSTextView turns Esc into completion.
     override func cancelOperation(_ sender: Any?) {
         if slashMenu.isOpen { return slashMenu.close() }
         window?.cancelOperation(sender)
@@ -335,8 +356,10 @@ final class NotesTextView: NSTextView {
     private var checkTimer: Timer?
 
     override func mouseDown(with event: NSEvent) {
-        if toggleCheckbox(at: convert(event.locationInWindow, from: nil)) { return }
-        super.mouseDown(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        guard !event.modifierFlags.contains(.control), checkbox(at: point) != nil else { return super.mouseDown(with: event) }
+        // The second click of a double-click lands on the box too; one toggle per gesture.
+        if event.clickCount == 1 { toggleCheckbox(at: point) }
     }
 
     /// Ticks or unticks the drawn checkbox under `point`, as one undoable edit.
@@ -369,7 +392,7 @@ final class NotesTextView: NSTextView {
         return found
     }
 
-    /// Fills the box and grows its tick into place over 120 ms.
+    /// Fills the box and grows its tick into place.
     private func animateCheck(at box: Int) {
         guard let layoutManager = layoutManager as? NotesLayoutManager else { return }
         layoutManager.checkAnimation = .init(box: box, start: CACurrentMediaTime())
@@ -404,7 +427,6 @@ final class NotesTextView: NSTextView {
         storage.replaceCharacters(in: mark, with: replacement)
         selectedRanges = selection
         didChangeText()
-        revealMarkup()
         return true
     }
 }
