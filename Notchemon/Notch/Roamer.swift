@@ -15,6 +15,7 @@ final class Roamer {
     @ObservationIgnored var onLookAgain: (() -> Void)?
 
     @ObservationIgnored private var range: ClosedRange<Double> = 0...0
+    @ObservationIgnored private var dock: ClosedRange<Double>?
     @ObservationIgnored private var homing = Homing.snap
     @ObservationIgnored private var cursor: CursorOffset?
     @ObservationIgnored private var rng = SystemRandomNumberGenerator()
@@ -22,15 +23,16 @@ final class Roamer {
     @ObservationIgnored private var wakeAt: Date?
 
     /// Cheap to call on every mouse move: unchanged inputs do nothing.
-    func update(range: ClosedRange<Double>, homing: Homing) {
-        guard range != self.range || homing != self.homing else { return }
+    func update(range: ClosedRange<Double>, dock: ClosedRange<Double>?, homing: Homing) {
+        guard range != self.range || dock != self.dock || homing != self.homing else { return }
         self.range = range
+        self.dock = dock
         self.homing = homing
         advance()
     }
 
-    /// The cursor relative to the creature's centre at home, or nil when it
-    /// is unknown. Cheap to call on every mouse move.
+    /// The cursor relative to the creature's centre at x 0 on the perch it is
+    /// on, or nil when it is unknown. Cheap to call on every mouse move.
     func watch(_ cursor: CursorOffset?) {
         guard cursor != self.cursor else { return }
         self.cursor = cursor
@@ -38,7 +40,7 @@ final class Roamer {
     }
 
     private func advance(lookAgain: Bool = false) {
-        let next = RoamRules.next(phase, RoamInputs(now: Date(), range: range, homing: homing), using: &rng)
+        let next = RoamRules.next(phase, RoamInputs(now: Date(), range: range, dock: dock, homing: homing), using: &rng)
         let moved = next != phase
         if moved { phase = next }
         schedule()

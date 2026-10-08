@@ -462,7 +462,7 @@ struct StateStoreTests {
         #expect(loaded.preferences.idleStyle == .calm)
         #expect(loaded.preferences.hopsOnApproach)
         #expect(loaded.preferences.fidgets)
-        #expect(loaded.preferences.wander == .topEdge)
+        #expect(loaded.preferences.wander == .topEdgeAndDock)
     }
 
     @Test(arguments: WanderRange.allCases)
@@ -471,9 +471,9 @@ struct StateStoreTests {
         #expect(decoded.wander == range)
     }
 
-    @Test func unknownWanderFallsBackToTheTopEdgeWithoutLosingTheOtherPreferences() throws {
+    @Test func unknownWanderFallsBackToTheTopEdgeAndDockWithoutLosingTheOtherPreferences() throws {
         let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"wander": "everywhere", "fidgets": false}"#.utf8))
-        #expect(decoded.wander == .topEdge)
+        #expect(decoded.wander == .topEdgeAndDock)
         #expect(!decoded.fidgets)
     }
 

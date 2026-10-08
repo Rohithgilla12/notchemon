@@ -25,6 +25,11 @@ enum FullScreenDetector {
         return isFullScreen(screen: quartzFrame, safeAreaTop: screen.safeAreaInsets.top, windows: otherAppsOnScreenWindows())
     }
 
+    /// For the screen whose AppKit frame is `frame`.
+    static func isFullScreen(screenFrame frame: CGRect) -> Bool {
+        NSScreen.screens.first { $0.frame == frame }.map(isFullScreen) ?? false
+    }
+
     /// Reads only bounds and layer, never window names, which are what Screen
     /// Recording permission withholds.
     private static func otherAppsOnScreenWindows() -> [WindowSnapshot] {

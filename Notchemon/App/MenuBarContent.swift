@@ -30,8 +30,13 @@ struct MenuBarContent: View {
                 Text("Off").tag(WanderRange.off)
                 Text("Near the Notch").tag(WanderRange.nearNotch)
                 Text("Across the Top Edge").tag(WanderRange.topEdge)
+                Text("On the Dock").tag(WanderRange.dock)
+                Text("Top Edge and Dock").tag(WanderRange.topEdgeAndDock)
             }
             .pickerStyle(.inline)
+            if model.snapshot.preferences.wander.includesDock, !app.dockWatcher.isTrusted {
+                Button("Allow Dock Walking…", action: app.requestDockAccess)
+            }
             Divider()
             Toggle("Hop When Cursor Comes Near", isOn: preference(\.hopsOnApproach))
             Toggle("Fidgets", isOn: preference(\.fidgets))

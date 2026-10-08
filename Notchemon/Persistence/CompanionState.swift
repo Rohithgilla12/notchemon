@@ -34,10 +34,11 @@ struct Preferences: Codable, Sendable, Equatable {
     var idleStyle = IdleStyle.calm
     var hopsOnApproach = true
     var fidgets = true
-    var wander = WanderRange.topEdge
+    var wander = WanderRange.topEdgeAndDock
 }
 
-/// How far from the notch the creature may walk along the strip below the menu bar.
+/// Where the creature may walk: along the strip below the menu bar, along
+/// the top of the Dock, or both.
 enum WanderRange: String, Codable, Sendable, CaseIterable {
     /// Stays under the notch.
     case off
@@ -45,6 +46,12 @@ enum WanderRange: String, Codable, Sendable, CaseIterable {
     case nearNotch
     /// Anywhere along the top edge of the screen.
     case topEdge
+    /// Along the top of the Dock, coming back to the notch now and then.
+    case dock
+    /// Anywhere along the top edge, and along the top of the Dock.
+    case topEdgeAndDock
+
+    var includesDock: Bool { self == .dock || self == .topEdgeAndDock }
 }
 
 /// How the creature passes the time between everything else it does.

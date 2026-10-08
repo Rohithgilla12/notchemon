@@ -30,8 +30,8 @@ struct NotchRootView: View {
                         .transition(.opacity.animation(.easeOut(duration: 0.15)))
                 }
 
-                if model.activeSpecies != nil {
-                    SpriteView(pose: SpritePose(model.snapshot, roam: roamer.phase, expanded: expanded))
+                if model.activeSpecies != nil, let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .topEdge, expanded: expanded) {
+                    SpriteView(pose: pose)
                         .frame(width: sprite.width, height: sprite.height)
                         .offset(x: sprite.minX, y: sprite.minY)
                 }

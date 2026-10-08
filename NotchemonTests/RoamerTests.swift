@@ -13,13 +13,13 @@ struct RoamerTests {
         roamer.onLookAgain = {
             seen.append(roamer.phase)
             guard seen.count == 1 else { return }
-            roamer.update(range: range, homing: .walk)
+            roamer.update(range: range, dock: nil, homing: .walk)
             afterNested = roamer.phase
         }
 
-        roamer.update(range: range, homing: .free)
+        roamer.update(range: range, dock: nil, homing: .free)
 
-        guard case .resting(at: 0, _) = seen.first else {
+        guard case .resting(at: .home, _) = seen.first else {
             Issue.record("leaving home rests there first, saw \(seen)")
             return
         }

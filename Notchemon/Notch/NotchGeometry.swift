@@ -43,9 +43,9 @@ enum NotchGeometry {
     static func roamReach(_ wander: WanderRange, screenWidth: CGFloat) -> CGFloat {
         let edge = max(0, screenWidth / 2 - roamEdgeInset)
         return switch wander {
-        case .off: 0
+        case .off, .dock: 0
         case .nearNotch: min(nearNotchReach, edge)
-        case .topEdge: edge
+        case .topEdge, .topEdgeAndDock: edge
         }
     }
 
