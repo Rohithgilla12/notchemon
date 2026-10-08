@@ -27,7 +27,8 @@ final class NotesPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         minSize = NotesWindowFrame.minimumSize
-        animationBehavior = .utilityWindow
+        // A hotkey toggles the window, so it appears and goes at once.
+        animationBehavior = .none
     }
 
     override var canBecomeKey: Bool { true }

@@ -12,7 +12,6 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
     static let framesKey = "NotchemonNotesFrames"
     static let selectedKey = "NotchemonNotesSelected"
     static let pollInterval: TimeInterval = 2
-    static let unfocusedAlpha: CGFloat = 0.85
 
     let session: NotesSession
     @ObservationIgnored let editor = NoteEditorHandle()
@@ -263,13 +262,11 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        panel?.alphaValue = 1
         guard !quitting else { return }
         session.rescan()
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        panel?.alphaValue = Self.unfocusedAlpha
         guard !quitting else { return }
         session.flush()
     }
