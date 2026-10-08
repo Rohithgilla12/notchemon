@@ -57,12 +57,23 @@ final class NotesLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             if !NSLocationInRange(character, run) {
                 runHidden = storage.attribute(.notesHidden, at: character, effectiveRange: &run) != nil
             }
-            if runHidden { adjusted[index] = .null }
+            if runHidden { adjusted[index] = .controlCharacter }
         }
         adjusted.withUnsafeBufferPointer { buffer in
             layoutManager.setGlyphs(glyphs, properties: buffer.baseAddress!, characterIndexes: characterIndexes, font: font, forGlyphRange: glyphRange)
         }
         return count
+    }
+
+    // Hidden markup is laid out in place at zero width. Null glyphs would be
+    // simpler, but at a line's start TextKit moves them onto the line before,
+    // which then grows taller.
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldUse action: NSLayoutManager.ControlCharacterAction,
+        forControlCharacterAt characterIndex: Int
+    ) -> NSLayoutManager.ControlCharacterAction {
+        layoutManager.textStorage?.attribute(.notesHidden, at: characterIndex, effectiveRange: nil) == nil ? action : .zeroAdvancement
     }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
@@ -77,9 +88,8 @@ final class NotesLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
     }
 
     /// Where the decoration for the hidden prefix `marker` sits, in text
-    /// container coordinates. Null glyphs at a line's start are placed at the
-    /// end of the line before, so the decoration hangs off the first visible
-    /// glyph after the prefix, which may be the newline.
+    /// container coordinates: hung off the first visible glyph after the
+    /// prefix, which may be the newline.
     func decorationFrame(_ block: MarkdownSpan.Block, marker: NSRange) -> NSRect? {
         guard let storage = textStorage, let anchor = firstShown(after: marker, in: storage) else { return nil }
         let glyph = glyphIndexForCharacter(at: anchor)

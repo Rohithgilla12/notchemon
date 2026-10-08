@@ -42,7 +42,7 @@ final class EditorHarness {
     func isHidden(at location: Int) -> Bool {
         let layoutManager = textView.layoutManager!
         let glyph = layoutManager.glyphIndexForCharacter(at: location)
-        return layoutManager.propertyForGlyph(at: glyph) == .null
+        return layoutManager.propertyForGlyph(at: glyph) == .controlCharacter && layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textView.textContainer!).width == 0
     }
 }
 
