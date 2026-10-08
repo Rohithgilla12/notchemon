@@ -19,7 +19,8 @@ final class DockWindowController {
             panel.orderOut(nil)
             return
         }
-        if panel.frame != shelf.panel { panel.setFrame(shelf.panel, display: true) }
+        let frame = shelf.panel(keeping: panel.frame)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
         if !panel.isVisible { panel.orderFrontRegardless() }
     }
 }

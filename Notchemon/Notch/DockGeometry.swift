@@ -40,6 +40,8 @@ struct AutoHidingDock: Sendable, Equatable {
     let span: ClosedRange<CGFloat>
     /// The list's top edge in global y once it has slid fully into view.
     let top: CGFloat
+    /// The list's height, which stays the same as it slides.
+    let height: CGFloat
     let slide: Slide
 
     var revealed: Bool { slide == .shown }
@@ -78,17 +80,26 @@ struct DockShelf: Sendable, Equatable {
     }
 
     /// The window the creature walks in: as wide as the walk, its bottom on
-    /// the ground, and tall enough above a shown Dock's top for a hop. It
-    /// does not change as an auto-hiding Dock slides, so the walk inside it
-    /// carries on undisturbed.
+    /// the ground, and tall enough above a shown Dock's top for a hop. For an
+    /// auto-hiding Dock it is as tall as the estimated shown top needs
+    /// whether the Dock is shown or hidden, so a slide does not resize it,
+    /// and taller only when a shown Dock stands higher than estimated.
     var panel: CGRect {
-        let climb = autoHide.map { $0.top - ground } ?? 0
+        let climb = autoHide.map { max(DockGeometry.shownLift + $0.height, $0.top - ground) } ?? 0
         return CGRect(
             x: walkable.lowerBound - DockGeometry.edgeInset,
             y: ground,
             width: walkable.upperBound - walkable.lowerBound + 2 * DockGeometry.edgeInset,
             height: climb + 2 * Self.spriteSide
         )
+    }
+
+    /// `panel`, or `current` when that covers the same span and is taller,
+    /// so a window grown for a Dock shown higher than estimated stays grown.
+    func panel(keeping current: CGRect) -> CGRect {
+        let next = panel
+        guard current.minX == next.minX, current.minY == next.minY, current.width == next.width else { return next }
+        return current.height > next.height ? current : next
     }
 
     /// The creature's centre in global screen coordinates, `x` points along the Dock.
@@ -146,7 +157,7 @@ enum DockGeometry {
         guard let screen else { return nil }
         let slide: AutoHidingDock.Slide = frame.minY >= screen.minY ? .shown : frame.maxY <= screen.minY ? .hidden : .sliding
         let top = slide == .shown ? frame.maxY : screen.minY + shownLift + frame.height
-        let dock = AutoHidingDock(span: frame.minX...frame.maxX, top: top, slide: slide)
+        let dock = AutoHidingDock(span: frame.minX...frame.maxX, top: top, height: frame.height, slide: slide)
         let margin = edgeInset + screenMargin
         return shelf(on: screen, ground: screen.minY, walkable: (screen.minX + margin)...(screen.maxX - margin), autoHide: dock)
     }

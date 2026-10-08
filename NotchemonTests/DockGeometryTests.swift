@@ -39,7 +39,7 @@ struct DockGeometryTests {
         #expect(shelf.ground == 0)
         #expect(shelf.walkable == 30...1698)
         #expect(shelf.range == -834...834)
-        #expect(shelf.autoHide == AutoHidingDock(span: 120...1608, top: 100, slide: .hidden))
+        #expect(shelf.autoHide == AutoHidingDock(span: 120...1608, top: 100, height: 90, slide: .hidden))
         #expect(shelf.step == nil)
         #expect(shelf.spriteCentre(x: 0) == CGPoint(x: 864, y: 22))
         #expect(shelf.spriteCentre(x: -834) == CGPoint(x: 30, y: 22))
@@ -49,7 +49,7 @@ struct DockGeometryTests {
         let shelf = try #require(DockGeometry.shelf(reading(shownAutoHidingDock, autoHides: true), screens: [macBookPro]))
         #expect(shelf.ground == 0)
         #expect(shelf.walkable == 30...1698)
-        #expect(shelf.autoHide == AutoHidingDock(span: 120...1608, top: 100, slide: .shown))
+        #expect(shelf.autoHide == AutoHidingDock(span: 120...1608, top: 100, height: 90, slide: .shown))
         #expect(shelf.step == GroundStep(span: -744...744, height: 100))
         #expect(shelf.spriteCentre(x: 0) == CGPoint(x: 864, y: 122))
         #expect(shelf.spriteCentre(x: -744) == CGPoint(x: 120, y: 122))
@@ -66,12 +66,32 @@ struct DockGeometryTests {
         #expect((shelf.step != nil) == (slide == .shown))
     }
 
-    @Test func anAutoHidingDockKeepsOneWindowWhetherShownOrHidden() throws {
+    @Test(arguments: [CGFloat(10), 4, 0])
+    func anAutoHidingDockKeepsOneWindowWhetherShownOrHidden(gap: CGFloat) throws {
         let hidden = try #require(DockGeometry.shelf(reading(hiddenDock, autoHides: true), screens: [macBookPro]))
-        let shown = try #require(DockGeometry.shelf(reading(shownAutoHidingDock, autoHides: true), screens: [macBookPro]))
+        let shownFrame = CGRect(x: 120, y: gap, width: 1488, height: 90)
+        let shown = try #require(DockGeometry.shelf(reading(shownFrame, autoHides: true), screens: [macBookPro]))
         #expect(hidden.panel == CGRect(x: 8, y: 0, width: 1712, height: 188))
         #expect(shown.panel == hidden.panel)
+        #expect(shown.panel.maxY >= shownFrame.maxY + 2 * DockShelf.spriteSide)
         #expect(shown.range == hidden.range)
+        #expect(hidden.panel(keeping: shown.panel) == hidden.panel)
+    }
+
+    @Test func aDockShownHigherThanEstimatedGrowsTheWindowOnceAndKeepsIt() throws {
+        let hidden = try #require(DockGeometry.shelf(reading(hiddenDock, autoHides: true), screens: [macBookPro]))
+        let shown = try #require(DockGeometry.shelf(reading(CGRect(x: 120, y: 16, width: 1488, height: 90), autoHides: true), screens: [macBookPro]))
+        let grown = shown.panel(keeping: hidden.panel)
+        #expect(grown == CGRect(x: 8, y: 0, width: 1712, height: 194))
+        #expect(hidden.panel(keeping: grown) == grown)
+        #expect(shown.panel(keeping: grown) == grown)
+    }
+
+    @Test func aWindowForAnotherSpanOrScreenIsNotKept() throws {
+        let hidden = try #require(DockGeometry.shelf(reading(hiddenDock, autoHides: true), screens: [macBookPro]))
+        let elsewhere = CGRect(x: 1758, y: -200, width: 2530, height: 400)
+        #expect(hidden.panel(keeping: elsewhere) == hidden.panel)
+        #expect(hidden.panel(keeping: .zero) == hidden.panel)
     }
 
     @Test func aHiddenDockBelowAnotherScreenWalksAlongThatScreensBottom() throws {
@@ -80,7 +100,7 @@ struct DockGeometryTests {
         #expect(shelf.screen == external)
         #expect(shelf.ground == -200)
         #expect(shelf.walkable == 1758...4258)
-        #expect(shelf.autoHide == AutoHidingDock(span: 2500...3500, top: -100, slide: .hidden))
+        #expect(shelf.autoHide == AutoHidingDock(span: 2500...3500, top: -100, height: 90, slide: .hidden))
     }
 
     @Test func aDockUnderAFullScreenAppIsNoShelfWhicheverScreenTheNotchIsOn() {
