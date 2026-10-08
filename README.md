@@ -40,7 +40,22 @@ Dock walking is the one feature that needs Accessibility permission, because onl
 3. Read the explanation and choose **Continue**. macOS shows its own Accessibility prompt.
 4. In **System Settings > Privacy & Security > Accessibility**, turn on Notchemon.
 
-The app notices the change when macOS announces it or the next time the app becomes active, so you do not need to relaunch it. With permission, the app reads only the Dock's frame, and only when an app launches or quits, the displays change, the creature steps onto or walks along the Dock, or, for an auto-hiding Dock, the cursor reaches the bottom of the screen or leaves the shown Dock. It reads the Dock's position and auto-hide settings from the `com.apple.dock` preferences. It never sends input to other apps. To revoke the permission, turn Notchemon off in the same settings pane; the creature then hops back up to the top edge.
+The app checks for the grant every 2 seconds for the next two minutes, then every 30 seconds while Dock walking is wanted and the permission is missing, so you do not need to relaunch it. The **Motion** submenu shows a **Dock walking** status line that says whether it is on, needs Accessibility, or is off because the Dock is on the side or a full-screen app is in front. With permission, the app reads only the Dock's frame, and only when an app launches or quits, the displays change, the creature steps onto or walks along the Dock, or, for an auto-hiding Dock, the cursor reaches the bottom of the screen or leaves the shown Dock. It reads the Dock's position and auto-hide settings from the `com.apple.dock` preferences. It never sends input to other apps. To revoke the permission, turn Notchemon off in the same settings pane; the creature then hops back up to the top edge.
+
+### Dock walking doesn't start
+
+If **System Settings > Privacy & Security > Accessibility** shows Notchemon on but the status line still says **needs Accessibility**, the grant belongs to a different build. macOS ties an Accessibility grant to the signature of the build that was granted, so a grant to a development build or an older release does not apply to the one you run now. Choose **Accessibility shows it on but it still won't walk?** in the **Motion** submenu for the steps, or do it by hand:
+
+1. In the Accessibility pane, select Notchemon and remove it with the **−** button.
+2. Choose **Allow Dock Walking…** again and turn Notchemon on when macOS asks.
+
+Or reset the grant from Terminal, then allow it again:
+
+```sh
+tccutil reset Accessibility com.rohithgilla.Notchemon
+```
+
+The app never runs `tccutil` or changes a setting itself.
 
 ## Updates, login, and About
 
