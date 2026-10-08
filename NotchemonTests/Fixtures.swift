@@ -67,7 +67,7 @@ enum Fixtures {
     }}
     """.utf8)
 
-    static func pokemonJSON(
+    static func spritesJSON(
         id: Int,
         showdown: URL? = nil,
         animated: URL? = nil,

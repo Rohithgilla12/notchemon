@@ -8,7 +8,7 @@ struct NamedResource: Decodable, Sendable {
     var id: Int? { Int(url.lastPathComponent) }
 }
 
-struct PokemonDTO: Decodable, Sendable {
+struct SpriteSetDTO: Decodable, Sendable {
     struct Sprites: Decodable, Sendable {
         struct Versions: Decodable, Sendable {
             struct GenerationV: Decodable, Sendable {
@@ -116,8 +116,8 @@ enum PokeAPIParser {
         return nil
     }
 
-    static func spriteSources(_ pokemonJSON: Data) throws -> SpriteSources {
-        let sprites = try decoder.decode(PokemonDTO.self, from: pokemonJSON).sprites
+    static func spriteSources(_ spritesJSON: Data) throws -> SpriteSources {
+        let sprites = try decoder.decode(SpriteSetDTO.self, from: spritesJSON).sprites
         return SpriteSources(
             animations: [
                 sprites.other?.showdown?.frontDefault,

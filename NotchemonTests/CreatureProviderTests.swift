@@ -62,11 +62,11 @@ struct PokeAPIParsingTests {
         let still = URL(string: "https://sprites.test/s/901.png")!
         let home = URL(string: "https://sprites.test/h/901.png")!
         let artwork = URL(string: "https://sprites.test/o/901.png")!
-        let json = Fixtures.pokemonJSON(id: 901, showdown: showdown, animated: animated, still: still, home: home, artwork: artwork)
+        let json = Fixtures.spritesJSON(id: 901, showdown: showdown, animated: animated, still: still, home: home, artwork: artwork)
         let sources = try PokeAPIParser.spriteSources(json)
         #expect(sources.animations == [showdown, animated, still])
         #expect(sources.portraits == [home, artwork])
-        #expect(try PokeAPIParser.spriteSources(Fixtures.pokemonJSON(id: 901, still: still)) == SpriteSources(animations: [still], portraits: []))
+        #expect(try PokeAPIParser.spriteSources(Fixtures.spritesJSON(id: 901, still: still)) == SpriteSources(animations: [still], portraits: []))
     }
 }
 
@@ -76,7 +76,7 @@ struct PokeAPICreatureProviderTests {
     let png = URL(string: "https://sprites.test/s/901.png")!
     let home = URL(string: "https://sprites.test/h/901.png")!
     let artwork = URL(string: "https://sprites.test/o/901.png")!
-    let pokemonURL = Fixtures.api.appendingPathComponent("pokemon/901/")
+    let spritesURL = Fixtures.api.appendingPathComponent("pokemon/901/")
     let testmon = Species(id: 901, name: "Testmon", evolvesTo: 902, evolvesAtLevel: 18)
 
     func provider(_ fetcher: StubFetcher, root: URL = Fixtures.temporaryDirectory()) -> PokeAPICreatureProvider {
@@ -112,7 +112,7 @@ struct PokeAPICreatureProviderTests {
             license: "CC BY-NC 4.0",
             url: URL(string: "https://github.com/PMDCollab/SpriteCollab")!
         ))
-        #expect(!fetcher.requests.contains(pokemonURL))
+        #expect(!fetcher.requests.contains(spritesURL))
     }
 
     @Test func oneShotWithItsOwnAnimPlaysOnce() async throws {
@@ -130,7 +130,7 @@ struct PokeAPICreatureProviderTests {
 
     @Test func spriteCollabMissFallsBackToShowdown() async throws {
         let fetcher = StubFetcher([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, showdown: showdown, animated: gif, still: png),
+            spritesURL: Fixtures.spritesJSON(id: 901, showdown: showdown, animated: gif, still: png),
             showdown: Fixtures.image(.gif, frames: 4, delay: 0.05),
             gif: Fixtures.image(.gif, frames: 2),
         ])
@@ -147,7 +147,7 @@ struct PokeAPICreatureProviderTests {
 
     @Test func sittingWithoutItsOwnArtHasNoStandIn() async throws {
         let fetcher = StubFetcher(Fixtures.spriteCollab(dex: 901).merging([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, showdown: showdown, still: png),
+            spritesURL: Fixtures.spritesJSON(id: 901, showdown: showdown, still: png),
             showdown: Fixtures.image(.gif, frames: 4, delay: 0.05),
             png: Fixtures.image(.png, frames: 1),
         ]) { first, _ in first })
@@ -160,7 +160,7 @@ struct PokeAPICreatureProviderTests {
 
     @Test func missingShowdownFallsBackToGen5() async throws {
         let fetcher = StubFetcher([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, animated: gif, still: png),
+            spritesURL: Fixtures.spritesJSON(id: 901, animated: gif, still: png),
             gif: Fixtures.image(.gif, frames: 3, delay: 0.08),
         ])
         let frames = try await provider(fetcher).sprite(for: testmon, state: .idle, facing: .down)
@@ -170,7 +170,7 @@ struct PokeAPICreatureProviderTests {
 
     @Test func fallsBackToStillWhenNoAnimatedSprite() async throws {
         let fetcher = StubFetcher([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, showdown: showdown, still: png),
+            spritesURL: Fixtures.spritesJSON(id: 901, showdown: showdown, still: png),
             png: Fixtures.image(.png, frames: 1),
         ])
         let frames = try await provider(fetcher).sprite(for: testmon, state: .sleeping, facing: .down)
@@ -180,7 +180,7 @@ struct PokeAPICreatureProviderTests {
 
     @Test func portraitPrefersHomeThenOfficialArtwork() async throws {
         let both = StubFetcher([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, home: home, artwork: artwork),
+            spritesURL: Fixtures.spritesJSON(id: 901, home: home, artwork: artwork),
             home: Fixtures.image(.png, frames: 1),
             artwork: Fixtures.image(.png, frames: 1),
         ])
@@ -188,7 +188,7 @@ struct PokeAPICreatureProviderTests {
         #expect(both.requests.last == home)
 
         let artworkOnly = StubFetcher([
-            pokemonURL: Fixtures.pokemonJSON(id: 901, home: home, artwork: artwork),
+            spritesURL: Fixtures.spritesJSON(id: 901, home: home, artwork: artwork),
             artwork: Fixtures.image(.png, frames: 1),
         ])
         _ = try await provider(artworkOnly).portrait(for: testmon)
