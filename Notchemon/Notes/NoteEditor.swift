@@ -7,17 +7,35 @@ extension NSAttributedString.Key {
 }
 
 struct MarkdownTheme {
+    static let headingSizes: [CGFloat] = [22, 18, 15]
+    // NSParagraphStyle is immutable; only the mutable subclass is unsafe to share.
+    nonisolated(unsafe) static let bodyParagraph = paragraphStyle(spacingBefore: 0)
+    nonisolated(unsafe) static let headingParagraph = paragraphStyle(spacingBefore: 8)
+
     var monospaced = false
-    var size: CGFloat = 14
+    var size: CGFloat = 15
 
     var baseFont: NSFont {
         monospaced ? .monospacedSystemFont(ofSize: size - 1, weight: .regular) : .systemFont(ofSize: size)
     }
 
     var baseAttributes: [NSAttributedString.Key: Any] {
+        [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.bodyParagraph]
+    }
+
+    func headingFont(level: Int) -> NSFont {
+        let headingSize = Self.headingSizes[min(level, Self.headingSizes.count) - 1]
+        return monospaced
+            ? .monospacedSystemFont(ofSize: headingSize, weight: .semibold)
+            : .systemFont(ofSize: headingSize, weight: .semibold)
+    }
+
+    private static func paragraphStyle(spacingBefore: CGFloat) -> NSParagraphStyle {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 3
-        return [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
+        paragraph.lineHeightMultiple = 1.45
+        paragraph.paragraphSpacing = 6
+        paragraph.paragraphSpacingBefore = spacingBefore
+        return paragraph
     }
 
     /// Restyles the whole lines `range` touches, and the line starting where it
@@ -37,12 +55,9 @@ struct MarkdownTheme {
         let range = span.range
         switch span.kind {
         case .heading(let level):
-            let scale: [CGFloat] = [1.6, 1.35, 1.2, 1.1, 1.05, 1.0]
-            let headingSize = (size * scale[min(level, 6) - 1]).rounded()
-            let font: NSFont = monospaced
-                ? .monospacedSystemFont(ofSize: headingSize, weight: .bold)
-                : .systemFont(ofSize: headingSize, weight: .bold)
-            storage.addAttribute(.font, value: font, range: range)
+            storage.addAttribute(.font, value: headingFont(level: level), range: range)
+            // Paragraph styles are fixed per paragraph, so the newline must match.
+            storage.addAttribute(.paragraphStyle, value: Self.headingParagraph, range: storage.mutableString.paragraphRange(for: range))
         case .bold:
             addTrait(.bold, to: storage, in: range)
         case .italic:
@@ -120,7 +135,8 @@ final class NotesTextView: NSTextView {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 12, height: 10)
+        textView.textContainerInset = NSSize(width: 28, height: 20)
+        textView.textContainer?.lineFragmentPadding = 0
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
