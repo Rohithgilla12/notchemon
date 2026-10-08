@@ -1,4 +1,3 @@
-import AppKit
 import CoreGraphics
 import Foundation
 
@@ -66,6 +65,18 @@ struct CompanionSnapshot: Sendable {
     var stash: [StashItem] = []
     var evolutionCount = 0
     var totalFocusMinutes = 0
+    /// Sessions completed since launch. Each one plays the focus sound.
+    var completedFocusSessions = 0
+}
+
+extension CompanionSnapshot {
+    /// The sound to play on moving from `previous` to this snapshot, if a
+    /// session completed in between. Snapshots coalesce, so this compares
+    /// counts rather than watching for one particular snapshot.
+    func focusSound(after previous: CompanionSnapshot) -> FocusSound? {
+        guard completedFocusSessions > previous.completedFocusSessions, preferences.focusSound != .off else { return nil }
+        return preferences.focusSound
+    }
 }
 
 enum InputIdle {
@@ -241,23 +252,11 @@ actor CreatureEngine {
         if case .completed(let minutes) = outcome {
             state.totalFocusMinutes += minutes
             snapshot.totalFocusMinutes = state.totalFocusMinutes
-            playFocusSound(state.preferences.focusSound)
+            snapshot.completedFocusSessions += 1
             await award(outcome.xp)
         } else {
             publish()
         }
-    }
-
-    private func playFocusSound(_ sound: FocusSound) {
-        guard sound != .off else { return }
-        let soundName: NSSound.Name
-        switch sound {
-        case .pokeFlute: soundName = NSSound.Name("Glass")
-        case .pokemonCenter: soundName = NSSound.Name("Hero")
-        case .levelUp: soundName = NSSound.Name("Ping")
-        case .off: return
-        }
-        NSSound(named: soundName)?.play()
     }
 
     func award(_ xp: Int) async {

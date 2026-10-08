@@ -18,7 +18,7 @@ struct MenuBarContent: View {
         }
         Picker("Focus Sound", selection: preference(\.focusSound)) {
             ForEach(FocusSound.allCases, id: \.self) { sound in
-                Text(sound.rawValue).tag(sound)
+                Text(sound.label).tag(sound)
             }
         }
         Toggle("Sleep When Idle", isOn: preference(\.sleepEnabled))

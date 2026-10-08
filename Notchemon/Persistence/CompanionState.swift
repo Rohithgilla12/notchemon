@@ -39,11 +39,32 @@ struct Preferences: Codable, Sendable, Equatable {
     var wander = WanderRange.topEdgeAndDock
 }
 
+/// Played when a focus session completes. The raw values are stored in
+/// `state.json`, so they never change; `label` is free to.
 enum FocusSound: String, Codable, Sendable, CaseIterable {
-    case off = "Off"
-    case pokeFlute = "Poké Flute"
-    case pokemonCenter = "Pokémon Center"
-    case levelUp = "Level Up"
+    case off
+    case chime
+    case fanfare
+    case ping
+
+    var label: String {
+        switch self {
+        case .off: "Off"
+        case .chime: "Chime"
+        case .fanfare: "Fanfare"
+        case .ping: "Ping"
+        }
+    }
+
+    /// A sound every Mac ships in /System/Library/Sounds.
+    var systemSoundName: String? {
+        switch self {
+        case .off: nil
+        case .chime: "Glass"
+        case .fanfare: "Hero"
+        case .ping: "Ping"
+        }
+    }
 }
 
 /// Where the creature may walk: along the strip below the menu bar, along
@@ -81,6 +102,7 @@ extension Preferences {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = Preferences()
         focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes) ?? defaults.focusMinutes
+        // A sound from a newer version reads as off, not as a broken file.
         focusSound = (try? container.decodeIfPresent(FocusSound.self, forKey: .focusSound)) ?? defaults.focusSound
         sleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .sleepEnabled) ?? defaults.sleepEnabled
         virtualNotchEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualNotchEnabled) ?? defaults.virtualNotchEnabled

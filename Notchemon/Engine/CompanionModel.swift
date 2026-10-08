@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Observation
@@ -35,6 +36,9 @@ final class CompanionModel {
     private func apply(_ next: CompanionSnapshot) {
         let preferencesChanged = next.preferences != snapshot.preferences
         let wasChoosing = isChoosing(snapshot.phase)
+        if let sound = next.focusSound(after: snapshot), let name = sound.systemSoundName {
+            NSSound(named: name)?.play()
+        }
         snapshot = next
         if preferencesChanged { onPreferencesChanged?(next.preferences) }
         onSnapshot?()
