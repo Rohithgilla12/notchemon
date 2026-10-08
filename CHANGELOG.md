@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- Dock walking now starts once Accessibility is granted while the app runs. The app checked for the grant only when it became active or when macOS announced it, which a menu-bar app rarely sees, so the grant went unnoticed until a relaunch. While Dock walking is wanted and the permission is missing, the app now checks every 30 seconds, and every 2 seconds for two minutes after you choose Allow Dock Walking….
+- The Motion submenu shows a Dock walking status line, such as "needs Accessibility", "on", "Dock is on the side", or "off in full screen", so a grant that did not take is visible.
+- When the permission is missing, the Motion submenu offers "Accessibility shows it on but it still won't walk?", which explains that a grant to an older or development build does not carry over and opens the Accessibility settings.
+
 ## [0.2.1] - 2026-10-08
 
 ### Added
