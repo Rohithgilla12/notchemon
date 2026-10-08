@@ -16,6 +16,7 @@ struct MarkdownStylerTests {
         case .heading(let level): "h\(level)"
         case .bold: "bold"
         case .italic: "italic"
+        case .strikethrough: "strike"
         case .code: "code"
         case .link(let url): "link(\(url))"
         case .syntax: "syntax"
@@ -26,8 +27,9 @@ struct MarkdownStylerTests {
     }
 
     @Test func headings() {
-        #expect(styled("# Title") == ["h1:# Title", "syntax:#"])
-        #expect(styled("### Three **b**") == ["h3:### Three **b**", "syntax:###", "syntax:**", "bold:b", "syntax:**"])
+        #expect(styled("# Title") == ["h1:# Title", "syntax:# "])
+        #expect(styled("#") == ["h1:#", "syntax:#"])
+        #expect(styled("### Three **b**") == ["h3:### Three **b**", "syntax:### ", "syntax:**", "bold:b", "syntax:**"])
         #expect(styled("#hashtag").isEmpty)
         #expect(styled("####### seven").isEmpty)
     }
@@ -40,6 +42,12 @@ struct MarkdownStylerTests {
         #expect(styled("**bold *and italic* too**") == [
             "syntax:**", "bold:bold *and italic* too", "syntax:**", "syntax:*", "italic:and italic", "syntax:*",
         ])
+    }
+
+    @Test func strikethrough() {
+        #expect(styled("a ~~gone~~ b") == ["syntax:~~", "strike:gone", "syntax:~~"])
+        #expect(styled("~~ loose ~~").isEmpty)
+        #expect(styled("a ~ b ~ c").isEmpty)
     }
 
     @Test func literalStarsAndUnderscoresStayPlain() {
@@ -82,6 +90,26 @@ struct MarkdownStylerTests {
         let box = spans.first { $0.kind == .checkbox(checked: false) }
         #expect(box.map { (text as NSString).substring(with: $0.range) } == "[ ]")
         #expect(spans.first { $0.kind == .bold }?.range == NSRange(location: 5, length: 1))
+    }
+
+    @Test func markupHidesEverywhereButTheCaretLine() {
+        let text = "# Plan\nsome **bold** text\n[docs](https://a.b) and `code`\n" as NSString
+        let all = NSRange(location: 0, length: text.length)
+        let hidden = { (caret: Int) -> [String] in
+            let active = MarkdownStyler.activeLines(for: [NSRange(location: caret, length: 0)], in: text)
+            return MarkdownStyler.hiddenRanges(in: text, range: all, active: active).map(text.substring(with:))
+        }
+        #expect(hidden(9) == ["# ", "[", "](https://a.b)", "`", "`"])
+        #expect(hidden(0) == ["**", "**", "[", "](https://a.b)", "`", "`"])
+        #expect(hidden(text.length) == ["# ", "**", "**", "[", "](https://a.b)", "`", "`"])
+    }
+
+    @Test func aSelectionShowsMarkupOnEveryLineItTouches() {
+        let text = "**a**\n**b**\n**c**" as NSString
+        let active = MarkdownStyler.activeLines(for: [NSRange(location: 2, length: 6)], in: text)
+        #expect(active == NSRange(location: 0, length: 12))
+        let hidden = MarkdownStyler.hiddenRanges(in: text, range: NSRange(location: 0, length: text.length), active: active)
+        #expect(hidden == [NSRange(location: 12, length: 2), NSRange(location: 15, length: 2)])
     }
 
     @Test func restylingTheEditedParagraphsMatchesRestylingEverything() {

@@ -7,13 +7,12 @@ import Testing
 final class EditorHarness {
     let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 420, height: 460), styleMask: [.titled], backing: .buffered, defer: true)
     let textView: NotesTextView
-    let highlighter = MarkdownHighlighter()
+    var highlighter: MarkdownHighlighter { textView.highlighter }
     var storage: NSTextStorage { textView.textStorage! }
 
     init(_ text: String) {
         let (scrollView, textView) = NotesTextView.makeScrollable()
         self.textView = textView
-        textView.textStorage?.delegate = highlighter
         window.contentView = scrollView
         textView.string = text
     }
@@ -27,11 +26,23 @@ final class EditorHarness {
         storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont
     }
 
-    /// The same text styled in one pass, to compare piecewise restyling against.
+    /// The same text styled in one pass, with markup showing on the caret's
+    /// lines, to compare piecewise restyling against.
     var styledFromScratch: NSAttributedString {
         let fresh = NSTextStorage(string: storage.string)
-        highlighter.theme.restyle(fresh, range: NSRange(location: 0, length: fresh.length))
+        highlighter.theme.restyle(fresh, range: NSRange(location: 0, length: fresh.length), active: textView.activeLines)
         return fresh
+    }
+
+    func moveCaret(to location: Int) {
+        textView.setSelectedRange(NSRange(location: location, length: 0))
+    }
+
+    /// Whether the character at `location` is laid out at zero width.
+    func isHidden(at location: Int) -> Bool {
+        let layoutManager = textView.layoutManager!
+        let glyph = layoutManager.glyphIndexForCharacter(at: location)
+        return layoutManager.propertyForGlyph(at: glyph) == .null
     }
 }
 
@@ -71,6 +82,42 @@ struct NoteEditorTests {
         let editor = EditorHarness("# Title\nplain")
         editor.textView.insertText("", replacementRange: NSRange(location: 7, length: 1))
         #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test func markupHidesOffTheCaretLineAndShowsOnIt() {
+        let editor = EditorHarness("# Plan\nship **it** today\n")
+        editor.moveCaret(to: 0)
+        #expect(editor.isHidden(at: 12))
+        #expect(!editor.isHidden(at: 0))
+        #expect(editor.storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .tertiaryLabelColor)
+        editor.moveCaret(to: 9)
+        #expect(editor.isHidden(at: 0))
+        #expect(editor.isHidden(at: 1))
+        #expect(!editor.isHidden(at: 12))
+        #expect(!editor.isHidden(at: 2))
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test func typingKeepsTheCaretLineMarkupShowing() {
+        let editor = EditorHarness("**a** b\n**c**\n")
+        editor.type("x", at: 11)
+        #expect(!editor.isHidden(at: 8))
+        #expect(editor.isHidden(at: 0))
+        editor.type("\n", at: 6)
+        #expect(editor.isHidden(at: 0))
+        #expect(editor.isHidden(at: 9))
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test(arguments: [
+        (NSRange(location: 10, length: 5), 3, NSRange(location: 13, length: 5)),
+        (NSRange(location: 0, length: 4), 2, NSRange(location: 0, length: 4)),
+        (NSRange(location: 2, length: 4), 3, NSRange(location: 2, length: 7)),
+        (NSRange(location: 5, length: 2), -2, NSRange(location: 4, length: 1)),
+    ])
+    func shownLinesMovePastEdits(range: NSRange, delta: Int, expected: NSRange) {
+        let edited = delta >= 0 ? NSRange(location: 4, length: delta) : NSRange(location: 4, length: 0)
+        #expect(MarkdownHighlighter.shift(range, past: edited, delta: delta, length: 100) == expected)
     }
 
     @Test func reloadingTheSameNoteDropsUndoForTheOldText() throws {

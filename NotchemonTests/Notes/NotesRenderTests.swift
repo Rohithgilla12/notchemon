@@ -83,7 +83,7 @@ struct NotesRenderTests {
 
         let styled = EditorHarness("")
         let initial = clock.measure { styled.textView.string = text }
-        let fullRestyle = clock.measure { styled.highlighter.restyleAll(styled.storage) }
+        let fullRestyle = clock.measure { styled.textView.restyleAll() }
         let plain = EditorHarness("")
         plain.storage.delegate = nil
         plain.textView.string = text
@@ -96,7 +96,7 @@ struct NotesRenderTests {
         let restyles: [Duration] = locations.map { location in
             clock.measure {
                 styled.storage.beginEditing()
-                styled.highlighter.theme.restyle(styled.storage, range: NSRange(location: location, length: 1))
+                styled.highlighter.theme.restyle(styled.storage, range: NSRange(location: location, length: 1), active: styled.textView.activeLines)
                 styled.storage.endEditing()
             }
         }
@@ -109,10 +109,12 @@ struct NotesRenderTests {
         5,000 lines, \(length) UTF-16 units, one keystroke at each of 400 places spread through the note
         initial load (set text, styles all lines): \(Self.ms(initial))
         full restyle of every line: \(Self.ms(fullRestyle))
-        keystroke, highlighter attached, first visit: \(Self.summary(styledFirst))
-        keystroke, highlighter attached, second visit: \(Self.summary(styledAgain))
-        keystroke, highlighter detached, first visit: \(Self.summary(plainFirst))
-        keystroke, highlighter detached, second visit: \(Self.summary(plainAgain))
+        keystroke, highlighter attached, first visit: \(Self.summary(styledFirst.keystrokes))
+        keystroke, highlighter attached, second visit: \(Self.summary(styledAgain.keystrokes))
+        keystroke, highlighter detached, first visit: \(Self.summary(plainFirst.keystrokes))
+        keystroke, highlighter detached, second visit: \(Self.summary(plainAgain.keystrokes))
+        caret move to a new line and its layout, attached, second visit: \(Self.summary(styledAgain.moves))
+        caret move to a new line and its layout, detached, second visit: \(Self.summary(plainAgain.moves))
         paragraph restyle alone, one editing pass: \(Self.summary(restyles))
         styler parse of that paragraph alone: \(Self.summary(parses))
         textView.string copy handed to the session: \(Self.summary(copies))
@@ -123,13 +125,21 @@ struct NotesRenderTests {
         #expect(styled.storage.isEqual(to: styled.styledFromScratch))
     }
 
-    private static func type(into editor: EditorHarness, at locations: [Int], clock: ContinuousClock) -> [Duration] {
-        locations.map { location in
-            editor.textView.setSelectedRange(NSRange(location: location, length: 0))
-            return clock.measure { editor.textView.insertText("a", replacementRange: editor.textView.selectedRange()) }
+    /// Moves the caret to each place and settles layout as the display pass
+    /// between keystrokes would, then types one character. Moving the caret
+    /// restyles the old and new lines, so moves and keystrokes are timed apart.
+    private static func type(into editor: EditorHarness, at locations: [Int], clock: ContinuousClock) -> (moves: [Duration], keystrokes: [Duration]) {
+        var moves: [Duration] = []
+        var keystrokes: [Duration] = []
+        for location in locations {
+            moves.append(clock.measure {
+                editor.textView.setSelectedRange(NSRange(location: location, length: 0))
+                editor.textView.layoutManager?.ensureLayout(for: editor.textView.textContainer!)
+            })
+            keystrokes.append(clock.measure { editor.textView.insertText("a", replacementRange: editor.textView.selectedRange()) })
         }
+        return (moves, keystrokes)
     }
-
 
     /// Captures the window's content over a sample wallpaper. The behind-window
     /// material only renders on screen, so a dark tint in the window's shape

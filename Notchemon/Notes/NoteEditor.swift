@@ -4,6 +4,8 @@ import SwiftUI
 extension NSAttributedString.Key {
     /// On the `[ ]` of a task line; the value is whether it is ticked.
     static let notesCheckbox = NSAttributedString.Key("NotchemonNotesCheckbox")
+    /// On markup laid out at zero width, off the caret's lines.
+    static let notesHidden = NSAttributedString.Key("NotchemonNotesHidden")
 }
 
 struct MarkdownTheme {
@@ -40,14 +42,18 @@ struct MarkdownTheme {
 
     /// Restyles the whole lines `range` touches, and the line starting where it
     /// ends: typing Return mid-line edits only the newline, yet the text after
-    /// it is now a new line. Only attributes change.
-    func restyle(_ storage: NSTextStorage, range: NSRange) {
+    /// it is now a new line. Markup on the `active` lines shows; elsewhere it
+    /// hides. Only attributes change.
+    func restyle(_ storage: NSTextStorage, range: NSRange, active: NSRange) {
         let text = storage.mutableString
         let after = NSRange(location: NSMaxRange(range), length: 0)
         let lines = NSUnionRange(text.lineRange(for: range), text.lineRange(for: after))
         storage.setAttributes(baseAttributes, range: lines)
         for span in MarkdownStyler.spans(in: text, range: lines) {
             apply(span, to: storage)
+            if span.isHidden(outside: active) {
+                storage.addAttribute(.notesHidden, value: true, range: span.range)
+            }
         }
     }
 
@@ -62,6 +68,8 @@ struct MarkdownTheme {
             addTrait(.bold, to: storage, in: range)
         case .italic:
             addTrait(.italic, to: storage, in: range)
+        case .strikethrough:
+            storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
         // No background colour: a translucent one replaces the window
         // material's pixels instead of blending, leaving a see-through box.
         case .code:
@@ -102,9 +110,16 @@ struct MarkdownTheme {
     }
 }
 
-/// Restyles the paragraphs each edit touched, never the whole note.
+/// Restyles the lines each edit touched, never the whole note, and keeps the
+/// markup showing only on the lines that hold the caret.
 final class MarkdownHighlighter: NSObject, NSTextStorageDelegate {
     var theme = MarkdownTheme()
+    /// Where the caret lands once the pending edit applies. Nil for an edit
+    /// away from the caret, such as loading a note or ticking a box.
+    var caretAfterEdit: Int?
+    /// Every line styled with its markup showing, in current offsets. It may
+    /// cover more lines than that, never fewer.
+    private(set) var shownLines: [NSRange] = []
 
     func textStorage(
         _ textStorage: NSTextStorage,
@@ -113,13 +128,51 @@ final class MarkdownHighlighter: NSObject, NSTextStorageDelegate {
         changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
-        theme.restyle(textStorage, range: editedRange)
+        let length = textStorage.length
+        shownLines = shownLines.compactMap { Self.shift($0, past: editedRange, delta: delta, length: length) }
+        let active = caretAfterEdit.map { textStorage.mutableString.lineRange(for: NSRange(location: min($0, length), length: 0)) }
+        caretAfterEdit = nil
+        theme.restyle(textStorage, range: editedRange, active: active ?? NSRange(location: 0, length: 0))
+        if let active, active.length > 0 { shownLines = shownLines.filter { $0 != active } + [active] }
     }
 
-    func restyleAll(_ storage: NSTextStorage) {
+    /// Shows the markup on `active` alone, restyling only the lines that change.
+    func show(_ active: NSRange, in storage: NSTextStorage) {
+        let wanted = active.length > 0 ? [active] : []
+        guard shownLines != wanted else { return }
+        let stale = shownLines.filter { $0 != active }
+        shownLines = wanted
         storage.beginEditing()
-        theme.restyle(storage, range: NSRange(location: 0, length: storage.length))
+        for range in stale + wanted {
+            theme.restyle(storage, range: range, active: active)
+        }
         storage.endEditing()
+    }
+
+    func restyleAll(_ storage: NSTextStorage, active: NSRange) {
+        storage.beginEditing()
+        theme.restyle(storage, range: NSRange(location: 0, length: storage.length), active: active)
+        storage.endEditing()
+        shownLines = active.length > 0 ? [active] : []
+    }
+
+    /// Moves `range` past an edit that replaced `edited` (in new offsets) and
+    /// changed the length by `delta`. A range the edit overlaps grows to cover it.
+    static func shift(_ range: NSRange, past edited: NSRange, delta: Int, length: Int) -> NSRange? {
+        var lower = range.location
+        var upper = NSMaxRange(range)
+        if upper <= edited.location {
+            // Before the edit: unchanged.
+        } else if lower >= NSMaxRange(edited) - delta {
+            lower += delta
+            upper += delta
+        } else {
+            lower = min(lower, edited.location)
+            upper = max(upper + delta, NSMaxRange(edited))
+        }
+        lower = max(0, min(lower, length))
+        upper = max(lower, min(upper, length))
+        return upper > lower ? NSRange(location: lower, length: upper - lower) : nil
     }
 }
 
@@ -127,6 +180,9 @@ final class NotesTextView: NSTextView {
     /// The editor as the window uses it, inside its scroll view.
     static func makeScrollable() -> (scrollView: NSScrollView, textView: NotesTextView) {
         let textView = NotesTextView(usingTextLayoutManager: false)
+        let layoutManager = NotesLayoutManager()
+        textView.textContainer?.replaceLayoutManager(layoutManager)
+        textView.textStorage?.delegate = textView.highlighter
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -143,7 +199,7 @@ final class NotesTextView: NSTextView {
         textView.autoresizingMask = [.width]
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
-        textView.layoutManager?.allowsNonContiguousLayout = true
+        layoutManager.allowsNonContiguousLayout = true
         textView.linkTextAttributes = [
             .foregroundColor: NSColor.linkColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
@@ -156,6 +212,39 @@ final class NotesTextView: NSTextView {
         scrollView.autohidesScrollers = true
         scrollView.documentView = textView
         return (scrollView, textView)
+    }
+
+    let highlighter = MarkdownHighlighter()
+
+    var activeLines: NSRange {
+        guard let storage = textStorage else { return NSRange(location: 0, length: 0) }
+        return MarkdownStyler.activeLines(for: selectedRanges.map(\.rangeValue), in: storage.mutableString)
+    }
+
+    override func shouldChangeText(inRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
+        guard super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings) else { return false }
+        if let last = affectedRanges.last?.rangeValue {
+            let inserted = replacementStrings?.last.map { ($0 as NSString).length } ?? 0
+            highlighter.caretAfterEdit = last.location + inserted
+        }
+        return true
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        // Mid-drag, revealing markup would move the text under the pointer.
+        if !stillSelecting { revealMarkup() }
+    }
+
+    /// Shows the markup on the caret's lines and hides it everywhere else.
+    func revealMarkup() {
+        guard let storage = textStorage, storage.delegate === highlighter, storage.editedMask.isEmpty else { return }
+        highlighter.show(activeLines, in: storage)
+    }
+
+    func restyleAll() {
+        guard let storage = textStorage else { return }
+        highlighter.restyleAll(storage, active: activeLines)
     }
 
     // Pastes arrive as plain text; the Markdown styling is the only formatting.
@@ -198,9 +287,11 @@ final class NotesTextView: NSTextView {
         let replacement = checked ? " " : "x"
         guard shouldChangeText(in: mark, replacementString: replacement) else { return true }
         let selection = selectedRanges
+        highlighter.caretAfterEdit = nil
         storage.replaceCharacters(in: mark, with: replacement)
         selectedRanges = selection
         didChangeText()
+        revealMarkup()
         return true
     }
 }
@@ -229,7 +320,6 @@ struct NoteEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let (scrollView, textView) = NotesTextView.makeScrollable()
         textView.delegate = context.coordinator
-        textView.textStorage?.delegate = context.coordinator.highlighter
         handle.textView = textView
         return scrollView
     }
@@ -237,10 +327,10 @@ struct NoteEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NotesTextView else { return }
         let coordinator = context.coordinator
-        if coordinator.highlighter.theme.monospaced != monospaced {
-            coordinator.highlighter.theme.monospaced = monospaced
-            textView.typingAttributes = coordinator.highlighter.theme.baseAttributes
-            if let storage = textView.textStorage { coordinator.highlighter.restyleAll(storage) }
+        if textView.highlighter.theme.monospaced != monospaced {
+            textView.highlighter.theme.monospaced = monospaced
+            textView.typingAttributes = textView.highlighter.theme.baseAttributes
+            textView.restyleAll()
         }
         if coordinator.revision != session.editorRevision {
             coordinator.revision = session.editorRevision
@@ -251,7 +341,6 @@ struct NoteEditor: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         let session: NotesSession
-        let highlighter = MarkdownHighlighter()
         var revision = -1
         private var noteID: UUID?
 
@@ -268,7 +357,7 @@ struct NoteEditor: NSViewRepresentable {
             noteID = note?.id
             if textView.string != text {
                 let selection = textView.selectedRange()
-                textView.typingAttributes = highlighter.theme.baseAttributes
+                textView.typingAttributes = textView.highlighter.theme.baseAttributes
                 textView.string = text
                 textView.undoManager?.removeAllActions()
                 let length = (text as NSString).length

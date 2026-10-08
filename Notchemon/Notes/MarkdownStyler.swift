@@ -5,9 +5,11 @@ struct MarkdownSpan: Equatable, Sendable {
         case heading(level: Int)
         case bold
         case italic
+        case strikethrough
         case code
         case link(String)
-        /// Markup characters such as `#`, `**`, and backticks, drawn faintly.
+        /// Markup characters such as `# `, `**`, and backticks: hidden off the
+        /// caret's lines, drawn faintly on them.
         case syntax
         case listMarker
         /// The `[ ]` or `[x]` of a task line.
@@ -22,6 +24,12 @@ struct MarkdownSpan: Equatable, Sendable {
     init(_ kind: Kind, _ location: Int, _ length: Int) {
         self.kind = kind
         range = NSRange(location: location, length: length)
+    }
+
+    /// Markup is hidden unless it sits on one of the `active` lines, the ones
+    /// holding the caret or selection, so editing it stays honest.
+    func isHidden(outside active: NSRange) -> Bool {
+        kind == .syntax && !NSLocationInRange(range.location, active)
     }
 }
 
@@ -60,6 +68,17 @@ enum MarkdownStyler {
         } while lineStart < end
         return spans
     }
+
+    /// The whole lines the selections touch, where markup stays visible.
+    static func activeLines(for selections: [NSRange], in text: NSString) -> NSRange {
+        guard let first = selections.first else { return NSRange(location: 0, length: 0) }
+        return selections.dropFirst().reduce(text.lineRange(for: first)) { NSUnionRange($0, text.lineRange(for: $1)) }
+    }
+
+    /// The markup laid out at zero width in the lines `range` touches.
+    static func hiddenRanges(in text: NSString, range: NSRange, active: NSRange) -> [NSRange] {
+        spans(in: text, range: range).filter { $0.isHidden(outside: active) }.map(\.range)
+    }
 }
 
 private enum Char {
@@ -76,6 +95,7 @@ private enum Char {
     static let closeBracket = unichar(0x5D)
     static let openParen = unichar(0x28)
     static let closeParen = unichar(0x29)
+    static let tilde = unichar(0x7E)
     static let lowerX = unichar(0x78)
     static let upperX = unichar(0x58)
 
@@ -128,7 +148,7 @@ private struct Line {
         let level = end - start
         guard (1...6).contains(level), end == count || Char.isSpace(characters[end]) else { return nil }
         add(.heading(level: level), 0, count)
-        add(.syntax, start, end)
+        add(.syntax, start, end < count ? end + 1 : end)
         return end
     }
 
@@ -164,6 +184,7 @@ private struct Line {
             case Char.backtick: next = codeSpan(index, end)
             case Char.openBracket: next = link(index, end)
             case Char.star, Char.underscore: next = emphasis(index, end)
+            case Char.tilde: next = strikethrough(index, end)
             default: next = nil
             }
             index = next ?? index + 1
@@ -213,6 +234,25 @@ private struct Line {
                 return afterClose
             }
             search = close + (doubledSingle ? 2 : 1)
+        }
+        return nil
+    }
+
+    /// `~~struck~~`, tight against its text like emphasis.
+    mutating func strikethrough(_ open: Int, _ end: Int) -> Int? {
+        let innerStart = open + 2
+        guard at(open + 1) == Char.tilde, innerStart < end, !Char.isSpace(characters[innerStart]),
+              characters[innerStart] != Char.tilde else { return nil }
+        var search = innerStart + 1
+        while let close = find(Char.tilde, from: search, before: end) {
+            if close + 1 < end, characters[close + 1] == Char.tilde, !Char.isSpace(characters[close - 1]) {
+                add(.syntax, open, innerStart)
+                add(.strikethrough, innerStart, close)
+                add(.syntax, close, close + 2)
+                inline(innerStart, close)
+                return close + 2
+            }
+            search = close + 1
         }
         return nil
     }
