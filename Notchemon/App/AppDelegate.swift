@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Arriving, setting off, or walking up to or past a still cursor moves
         // the creature, not the cursor, so it looks again from where it is.
         // On or bound for the Dock, the Dock may have changed size since the
-        // last read, so it is read again here and nowhere on a timer.
+        // last read, so it is read again here rather than polled.
         roamer.onLookAgain = { [weak self, weak controller] in
             guard let self else { return }
             if roamer.phase.touches(.dock) { dockWatcher.refresh() }

@@ -3,12 +3,19 @@ import ApplicationServices
 import Observation
 
 /// Reads where the Dock is. Its frame needs Accessibility permission;
-/// without it the frame reads as nil and nothing prompts.
+/// without it the Dock is unreadable and nothing prompts.
 enum DockReader {
     static let bundleIdentifier = "com.apple.dock"
 
-    static func shelf() -> DockShelf? {
-        DockGeometry.shelf(reading(), screens: NSScreen.screens.map(\.frame))
+    /// Accessibility gave no frame for the Dock: it timed out, was refused,
+    /// or the Dock was not running.
+    struct Unreadable: Error {}
+
+    /// The shelf, or nil when the Dock answered but offers none.
+    static func shelf() throws -> DockShelf? {
+        let reading = reading()
+        guard reading.listFrame != nil else { throw Unreadable() }
+        return DockGeometry.shelf(reading, screens: NSScreen.screens.map(\.frame))
     }
 
     static func reading() -> DockReading {
@@ -49,7 +56,8 @@ enum DockReader {
 
 /// Keeps the Dock's shelf current while the wander setting includes the
 /// Dock. It reads only when asked or when something that moves, resizes,
-/// shows, or hides the Dock happens. Nothing runs between those.
+/// shows, or hides the Dock happens, and retries a read the Dock did not
+/// answer at most `retryDelays.count` times. Nothing runs between those.
 @MainActor
 @Observable
 final class DockWatcher {
@@ -59,7 +67,7 @@ final class DockWatcher {
 
     @ObservationIgnored private var wanted = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
-    @ObservationIgnored private let read: @MainActor () -> DockShelf?
+    @ObservationIgnored private let read: @MainActor () throws -> DockShelf?
     @ObservationIgnored private let trusted: () -> Bool
     @ObservationIgnored private let after: After
     @ObservationIgnored private var cursor: CGPoint?
@@ -68,6 +76,9 @@ final class DockWatcher {
     /// What the cursor last called for that a whole confirm could not see
     /// happen, so moving on without changing that call reads nothing more.
     @ObservationIgnored private var gaveUpOn: Bool?
+    /// Retries spent since the Dock last answered, or nil while it answers.
+    @ObservationIgnored private var retriesSpent: Int?
+    @ObservationIgnored private var retryDue = false
 
     /// The Dock's Accessibility elements send no move notification as it
     /// slides (registering for one fails as unsupported), so a slide is
@@ -76,12 +87,16 @@ final class DockWatcher {
     static let confirmDelay: Duration = .milliseconds(300)
     static let confirmStep: Duration = .milliseconds(100)
     static let confirmReads = 8
+    /// How long after each read the Dock did not answer it is read again. An
+    /// app launch can keep the Dock too busy to answer, and a relaunched Dock
+    /// takes a moment before it can.
+    static let retryDelays: [Duration] = [.seconds(1), .seconds(3)]
 
     /// Runs work on the main actor once a delay has passed. Tests pass one they move on by hand.
     typealias After = @MainActor (Duration, @escaping @MainActor @Sendable () -> Void) -> Void
 
     init(
-        read: @escaping @MainActor () -> DockShelf? = DockReader.shelf,
+        read: @escaping @MainActor () throws -> DockShelf? = DockReader.shelf,
         trusted: @escaping () -> Bool = AXIsProcessTrusted,
         after: @escaping After = DockWatcher.afterSleeping
     ) {
@@ -102,9 +117,12 @@ final class DockWatcher {
         self.wanted = wanted
         // Launching or quitting an app adds or drops a Dock icon, which resizes the Dock.
         let workspace = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-            observe(workspace, name) { $0.refresh() }
+        let launches = workspace.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let launched = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
+            MainActor.assumeIsolated { self?.applicationLaunched(bundleIdentifier: launched) }
         }
+        observers.append(launches)
+        observe(workspace, NSWorkspace.didTerminateApplicationNotification) { $0.refresh() }
         // Clicking an app in a shown auto-hiding Dock can hide it with the cursor still over it.
         observe(workspace, NSWorkspace.didActivateApplicationNotification) { watcher in
             if watcher.shelf?.autoHide?.slide == .shown { watcher.confirmSlide() }
@@ -130,10 +148,42 @@ final class DockWatcher {
     /// but still a round trip to the Dock, so callers ask only at moments
     /// the creature is on it or heading there.
     func refresh() {
-        let next = wanted && isTrusted ? read() : nil
+        var next: DockShelf?
+        if wanted && isTrusted {
+            do {
+                next = try read()
+                retriesSpent = nil
+            } catch {
+                readAgain()
+            }
+        } else {
+            retriesSpent = nil
+        }
         guard next != shelf else { return }
         shelf = next
         onChange?()
+    }
+
+    /// Reads the Dock once a retry delay has passed, unless a retry is
+    /// already due or every one has been spent since the Dock last answered.
+    private func readAgain() {
+        let spent = retriesSpent ?? 0
+        retriesSpent = spent
+        guard !retryDue, spent < Self.retryDelays.count else { return }
+        retriesSpent = spent + 1
+        retryDue = true
+        after(Self.retryDelays[spent]) { [weak self] in
+            guard let self else { return }
+            retryDue = false
+            if retriesSpent != nil { refresh() }
+        }
+    }
+
+    func applicationLaunched(bundleIdentifier: String?) {
+        refresh()
+        // A relaunched Dock is announced as it starts, which can be before it
+        // answers Accessibility or has laid out its icons.
+        if bundleIdentifier == DockReader.bundleIdentifier { readAgain() }
     }
 
     /// Called on every cursor move, so it reads nothing unless the cursor

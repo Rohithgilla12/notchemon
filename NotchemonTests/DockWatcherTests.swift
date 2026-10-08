@@ -38,16 +38,28 @@ struct DockWatcherTests {
     /// Hands out the Dock as it would read at each successive read, then keeps the last.
     @MainActor
     final class Dock {
-        var script: [DockShelf?]
-        var reads = 0
-
-        init(_ script: DockShelf?...) {
-            self.script = script
+        enum Answer {
+            case shelf(DockShelf?)
+            case unreadable
         }
 
-        func read() -> DockShelf? {
+        var script: [Answer]
+        var reads = 0
+
+        init(_ shelves: DockShelf?...) {
+            script = shelves.map(Answer.shelf)
+        }
+
+        init(answers: Answer...) {
+            script = answers
+        }
+
+        func read() throws -> DockShelf? {
             reads += 1
-            return script.count > 1 ? script.removeFirst() : script.first ?? nil
+            switch script.count > 1 ? script.removeFirst() : script.first ?? .shelf(nil) {
+            case .shelf(let shelf): return shelf
+            case .unreadable: throw DockReader.Unreadable()
+            }
         }
     }
 
@@ -130,5 +142,80 @@ struct DockWatcherTests {
         watcher.cursorMoved(to: CGPoint(x: 600, y: 0))
         timers.advance(by: .seconds(5))
         #expect(dock.reads == 1)
+    }
+
+    @Test func anUnreadableDockIsReadAgainAfterOneSecondAndThreeMoreThenLeftAlone() {
+        let dock = Dock(answers: .unreadable)
+        let watcher = watcher(dock)
+        #expect(watcher.shelf == nil)
+        timers.advance(by: .milliseconds(999))
+        #expect(dock.reads == 1)
+        timers.advance(by: .milliseconds(1))
+        #expect(dock.reads == 2)
+        timers.advance(by: .milliseconds(2999))
+        #expect(dock.reads == 2)
+        timers.advance(by: .milliseconds(1))
+        #expect(dock.reads == 3)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 3)
+        #expect(watcher.shelf == nil)
+    }
+
+    @Test func aDockThatAnswersARetryIsAShelfAgainAndIsNotReadFurther() {
+        let dock = Dock(answers: .unreadable, .shelf(Self.hidden))
+        let watcher = watcher(dock)
+        var changes = 0
+        watcher.onChange = { changes += 1 }
+        timers.advance(by: .seconds(1))
+        #expect(watcher.shelf == Self.hidden)
+        #expect(changes == 1)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 2)
+    }
+
+    @Test func aDockThatAnswersWithNoShelfIsNotRetried() {
+        let dock = Dock(nil)
+        _ = watcher(dock)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 1)
+    }
+
+    @Test func aRetryDueAfterTheDockIsNoLongerWantedReadsNothing() {
+        let dock = Dock(answers: .unreadable)
+        let watcher = watcher(dock)
+        watcher.setWanted(false)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 1)
+    }
+
+    @Test func failuresWhileARetryIsDueAddNoMoreRetries() {
+        let dock = Dock(answers: .unreadable)
+        let watcher = watcher(dock)
+        for _ in 0..<5 { watcher.refresh() }
+        #expect(dock.reads == 6)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 8)
+    }
+
+    @Test func theDockLaunchingIsReadAtOnceAndAgainASecondLater() {
+        let dock = Dock(answers: .shelf(nil), .shelf(nil), .shelf(Self.hidden))
+        let watcher = watcher(dock)
+        watcher.applicationLaunched(bundleIdentifier: DockReader.bundleIdentifier)
+        #expect(dock.reads == 2)
+        #expect(watcher.shelf == nil)
+        timers.advance(by: .seconds(1))
+        #expect(dock.reads == 3)
+        #expect(watcher.shelf == Self.hidden)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 3)
+    }
+
+    @Test func anotherAppLaunchingIsReadOnceAtOnce() {
+        let dock = Dock(Self.hidden)
+        let watcher = watcher(dock)
+        watcher.applicationLaunched(bundleIdentifier: "com.example.Editor")
+        #expect(dock.reads == 2)
+        timers.advance(by: .seconds(600))
+        #expect(dock.reads == 2)
     }
 }
