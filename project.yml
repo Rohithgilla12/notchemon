@@ -41,7 +41,8 @@ targets:
         SUFeedURL: https://github.com/Rohithgilla12/notchemon/releases/latest/download/appcast.xml
         # Written by scripts/setup-sparkle-keys.sh. While empty, the app never starts the updater.
         SUPublicEDKey: ""
-        # Without this, Sparkle 2 accepts an update signed only by Apple code signing when no EdDSA key is set.
+        # Checks the EdDSA signature before unpacking an update. Sparkle 2 otherwise
+        # accepts Apple code signing alone when no EdDSA key is set.
         SUVerifyUpdateBeforeExtraction: true
     entitlements:
       path: Notchemon/Notchemon.entitlements

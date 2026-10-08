@@ -91,6 +91,12 @@ check "bump keeps an empty Unreleased heading" "## [Unreleased]||## [0.10.0] - 2
   "$(sed -n '3,5p' "$work/repo/CHANGELOG.md" | paste -sd '|' -)"
 bump 0.11.0
 check "bump refuses an empty Unreleased section" "1" "$?"
+sed -i '' 's/^## \[Unreleased\]$/## [Unreleased]\
+\
+### Added\
+/' "$work/repo/CHANGELOG.md"
+bump 0.11.0
+check "bump refuses an Unreleased section with only headings" "1" "$?"
 
 for version in 0.9.3 0.9.2 1.0 v1.0.0 1.0.0-beta 01.0.0; do
   fixture

@@ -56,7 +56,6 @@ make_zip() {
   ditto -c -k --keepParent "$app" "$zip"
 }
 
-# The app beside a link to /Applications, in a compressed read-only image.
 make_dmg() {
   local staging
   staging="$(mktemp -d)"
@@ -65,7 +64,7 @@ make_dmg() {
   rm -f "$dmg"
   hdiutil create -quiet -volname Notchemon -srcfolder "$staging" -fs HFS+ -format UDZO "$dmg"
   rm -rf "$staging"
-  codesign --sign "Developer ID Application" --timestamp "$dmg"
+  codesign --sign "Developer ID Application: Rohith Gilla (7D2V3RM56T)" --timestamp "$dmg"
   codesign --verify --strict --verbose=2 "$dmg"
 }
 
@@ -79,7 +78,7 @@ notarize() {
 }
 
 has_keychain_profile() {
-  security find-generic-password -s "com.apple.gke.notary.tool" -a "$profile" >/dev/null 2>&1
+  security find-generic-password -s "com.apple.gke.notary.tool" -a "com.apple.gke.notary.tool.saved-creds.$profile" >/dev/null 2>&1
 }
 
 mkdir -p "$dist_dir"
@@ -102,9 +101,10 @@ elif [[ -n "${NOTARY_KEY_PATH:-}" ]] || has_keychain_profile; then
   xcrun stapler validate "$dmg"
   spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
 else
-  echo "Skipping notarisation: no API key in NOTARY_KEY_PATH and no keychain profile named '$profile'."
-  echo "Create one with: xcrun notarytool store-credentials $profile --apple-id <id> --team-id 7D2V3RM56T"
-  make_dmg
+  echo "No notarisation credentials: no API key in NOTARY_KEY_PATH and no keychain profile named '$profile'." >&2
+  echo "Create one with: xcrun notarytool store-credentials $profile --apple-id <id> --team-id 7D2V3RM56T" >&2
+  echo "Or set SKIP_NOTARIZE=1 for a build you will not publish." >&2
+  exit 1
 fi
 
 echo "version: $version"

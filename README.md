@@ -30,7 +30,7 @@ Notchemon asks for no permissions. It reads idle time with `CGEventSource.second
 
 ## Updates, login, and About
 
-- **Updates.** Notchemon updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle asks whether to check for updates automatically. **Check for Updates…** in the menu checks at any time. Each update is signed with an EdDSA key, and the app refuses an update without a valid signature.
+- **Updates.** Notchemon updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle asks whether to check for updates automatically. **Check for Updates…** in the menu checks at any time. Each update is signed with an EdDSA key, and the app checks that signature before it unpacks the update.
 - **Launch at Login.** Off by default. Turn it on from the menu. If you turn it off in System Settings › General › Login Items, the menu offers to open that pane, because only System Settings can turn it back on.
 - **About Notchemon.** Shows the version, the licence, the disclaimer, and the credits.
 

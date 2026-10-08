@@ -38,7 +38,7 @@ The commands use a 1Password vault named `Private`. If your vault has another na
 
 3. Commit the change to `project.yml`.
 
-Until `SUPublicEDKey` is set, the app never starts Sparkle and **Check for Updates…** stays disabled. The app also sets `SUVerifyUpdateBeforeExtraction`, so Sparkle refuses any update that lacks a valid EdDSA signature.
+Until `SUPublicEDKey` is set, the app never starts Sparkle and **Check for Updates…** stays disabled. The app also sets `SUVerifyUpdateBeforeExtraction`, so Sparkle checks the EdDSA signature before it unpacks an update. For a zip, that signature is required. Sparkle accepts a DMG or a package without it only when the archive itself carries a Developer ID signature from the same team.
 
 ### Store the signing credentials in 1Password
 
@@ -148,18 +148,19 @@ While the repository stays private, macOS runners also count against your Action
 
 ### Release from your Mac
 
-To publish without CI, run the same steps by hand after step 3, before you push the tag:
+Release from your Mac only while the release secrets are not set in GitHub. Otherwise the tag push also starts the CI release, and the two race to create the same release. Run these commands after you commit the version bump in step 3, instead of the `git tag` and `git push` commands:
 
 ```sh
 scripts/release.sh
 scripts/make-appcast.sh 0.2.0
+git tag v0.2.0
 git push origin main v0.2.0
 gh release create v0.2.0 dist/Notchemon-0.2.0.dmg dist/Notchemon-0.2.0.zip dist/appcast.xml \
 	--verify-tag --title "Notchemon 0.2.0" --notes "$(scripts/changelog-section.sh 0.2.0)"
 scripts/update-cask.sh 0.2.0 "$(shasum -a 256 dist/Notchemon-0.2.0.zip | cut -d' ' -f1)"
 ```
 
-`make-appcast.sh` reads the private key from your Keychain, so macOS may ask you to allow access. Commit the cask change. If the release secrets are set, CI also tries to publish the tag, and its `gh release create` fails because the release exists.
+`make-appcast.sh` reads the private key from your Keychain, so macOS may ask you to allow access. Commit and push the cask change.
 
 ## How the cask stays current
 

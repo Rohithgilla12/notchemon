@@ -40,7 +40,7 @@ is_newer "$new" "$current" || fail "$new is not newer than $current"
 
 grep -q '^## \[Unreleased\]' "$changelog" || fail "CHANGELOG.md has no '## [Unreleased]' heading"
 grep -qF "## [$new]" "$changelog" && fail "CHANGELOG.md already has a section for $new"
-unreleased="$(awk '/^## \[Unreleased\]/ { inside = 1; next } inside && /^## / { exit } inside && /[^[:space:]]/ { print }' "$changelog")"
+unreleased="$(awk '/^## \[Unreleased\]/ { inside = 1; next } inside && /^## / { exit } inside && /[^[:space:]]/ && !/^#/ { print }' "$changelog")"
 [[ -n "$unreleased" ]] || fail "nothing is listed under '## [Unreleased]'; add the changes first"
 
 next_build=$((build + 1))
