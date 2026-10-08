@@ -145,9 +145,44 @@ struct NoteEditorTests {
         #expect(editor.textView.toggleCheckbox(atCharacter: box.location + 1))
         #expect(editor.storage.string == "Groceries\n- [x] milk\n")
         let done = (editor.storage.string as NSString).range(of: "milk")
-        #expect(editor.storage.attribute(.strikethroughStyle, at: done.location, effectiveRange: nil) != nil)
+        #expect(editor.storage.attribute(.strikethroughStyle, at: done.location, effectiveRange: nil) == nil)
+        let colour = editor.storage.attribute(.foregroundColor, at: done.location, effectiveRange: nil) as? NSColor
+        #expect(colour?.alphaComponent == 0.55)
         try #require(editor.textView.undoManager).undo()
         #expect(editor.storage.string == "Groceries\n- [ ] milk\n")
+    }
+
+    @Test func clickingTheDrawnBoxTicksItWithinA22PointTarget() throws {
+        let editor = EditorHarness("Groceries\n- [ ] milk\n")
+        editor.moveCaret(to: 0)
+        let layoutManager = try #require(editor.textView.layoutManager as? NotesLayoutManager)
+        layoutManager.ensureLayout(for: try #require(editor.textView.textContainer))
+        let marker = NSRange(location: 10, length: 6)
+        #expect(editor.storage.attribute(.notesDecoration, at: 10, effectiveRange: nil) as? Int == MarkdownSpan.Block.task.rawValue)
+        let frame = try #require(layoutManager.decorationFrame(.task, marker: marker))
+        #expect(frame.size == NSSize(width: 14, height: 14))
+        let origin = editor.textView.textContainerOrigin
+        let centre = NSPoint(x: frame.midX + origin.x, y: frame.midY + origin.y)
+
+        #expect(!editor.textView.toggleCheckbox(at: NSPoint(x: centre.x + 12, y: centre.y)))
+        #expect(editor.textView.toggleCheckbox(at: NSPoint(x: centre.x + 10, y: centre.y)))
+        #expect(editor.storage.string == "Groceries\n- [x] milk\n")
+        #expect(layoutManager.checkAnimation?.box == 12)
+        #expect(editor.storage.attribute(.notesDecoration, at: 10, effectiveRange: nil) as? Int == MarkdownSpan.Block.doneTask.rawValue)
+        #expect(editor.textView.selectedRange() == NSRange(location: 0, length: 0))
+
+        #expect(editor.textView.toggleCheckbox(at: centre))
+        #expect(editor.storage.string == "Groceries\n- [ ] milk\n")
+    }
+
+    @Test func theCaretLineShowsTheTaskPrefixInsteadOfABox() {
+        let editor = EditorHarness("Groceries\n- [ ] milk\n")
+        editor.moveCaret(to: 18)
+        #expect(editor.storage.attribute(.notesDecoration, at: 10, effectiveRange: nil) == nil)
+        #expect(!editor.isHidden(at: 10))
+        let paragraph = editor.storage.attribute(.paragraphStyle, at: 10, effectiveRange: nil) as? NSParagraphStyle
+        #expect(paragraph?.headIndent == 22)
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
     }
 
     @Test func textOutsideACheckboxIsNotAToggle() {

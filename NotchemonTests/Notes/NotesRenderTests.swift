@@ -26,6 +26,12 @@ struct NotesRenderTests {
     1. Run `xcodegen generate -q` first
     2. Then the tests
     - Plain bullet with _emphasis_
+    - ~~Old plan~~ dropped
+
+    > Ship small, ship often.
+
+    ---
+    Done.
     """
 
     @Test func rendersAStyledNoteAndTheQuickSwitcher() throws {
@@ -41,9 +47,14 @@ struct NotesRenderTests {
         let notes = FloatingNotes(store: store, defaults: defaults)
         notes.session.load(selecting: launch.url.lastPathComponent)
 
-        for appearance in [NSAppearance.Name.darkAqua, .aqua] {
-            let suffix = appearance == .darkAqua ? "dark" : "light"
-            try render(notes.preparePanel(), appearance: appearance, to: folder.appendingPathComponent("styled-note-\(suffix).png"))
+        let panel = notes.preparePanel()
+        panel.setContentSize(NSSize(width: 420, height: 760))
+        try render(panel, appearance: .darkAqua, to: folder.appendingPathComponent("styled-note-dark.png"))
+        let text = Self.styledNote as NSString
+        for (name, line) in [("caret-on-prose", "Ship the"), ("caret-on-checkbox", "Write the")] {
+            let textView = try #require(notes.editor.textView)
+            textView.setSelectedRange(NSRange(location: NSMaxRange(text.lineRange(for: text.range(of: line))) - 1, length: 0))
+            try render(panel, appearance: .darkAqua, to: folder.appendingPathComponent("styled-note-\(name).png"))
         }
 
         for hovering in [false, true] {

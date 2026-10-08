@@ -20,9 +20,11 @@ struct MarkdownStylerTests {
         case .code: "code"
         case .link(let url): "link(\(url))"
         case .syntax: "syntax"
-        case .listMarker: "list"
+        case .block(let block): "\(block)"
+        case .number: "number"
         case .checkbox(let checked): checked ? "done-box" : "box"
         case .done: "done"
+        case .quoted: "quoted"
         }
     }
 
@@ -54,7 +56,15 @@ struct MarkdownStylerTests {
         #expect(styled("2 * 3 * 4").isEmpty)
         #expect(styled("snake_case_name").isEmpty)
         #expect(styled("** not bold**").isEmpty)
-        #expect(styled("---").isEmpty)
+    }
+
+    @Test func rulesAndQuotes() {
+        #expect(styled("---") == ["rule:---"])
+        #expect(styled("*****") == ["rule:*****"])
+        #expect(styled("--").isEmpty)
+        #expect(styled("-- -").isEmpty)
+        #expect(styled("> said **so**") == ["quote:> ", "quoted:said **so**", "syntax:**", "bold:so", "syntax:**"])
+        #expect(styled(">") == ["quote:>"])
     }
 
     @Test func inlineCodeHidesMarkupInside() {
@@ -70,18 +80,19 @@ struct MarkdownStylerTests {
     }
 
     @Test func bulletsAndNumbers() {
-        #expect(styled("- item") == ["list:-"])
-        #expect(styled("  * nested") == ["list:*"])
-        #expect(styled("12. twelfth") == ["list:12."])
+        #expect(styled("- item") == ["bullet:- "])
+        #expect(styled("  * nested") == ["bullet:* "])
+        #expect(styled("12. twelfth") == ["number:12."])
         #expect(styled("-not a list").isEmpty)
     }
 
     @Test func checkboxes() {
-        #expect(styled("- [ ] buy milk") == ["list:-", "box:[ ]"])
-        #expect(styled("- [x] paid rent") == ["list:-", "done-box:[x]", "done: paid rent"])
-        #expect(styled("- [X] shouty") == ["list:-", "done-box:[X]", "done: shouty"])
-        #expect(styled("- [ ]") == ["list:-", "box:[ ]"])
-        #expect(styled("- [y] nope") == ["list:-"])
+        #expect(styled("- [ ] buy milk") == ["task:- [ ] ", "box:[ ]"])
+        #expect(styled("- [x] paid rent") == ["doneTask:- [x] ", "done-box:[x]", "done: paid rent"])
+        #expect(styled("- [X] shouty") == ["doneTask:- [X] ", "done-box:[X]", "done: shouty"])
+        #expect(styled("- [ ]") == ["task:- [ ]", "box:[ ]"])
+        #expect(styled("- [y] nope") == ["bullet:- "])
+        #expect(styled("1. [ ] numbered") == ["number:1.", "box:[ ]"])
     }
 
     @Test func offsetsAreDocumentOffsetsAcrossLinesAndEmoji() {
@@ -100,6 +111,10 @@ struct MarkdownStylerTests {
             return MarkdownStyler.hiddenRanges(in: text, range: all, active: active).map(text.substring(with:))
         }
         #expect(hidden(9) == ["# ", "[", "](https://a.b)", "`", "`"])
+        let list = "- [x] done\n- item\n1. one" as NSString
+        let listAll = NSRange(location: 0, length: list.length)
+        let caretOnItem = MarkdownStyler.activeLines(for: [NSRange(location: 13, length: 0)], in: list)
+        #expect(MarkdownStyler.hiddenRanges(in: list, range: listAll, active: caretOnItem).map(list.substring(with:)) == ["- [x] "])
         #expect(hidden(0) == ["**", "**", "[", "](https://a.b)", "`", "`"])
         #expect(hidden(text.length) == ["# ", "**", "**", "[", "](https://a.b)", "`", "`"])
     }

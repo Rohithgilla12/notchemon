@@ -11,11 +11,25 @@ struct MarkdownSpan: Equatable, Sendable {
         /// Markup characters such as `# `, `**`, and backticks: hidden off the
         /// caret's lines, drawn faintly on them.
         case syntax
-        case listMarker
+        /// A line's leading markup, such as `- ` or `- [x] `, drawn as a
+        /// decoration off the caret's lines and faintly on them.
+        case block(Block)
+        /// The `1.` of a numbered item, which always shows.
+        case number
         /// The `[ ]` or `[x]` of a task line.
         case checkbox(checked: Bool)
         /// The text after a ticked checkbox.
         case done
+        /// The text after a quote's `> `.
+        case quoted
+    }
+
+    enum Block: Int, Sendable {
+        case bullet
+        case task
+        case doneTask
+        case quote
+        case rule
     }
 
     let kind: Kind
@@ -27,9 +41,14 @@ struct MarkdownSpan: Equatable, Sendable {
     }
 
     /// Markup is hidden unless it sits on one of the `active` lines, the ones
-    /// holding the caret or selection, so editing it stays honest.
-    func isHidden(outside active: NSRange) -> Bool {
-        kind == .syntax && !NSLocationInRange(range.location, active)
+    /// holding the caret or selection, so editing it stays honest. A line
+    /// prefix hides only when a character follows it to hang its decoration on.
+    func isHidden(outside active: NSRange, textLength: Int) -> Bool {
+        switch kind {
+        case .syntax: !NSLocationInRange(range.location, active)
+        case .block: !NSLocationInRange(range.location, active) && NSMaxRange(range) < textLength
+        default: false
+        }
     }
 }
 
@@ -77,7 +96,7 @@ enum MarkdownStyler {
 
     /// The markup laid out at zero width in the lines `range` touches.
     static func hiddenRanges(in text: NSString, range: NSRange, active: NSRange) -> [NSRange] {
-        spans(in: text, range: range).filter { $0.isHidden(outside: active) }.map(\.range)
+        spans(in: text, range: range).filter { $0.isHidden(outside: active, textLength: text.length) }.map(\.range)
     }
 }
 
@@ -96,6 +115,7 @@ private enum Char {
     static let openParen = unichar(0x28)
     static let closeParen = unichar(0x29)
     static let tilde = unichar(0x7E)
+    static let greater = unichar(0x3E)
     static let lowerX = unichar(0x78)
     static let upperX = unichar(0x58)
 
@@ -133,7 +153,11 @@ private struct Line {
         while indent < count, Char.isSpace(characters[indent]) { indent += 1 }
         if let after = heading(from: indent) {
             inline(after, count)
+        } else if rule(from: indent) {
+            return
         } else if let after = listItem(from: indent) {
+            inline(after, count)
+        } else if let after = quote(from: indent) {
             inline(after, count)
         } else {
             inline(indent, count)
@@ -152,28 +176,57 @@ private struct Line {
         return end
     }
 
+    /// Three or more `-`, `*`, or `_` alone on a line.
+    mutating func rule(from start: Int) -> Bool {
+        guard start <= 3, let mark = at(start), mark == Char.minus || mark == Char.star || mark == Char.underscore,
+              count - start >= 3, characters[start...].allSatisfy({ $0 == mark }) else { return false }
+        add(.block(.rule), start, count)
+        return true
+    }
+
     /// A bullet (`-`, `*`, `+`) or number (`1.`, `1)`) then a space, and an
     /// optional `[ ]` or `[x]` checkbox. Returns where the item's text starts.
     mutating func listItem(from start: Int) -> Int? {
         guard let first = at(start) else { return nil }
-        var markerEnd = start
-        if first == Char.minus || first == Char.star || first == Char.plus {
-            markerEnd = start + 1
-        } else {
+        let bulleted = first == Char.minus || first == Char.star || first == Char.plus
+        var markerEnd = start + 1
+        if !bulleted {
+            markerEnd = start
             while markerEnd < count, Char.isDigit(characters[markerEnd]) { markerEnd += 1 }
             guard markerEnd > start, let dot = at(markerEnd), dot == Char.dot || dot == Char.closeParen else { return nil }
             markerEnd += 1
         }
         guard let gap = at(markerEnd), Char.isSpace(gap) else { return nil }
-        add(.listMarker, start, markerEnd)
         let box = markerEnd + 1
-        guard at(box) == Char.openBracket, at(box + 2) == Char.closeBracket, let mark = at(box + 1),
-              mark == Char.space || mark == Char.lowerX || mark == Char.upperX,
-              box + 3 == count || at(box + 3).map(Char.isSpace) == true else { return box }
-        let checked = mark != Char.space
+        guard let checked = checkbox(at: box) else {
+            add(bulleted ? .block(.bullet) : .number, start, bulleted ? box : markerEnd)
+            return box
+        }
+        if bulleted {
+            add(.block(checked ? .doneTask : .task), start, min(box + 4, count))
+        } else {
+            add(.number, start, markerEnd)
+        }
         add(.checkbox(checked: checked), box, box + 3)
         if checked { add(.done, box + 3, count) }
         return box + 3
+    }
+
+    /// Whether `[ ]` or `[x]` starts at `box`, ending the line or followed by a space.
+    func checkbox(at box: Int) -> Bool? {
+        guard at(box) == Char.openBracket, at(box + 2) == Char.closeBracket, let mark = at(box + 1),
+              mark == Char.space || mark == Char.lowerX || mark == Char.upperX,
+              box + 3 == count || at(box + 3).map(Char.isSpace) == true else { return nil }
+        return mark != Char.space
+    }
+
+    /// `> ` then the quoted text.
+    mutating func quote(from start: Int) -> Int? {
+        guard start <= 3, at(start) == Char.greater else { return nil }
+        let end = at(start + 1).map(Char.isSpace) == true ? start + 2 : start + 1
+        add(.block(.quote), start, end)
+        add(.quoted, end, count)
+        return end
     }
 
     mutating func inline(_ start: Int, _ end: Int) {

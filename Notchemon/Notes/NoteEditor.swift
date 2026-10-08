@@ -6,6 +6,8 @@ extension NSAttributedString.Key {
     static let notesCheckbox = NSAttributedString.Key("NotchemonNotesCheckbox")
     /// On markup laid out at zero width, off the caret's lines.
     static let notesHidden = NSAttributedString.Key("NotchemonNotesHidden")
+    /// On a hidden line prefix drawn as a decoration; the value is a `MarkdownSpan.Block` raw value.
+    static let notesDecoration = NSAttributedString.Key("NotchemonNotesDecoration")
 }
 
 struct MarkdownTheme {
@@ -13,6 +15,17 @@ struct MarkdownTheme {
     // NSParagraphStyle is immutable; only the mutable subclass is unsafe to share.
     nonisolated(unsafe) static let bodyParagraph = paragraphStyle(spacingBefore: 0)
     nonisolated(unsafe) static let headingParagraph = paragraphStyle(spacingBefore: 8)
+    nonisolated(unsafe) static let listParagraph = indented(first: gutter(.bullet), rest: gutter(.bullet))
+    nonisolated(unsafe) static let quoteParagraph = indented(first: gutter(.quote), rest: gutter(.quote))
+
+    /// The room a block's decoration takes before its text.
+    static func gutter(_ block: MarkdownSpan.Block) -> CGFloat {
+        switch block {
+        case .bullet, .task, .doneTask: 22
+        case .quote: 14
+        case .rule: 0
+        }
+    }
 
     var monospaced = false
     var size: CGFloat = 15
@@ -40,6 +53,14 @@ struct MarkdownTheme {
         return paragraph
     }
 
+    private static func indented(first: CGFloat, rest: CGFloat) -> NSParagraphStyle {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.setParagraphStyle(bodyParagraph)
+        paragraph.firstLineHeadIndent = first
+        paragraph.headIndent = rest
+        return paragraph
+    }
+
     /// Restyles the whole lines `range` touches, and the line starting where it
     /// ends: typing Return mid-line edits only the newline, yet the text after
     /// it is now a new line. Markup on the `active` lines shows; elsewhere it
@@ -50,14 +71,11 @@ struct MarkdownTheme {
         let lines = NSUnionRange(text.lineRange(for: range), text.lineRange(for: after))
         storage.setAttributes(baseAttributes, range: lines)
         for span in MarkdownStyler.spans(in: text, range: lines) {
-            apply(span, to: storage)
-            if span.isHidden(outside: active) {
-                storage.addAttribute(.notesHidden, value: true, range: span.range)
-            }
+            apply(span, to: storage, hidden: span.isHidden(outside: active, textLength: text.length))
         }
     }
 
-    private func apply(_ span: MarkdownSpan, to storage: NSTextStorage) {
+    private func apply(_ span: MarkdownSpan, to storage: NSTextStorage, hidden: Bool) {
         let range = span.range
         switch span.kind {
         case .heading(let level):
@@ -83,22 +101,42 @@ struct MarkdownTheme {
                 storage.addAttribute(.link, value: url, range: range)
             }
         case .syntax:
-            storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
-        case .listMarker:
+            if hidden {
+                storage.addAttribute(.notesHidden, value: true, range: range)
+            } else {
+                storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
+            }
+        case .block(let block):
+            apply(block, to: storage, in: range, hidden: hidden)
+        case .number:
             storage.addAttribute(.foregroundColor, value: NotesPalette.accent.withAlphaComponent(0.7), range: range)
         case .checkbox(let checked):
-            storage.addAttributes([
-                .notesCheckbox: checked,
-                .foregroundColor: NotesPalette.accent,
-                .font: NSFont.monospacedSystemFont(ofSize: size - 1, weight: .bold),
-                .cursor: NSCursor.pointingHand,
-            ], range: range)
+            storage.addAttribute(.notesCheckbox, value: checked, range: range)
         case .done:
-            storage.addAttributes([
-                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                .foregroundColor: NSColor.secondaryLabelColor,
-            ], range: range)
+            storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(0.55), range: range)
+        case .quoted:
+            storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: range)
         }
+    }
+
+    /// Off the caret's lines the prefix hides and a decoration takes its
+    /// place. On them the prefix shows, hung in the gutter where it fits, so
+    /// the text barely moves as the caret arrives.
+    private func apply(_ block: MarkdownSpan.Block, to storage: NSTextStorage, in range: NSRange, hidden: Bool) {
+        let paragraphRange = storage.mutableString.paragraphRange(for: range)
+        let gutter = Self.gutter(block)
+        if hidden {
+            storage.addAttributes([.notesHidden: true, .notesDecoration: block.rawValue], range: range)
+            if gutter > 0 {
+                let paragraph = block == .quote ? Self.quoteParagraph : Self.listParagraph
+                storage.addAttribute(.paragraphStyle, value: paragraph, range: paragraphRange)
+            }
+            return
+        }
+        storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
+        guard gutter > 0 else { return }
+        let width = storage.attributedSubstring(from: range).size().width
+        storage.addAttribute(.paragraphStyle, value: Self.indented(first: max(0, gutter - width), rest: gutter), range: paragraphRange)
     }
 
     private func addTrait(_ trait: NSFontDescriptor.SymbolicTraits, to storage: NSTextStorage, in range: NSRange) {
@@ -259,22 +297,63 @@ final class NotesTextView: NSTextView {
         window?.cancelOperation(sender)
     }
 
+    private static let checkboxHitSize: CGFloat = 22
+    private var checkTimer: Timer?
+
     override func mouseDown(with event: NSEvent) {
         if toggleCheckbox(at: convert(event.locationInWindow, from: nil)) { return }
         super.mouseDown(with: event)
     }
 
-    /// Ticks or unticks the checkbox under `point`, as one undoable edit.
+    /// Ticks or unticks the drawn checkbox under `point`, as one undoable edit.
     @discardableResult
     func toggleCheckbox(at point: NSPoint) -> Bool {
-        guard let layoutManager, let textContainer, let storage = textStorage, storage.length > 0 else { return false }
+        guard let box = checkbox(at: point), let storage = textStorage else { return false }
+        let wasChecked = storage.attribute(.notesCheckbox, at: box, effectiveRange: nil) as? Bool == true
+        guard toggleCheckbox(atCharacter: box) else { return false }
+        if !wasChecked { animateCheck(at: box) }
+        return true
+    }
+
+    /// The `[` of the drawn checkbox whose hit target holds `point`.
+    func checkbox(at point: NSPoint) -> Int? {
+        guard let layoutManager = layoutManager as? NotesLayoutManager, let textContainer, let storage = textStorage,
+              storage.length > 0 else { return nil }
         let inContainer = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
-        let glyph = layoutManager.glyphIndex(for: inContainer, in: textContainer, fractionOfDistanceThroughGlyph: nil)
-        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
-        guard glyphRect.contains(inContainer) else { return false }
-        let index = layoutManager.characterIndexForGlyph(at: glyph)
-        guard index < storage.length else { return false }
-        return toggleCheckbox(atCharacter: index)
+        let glyph = layoutManager.glyphIndex(for: inContainer, in: textContainer)
+        let character = min(layoutManager.characterIndexForGlyph(at: glyph), storage.length - 1)
+        let line = storage.mutableString.lineRange(for: NSRange(location: character, length: 0))
+        var found: Int?
+        storage.enumerateAttribute(.notesDecoration, in: line) { value, marker, stop in
+            guard let raw = value as? Int, let block = MarkdownSpan.Block(rawValue: raw), block == .task || block == .doneTask,
+                  let frame = layoutManager.decorationFrame(block, marker: marker) else { return }
+            let slack = (Self.checkboxHitSize - frame.width) / 2
+            guard frame.insetBy(dx: -slack, dy: -slack).contains(inContainer) else { return }
+            found = storage.mutableString.range(of: "[", range: marker).location
+            stop.pointee = true
+        }
+        return found
+    }
+
+    /// Fills the box and grows its tick into place over 120 ms.
+    private func animateCheck(at box: Int) {
+        guard let layoutManager = layoutManager as? NotesLayoutManager else { return }
+        layoutManager.checkAnimation = .init(box: box, start: CACurrentMediaTime())
+        checkTimer?.invalidate()
+        checkTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stepCheckAnimation() }
+        }
+    }
+
+    private func stepCheckAnimation() {
+        needsDisplay = true
+        guard let layoutManager = layoutManager as? NotesLayoutManager, let animation = layoutManager.checkAnimation,
+              CACurrentMediaTime() - animation.start < NotesLayoutManager.checkDuration else {
+            (layoutManager as? NotesLayoutManager)?.checkAnimation = nil
+            checkTimer?.invalidate()
+            checkTimer = nil
+            return
+        }
     }
 
     @discardableResult
