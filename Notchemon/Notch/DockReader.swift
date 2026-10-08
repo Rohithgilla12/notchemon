@@ -15,7 +15,7 @@ enum DockReader {
     static func shelf() throws -> DockShelf? {
         let reading = reading()
         guard reading.listFrame != nil else { throw Unreadable() }
-        return DockGeometry.shelf(reading, screens: NSScreen.screens.map(\.frame))
+        return DockGeometry.shelf(reading, screens: NSScreen.screens.map(\.frame), isFullScreen: FullScreenDetector.isFullScreen(screenFrame:))
     }
 
     static func reading() -> DockReading {
@@ -155,6 +155,8 @@ final class DockWatcher {
             if watcher.shelf?.autoHide?.slide == .shown { watcher.confirmSlide() }
         }
         observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.refresh() }
+        // Entering or leaving a full-screen app switches Spaces.
+        observe(workspace, NSWorkspace.activeSpaceDidChangeNotification) { $0.refresh() }
         observe(.default, NSApplication.didBecomeActiveNotification) { $0.recheckTrust() }
         // Posted when any app's Accessibility grant changes. The new grant
         // can take a moment to show in AXIsProcessTrusted, so check once more after it.

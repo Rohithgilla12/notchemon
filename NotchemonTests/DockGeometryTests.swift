@@ -83,6 +83,16 @@ struct DockGeometryTests {
         #expect(shelf.autoHide == AutoHidingDock(span: 2500...3500, top: -100, slide: .hidden))
     }
 
+    @Test func aDockUnderAFullScreenAppIsNoShelfWhicheverScreenTheNotchIsOn() {
+        let dock = CGRect(x: 2500, y: -290, width: 1000, height: 90)
+        let onExternal = reading(dock, autoHides: true)
+        #expect(DockGeometry.shelf(onExternal, screens: [macBookPro, external], isFullScreen: { $0 == external }) == nil)
+        let besideAFullScreenNotch = DockGeometry.shelf(onExternal, screens: [macBookPro, external], isFullScreen: { $0 == macBookPro })
+        #expect(besideAFullScreenNotch?.screen == external)
+        #expect(DockGeometry.shelf(reading(shownDock), screens: [macBookPro, external], isFullScreen: { $0 == macBookPro }) == nil)
+        #expect(DockGeometry.shelf(reading(shownDock), screens: [macBookPro, external], isFullScreen: { $0 == external }) != nil)
+    }
+
     @Test func anAutoHidingDockFarFromEveryScreensBottomIsNoShelf() {
         let farBelow = CGRect(x: 120, y: -400, width: 1488, height: 90)
         #expect(DockGeometry.shelf(reading(farBelow, autoHides: true), screens: [macBookPro]) == nil)

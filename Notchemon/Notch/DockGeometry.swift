@@ -122,10 +122,15 @@ enum DockGeometry {
     static let revealEdge: CGFloat = 3
 
     /// Nil unless the Dock sits at the bottom of one of `screens` with room
-    /// to walk. A Dock that stays shown is a shelf along its top; an
-    /// auto-hiding one is a walk along the screen's bottom edge that rises
-    /// onto the Dock while it is shown.
-    static func shelf(_ reading: DockReading, screens: [CGRect]) -> DockShelf? {
+    /// to walk and no full-screen app covers that screen. A Dock that stays
+    /// shown is a shelf along its top; an auto-hiding one is a walk along the
+    /// screen's bottom edge that rises onto the Dock while it is shown.
+    static func shelf(_ reading: DockReading, screens: [CGRect], isFullScreen: (CGRect) -> Bool = { _ in false }) -> DockShelf? {
+        guard let shelf = shelf(reading, screens: screens), !isFullScreen(shelf.screen) else { return nil }
+        return shelf
+    }
+
+    private static func shelf(_ reading: DockReading, screens: [CGRect]) -> DockShelf? {
         guard reading.orientation == .bottom, let frame = reading.listFrame else { return nil }
         if reading.autoHides { return autoHidingShelf(frame, screens: screens) }
         guard let screen = screens.first(where: { $0.contains(CGPoint(x: frame.midX, y: frame.midY)) }) else { return nil }
