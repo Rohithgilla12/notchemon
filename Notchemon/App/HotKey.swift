@@ -6,13 +6,15 @@ import Carbon.HIToolbox
 @MainActor
 final class HotKey {
     static let signature = OSType(0x4E_54_43_48)
+    static let notchID: UInt32 = 1
+    static let notesID: UInt32 = 2
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let id: UInt32
     private let action: @MainActor () -> Void
 
-    init?(keyCode: Int, modifiers: Int, id: UInt32 = 1, action: @escaping @MainActor () -> Void) {
+    init?(keyCode: Int, modifiers: Int, id: UInt32, action: @escaping @MainActor () -> Void) {
         self.id = id
         self.action = action
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -45,10 +47,10 @@ final class HotKey {
     }
 
     static func controlOptionN(action: @escaping @MainActor () -> Void) -> HotKey? {
-        HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey, action: action)
+        HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey, id: notchID, action: action)
     }
 
     static func controlOptionCommandN(action: @escaping @MainActor () -> Void) -> HotKey? {
-        HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey | cmdKey, id: 2, action: action)
+        HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey | cmdKey, id: notesID, action: action)
     }
 }

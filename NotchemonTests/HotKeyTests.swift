@@ -19,18 +19,20 @@ struct HotKeyTests {
         return SendEventToEventTarget(event, GetApplicationEventTarget())
     }
 
-    @Test func eachHotkeyFiresOnlyForItsOwnPress() throws {
+    /// ⌃⌥N toggles the notch and ⌃⌥⌘N floating notes; each press reaches only its own action.
+    @Test func theNotchAndNotesHotkeysEachFireOnlyForTheirOwnPress() throws {
+        #expect(HotKey.notchID != HotKey.notesID)
         var fired: [String] = []
         let modifiers = controlKey | optionKey | cmdKey | shiftKey
-        let first = try #require(HotKey(keyCode: kVK_F19, modifiers: modifiers, id: 901) { fired.append("first") })
-        let second = try #require(HotKey(keyCode: kVK_F18, modifiers: modifiers, id: 902) { fired.append("second") })
-        Self.keptAlive += [first, second]
+        let notch = try #require(HotKey(keyCode: kVK_F19, modifiers: modifiers, id: HotKey.notchID) { fired.append("notch") })
+        let notes = try #require(HotKey(keyCode: kVK_F18, modifiers: modifiers, id: HotKey.notesID) { fired.append("notes") })
+        Self.keptAlive += [notch, notes]
 
-        #expect(press(901) == noErr)
-        #expect(fired == ["first"])
-        #expect(press(902) == noErr)
-        #expect(fired == ["first", "second"])
+        #expect(press(HotKey.notchID) == noErr)
+        #expect(fired == ["notch"])
+        #expect(press(HotKey.notesID) == noErr)
+        #expect(fired == ["notch", "notes"])
         #expect(press(999) == OSStatus(eventNotHandledErr))
-        #expect(fired == ["first", "second"])
+        #expect(fired == ["notch", "notes"])
     }
 }
