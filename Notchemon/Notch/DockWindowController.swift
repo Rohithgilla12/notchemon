@@ -53,9 +53,11 @@ final class DockPanel: NSPanel {
 struct DockRootView: View {
     let model: CompanionModel
     let roamer: Roamer
+    let dock: DockWatcher
 
     var body: some View {
-        if model.activeSpecies != nil, let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .dock, expanded: false) {
+        if model.activeSpecies != nil,
+           let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .dock, expanded: false, ground: dock.shelf?.step) {
             SpriteView(pose: pose)
                 .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)

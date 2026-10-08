@@ -21,6 +21,8 @@ struct SpritePose: Equatable {
     var fit = SpriteFit.peek
     var idleStyle = IdleStyle.calm
     var track = SpriteTrack.still(0)
+    /// A shown auto-hiding Dock the creature climbs onto over its span.
+    var ground: GroundStep?
 
     static func == (lhs: SpritePose, rhs: SpritePose) -> Bool {
         lhs.show?.loop.frames.first === rhs.show?.loop.frames.first
@@ -28,7 +30,7 @@ struct SpritePose: Equatable {
             && lhs.show?.bounds == rhs.show?.bounds && lhs.fit == rhs.fit && lhs.idleStyle == rhs.idleStyle
             && lhs.show?.oneShot?.serial == rhs.show?.oneShot?.serial
             && lhs.tucked == rhs.tucked && lhs.flashToken == rhs.flashToken && lhs.fidgets == rhs.fidgets
-            && lhs.track == rhs.track
+            && lhs.track == rhs.track && lhs.ground == rhs.ground
     }
 }
 
@@ -37,8 +39,9 @@ extension SpritePose {
     /// The open panel shows it in its own slot wherever it was wandering.
     /// Closed, it walks or rests along whichever perch it is on and hops
     /// between them. Asleep, it sleeps where it stopped and tucks up behind
-    /// the notch only if that is home.
-    init?(_ snapshot: CompanionSnapshot, roam: RoamPhase, on perch: Perch, expanded: Bool) {
+    /// the notch only if that is home. On a shown auto-hiding Dock it stands
+    /// on the Dock over `ground`'s span and below it elsewhere.
+    init?(_ snapshot: CompanionSnapshot, roam: RoamPhase, on perch: Perch, expanded: Bool, ground: GroundStep? = nil) {
         let track: SpriteTrack
         if expanded {
             guard perch == .topEdge else { return nil }
@@ -63,7 +66,8 @@ extension SpritePose {
             fidgets: snapshot.preferences.fidgets && !tucked && still,
             fit: expanded ? .contain : .peek,
             idleStyle: snapshot.preferences.idleStyle,
-            track: track
+            track: track,
+            ground: ground
         )
     }
 
@@ -105,6 +109,8 @@ final class SpriteHostView: NSView {
     private var fidgetTask: Task<Void, Never>?
     /// The sprite's x offset from the box's centre once any walk ends.
     private var offset: CGFloat = 0
+    /// How high the sprite stands above the box's bottom over time.
+    private var groundPath: GroundPath?
 
     init(pose: SpritePose) {
         self.pose = pose
@@ -124,8 +130,12 @@ final class SpriteHostView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         sprite.bounds = CGRect(origin: .zero, size: bounds.size)
-        sprite.position = CGPoint(x: bounds.midX + offset, y: bounds.midY)
+        sprite.position = restingPosition
         CATransaction.commit()
+    }
+
+    private var restingPosition: CGPoint {
+        CGPoint(x: bounds.midX + offset, y: bounds.midY + (groundPath?.final ?? 0))
     }
 
     override func viewDidChangeBackingProperties() {
@@ -155,6 +165,7 @@ final class SpriteHostView: NSView {
         sprite.idleStyle = next.idleStyle
         sprite.show(next.show, playOneShot: !initial)
         if initial || next.track != previous.track { follow(next.track) }
+        if initial || next.track != previous.track || next.ground != previous.ground { settle(on: next.ground) }
         guard !initial else { return }
         if next.flashToken != previous.flashToken { sprite.flash() }
         if next.fidgets != previous.fidgets { scheduleFidgets() }
@@ -192,7 +203,33 @@ final class SpriteHostView: NSView {
             offset = x
             sprite.add(Self.hop(arriving: true, at: start), forKey: "transfer")
         }
-        sprite.position = CGPoint(x: bounds.midX + offset, y: bounds.midY)
+        sprite.position = restingPosition
+        CATransaction.commit()
+    }
+
+    /// Rises onto or drops off a shown Dock from wherever the sprite stands
+    /// now, then climbs at each edge of it the walk crosses. A separate
+    /// additive animation, so the walk's and a hop's carry on untouched.
+    private func settle(on step: GroundStep?) {
+        let now = Date()
+        let path = GroundPath.plan(pose.track, on: step, from: groundPath?.height(at: now), at: now)
+        groundPath = path
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sprite.removeAnimation(forKey: "ground")
+        if let first = path.keys.first, let last = path.keys.last, last.at > first.at {
+            let span = last.at.timeIntervalSince(first.at)
+            let climb = CAKeyframeAnimation(keyPath: "position.y")
+            climb.values = path.keys.map { $0.height - path.final }
+            climb.keyTimes = path.keys.map { NSNumber(value: $0.at.timeIntervalSince(first.at) / span) }
+            climb.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: path.keys.count - 1)
+            climb.isAdditive = true
+            climb.duration = span
+            climb.beginTime = CACurrentMediaTime() + first.at.timeIntervalSinceNow
+            climb.fillMode = .backwards
+            sprite.add(climb, forKey: "ground")
+        }
+        sprite.position = restingPosition
         CATransaction.commit()
     }
 

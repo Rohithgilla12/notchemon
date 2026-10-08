@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content: NotchRootView(presentation: presentation, model: model, roamer: roamer)
         )
         windowController = controller
-        dockController = DockWindowController(content: DockRootView(model: model, roamer: roamer))
+        dockController = DockWindowController(content: DockRootView(model: model, roamer: roamer, dock: dockWatcher))
         controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
         // Arriving, setting off, or walking up to or past a still cursor moves
         // the creature, not the cursor, so it looks again from where it is.
