@@ -61,9 +61,10 @@ final class DockWatcher {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private let read: @MainActor () -> DockShelf?
     @ObservationIgnored private let trusted: () -> Bool
+    @ObservationIgnored private let after: After
     @ObservationIgnored private var cursor: CGPoint?
-    /// Reads that follow an auto-hiding Dock through one slide.
-    @ObservationIgnored private var confirming: Task<Void, Never>?
+    /// Whether reads are following an auto-hiding Dock through one slide.
+    @ObservationIgnored private var confirming = false
     /// What the cursor last called for that a whole confirm could not see
     /// happen, so moving on without changing that call reads nothing more.
     @ObservationIgnored private var gaveUpOn: Bool?
@@ -76,10 +77,25 @@ final class DockWatcher {
     static let confirmStep: Duration = .milliseconds(100)
     static let confirmReads = 8
 
-    init(read: @escaping @MainActor () -> DockShelf? = DockReader.shelf, trusted: @escaping () -> Bool = AXIsProcessTrusted) {
+    /// Runs work on the main actor once a delay has passed. Tests pass one they move on by hand.
+    typealias After = @MainActor (Duration, @escaping @MainActor @Sendable () -> Void) -> Void
+
+    init(
+        read: @escaping @MainActor () -> DockShelf? = DockReader.shelf,
+        trusted: @escaping () -> Bool = AXIsProcessTrusted,
+        after: @escaping After = DockWatcher.afterSleeping
+    ) {
         self.read = read
         self.trusted = trusted
+        self.after = after
         isTrusted = trusted()
+    }
+
+    static func afterSleeping(_ delay: Duration, _ work: @escaping @MainActor @Sendable () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            work()
+        }
     }
 
     func start(wanted: Bool) {
@@ -99,10 +115,7 @@ final class DockWatcher {
         // can take a moment to show in AXIsProcessTrusted, so check once more after it.
         observe(DistributedNotificationCenter.default(), Notification.Name("com.apple.accessibility.api")) { watcher in
             watcher.recheckTrust()
-            Task { @MainActor [weak watcher] in
-                try? await Task.sleep(for: .milliseconds(500))
-                watcher?.recheckTrust()
-            }
+            watcher.after(.milliseconds(500)) { [weak watcher] in watcher?.recheckTrust() }
         }
         refresh()
     }
@@ -143,26 +156,26 @@ final class DockWatcher {
     /// moved from where it was or agrees with the cursor. A Dock that slid
     /// one way but should now slide back is followed by another confirm.
     private func confirmSlide() {
-        guard confirming == nil, let from = shelf?.autoHide?.slide else { return }
-        confirming = Task { [weak self] in
-            try? await Task.sleep(for: Self.confirmDelay)
-            var settled = false
-            for read in 1...Self.confirmReads {
-                guard let self else { return }
-                refresh()
-                guard let slide = shelf?.autoHide?.slide else { break }
-                settled = slide != .sliding && (slide != from || (slide == .shown) == cursorShowsDock)
-                if settled || read == Self.confirmReads { break }
-                try? await Task.sleep(for: Self.confirmStep)
-            }
-            guard let self else { return }
-            confirming = nil
-            if settled {
-                gaveUpOn = nil
-                if let cursor { cursorMoved(to: cursor) }
-            } else {
-                gaveUpOn = cursorShowsDock
-            }
+        guard !confirming, let from = shelf?.autoHide?.slide else { return }
+        confirming = true
+        after(Self.confirmDelay) { [weak self] in self?.confirmRead(1, from: from) }
+    }
+
+    private func confirmRead(_ read: Int, from: AutoHidingDock.Slide) {
+        refresh()
+        guard let slide = shelf?.autoHide?.slide else { return finishConfirm(settled: false) }
+        let settled = slide != .sliding && (slide != from || (slide == .shown) == cursorShowsDock)
+        if settled || read == Self.confirmReads { return finishConfirm(settled: settled) }
+        after(Self.confirmStep) { [weak self] in self?.confirmRead(read + 1, from: from) }
+    }
+
+    private func finishConfirm(settled: Bool) {
+        confirming = false
+        if settled {
+            gaveUpOn = nil
+            if let cursor { cursorMoved(to: cursor) }
+        } else {
+            gaveUpOn = cursorShowsDock
         }
     }
 
