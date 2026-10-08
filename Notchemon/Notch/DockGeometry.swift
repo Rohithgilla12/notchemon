@@ -118,6 +118,30 @@ struct DockShelf: Sendable, Equatable {
     }
 }
 
+/// What one read of the Dock found.
+enum DockRead: Sendable, Equatable {
+    enum Absence: Sendable, Equatable {
+        /// The Dock is on the left or right, which the creature cannot walk.
+        case sideDock
+        /// The Dock is on no screen or leaves less than `DockGeometry.minimumWalk`.
+        case noRoom
+        /// A full-screen app covers the Dock's screen.
+        case fullScreen
+    }
+
+    case shelf(DockShelf)
+    /// The Dock answered but offers nothing to walk on.
+    case noShelf(Absence)
+    /// Accessibility gave no frame for the Dock: the process is not trusted,
+    /// the read timed out, or the Dock was not running.
+    case unreadable
+
+    var shelf: DockShelf? {
+        if case .shelf(let shelf) = self { return shelf }
+        return nil
+    }
+}
+
 enum DockGeometry {
     /// Half the creature's collapsed width, so it never hangs off the Dock's ends.
     static let edgeInset: CGFloat = NotchGeometry.peekHeight / 2
@@ -132,18 +156,24 @@ enum DockGeometry {
     /// How close to the screen's bottom the cursor comes before an auto-hiding Dock slides up.
     static let revealEdge: CGFloat = 3
 
-    /// Nil unless the Dock sits at the bottom of one of `screens` with room
-    /// to walk and no full-screen app covers that screen. A Dock that stays
-    /// shown is a shelf along its top; an auto-hiding one is a walk along the
-    /// screen's bottom edge that rises onto the Dock while it is shown.
-    static func shelf(_ reading: DockReading, screens: [CGRect], isFullScreen: (CGRect) -> Bool = { _ in false }) -> DockShelf? {
-        guard let shelf = shelf(reading, screens: screens), !isFullScreen(shelf.screen) else { return nil }
-        return shelf
+    /// A shelf when the Dock sits at the bottom of one of `screens` with room
+    /// to walk and no full-screen app covers that screen, else why not. A
+    /// Dock that stays shown is a shelf along its top; an auto-hiding one is
+    /// a walk along the screen's bottom edge that rises onto the Dock while
+    /// it is shown.
+    static func read(_ reading: DockReading, screens: [CGRect], isFullScreen: (CGRect) -> Bool = { _ in false }) -> DockRead {
+        guard let frame = reading.listFrame else { return .unreadable }
+        guard reading.orientation == .bottom else { return .noShelf(.sideDock) }
+        let shelf = reading.autoHides ? autoHidingShelf(frame, screens: screens) : shownShelf(frame, screens: screens)
+        guard let shelf else { return .noShelf(.noRoom) }
+        return isFullScreen(shelf.screen) ? .noShelf(.fullScreen) : .shelf(shelf)
     }
 
-    private static func shelf(_ reading: DockReading, screens: [CGRect]) -> DockShelf? {
-        guard reading.orientation == .bottom, let frame = reading.listFrame else { return nil }
-        if reading.autoHides { return autoHidingShelf(frame, screens: screens) }
+    static func shelf(_ reading: DockReading, screens: [CGRect], isFullScreen: (CGRect) -> Bool = { _ in false }) -> DockShelf? {
+        read(reading, screens: screens, isFullScreen: isFullScreen).shelf
+    }
+
+    private static func shownShelf(_ frame: CGRect, screens: [CGRect]) -> DockShelf? {
         guard let screen = screens.first(where: { $0.contains(CGPoint(x: frame.midX, y: frame.midY)) }) else { return nil }
         return shelf(on: screen, ground: frame.maxY, walkable: (frame.minX + edgeInset)...(frame.maxX - edgeInset))
     }

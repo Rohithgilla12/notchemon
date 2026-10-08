@@ -7,15 +7,8 @@ import Observation
 enum DockReader {
     static let bundleIdentifier = "com.apple.dock"
 
-    /// Accessibility gave no frame for the Dock: it timed out, was refused,
-    /// or the Dock was not running.
-    struct Unreadable: Error {}
-
-    /// The shelf, or nil when the Dock answered but offers none.
-    static func shelf() throws -> DockShelf? {
-        let reading = reading()
-        guard reading.listFrame != nil else { throw Unreadable() }
-        return DockGeometry.shelf(reading, screens: NSScreen.screens.map(\.frame), isFullScreen: FullScreenDetector.isFullScreen(screenFrame:))
+    static func read() -> DockRead {
+        DockGeometry.read(reading(), screens: NSScreen.screens.map(\.frame), isFullScreen: FullScreenDetector.isFullScreen(screenFrame:))
     }
 
     static func reading() -> DockReading {
@@ -84,20 +77,29 @@ struct DockReadBudget {
 /// Keeps the Dock's shelf current while the wander setting includes the
 /// Dock. It reads only when asked or when something that moves, resizes,
 /// shows, or hides the Dock happens, and retries a read the Dock did not
-/// answer at most `retryDelays.count` times. Nothing runs between those.
+/// answer at most `retryDelays.count` times. Nothing runs between those,
+/// except a slow check for Accessibility while that is wanted and missing.
 @MainActor
 @Observable
 final class DockWatcher {
-    private(set) var shelf: DockShelf?
+    /// The last read while the Dock was wanted and the process trusted, else nil.
+    private(set) var lastRead: DockRead?
     private(set) var isTrusted: Bool
     @ObservationIgnored var onChange: (() -> Void)?
 
+    var shelf: DockShelf? { lastRead?.shelf }
+
     @ObservationIgnored private var wanted = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
-    @ObservationIgnored private let read: @MainActor () throws -> DockShelf?
+    @ObservationIgnored private let read: @MainActor () -> DockRead
     @ObservationIgnored private let trusted: () -> Bool
     @ObservationIgnored private let after: After
     @ObservationIgnored private var cursor: CGPoint?
+    @ObservationIgnored private var trustCheckDue = false
+    /// Bumped to disown a check already due.
+    @ObservationIgnored private var trustCheckSerial = 0
+    /// Quick trust checks left since the user last asked for Accessibility.
+    @ObservationIgnored private var quickTrustChecksLeft = 0
     /// Whether reads are following an auto-hiding Dock through one slide.
     @ObservationIgnored private var confirming = false
     /// What the cursor last called for that a whole confirm could not see
@@ -118,12 +120,20 @@ final class DockWatcher {
     /// app launch can keep the Dock too busy to answer, and a relaunched Dock
     /// takes a moment before it can.
     static let retryDelays: [Duration] = [.seconds(1), .seconds(3)]
+    /// An Accessibility grant made in System Settings reaches a menu-bar app
+    /// through no notification it can count on, so while the Dock is wanted
+    /// and the process is untrusted, trust is checked this often. For
+    /// `quickTrustChecks` checks after the user asks for access it is
+    /// checked every `quickTrustCheck` instead.
+    static let trustCheck: Duration = .seconds(30)
+    static let quickTrustCheck: Duration = .seconds(2)
+    static let quickTrustChecks = 60
 
     /// Runs work on the main actor once a delay has passed. Tests pass one they move on by hand.
     typealias After = @MainActor (Duration, @escaping @MainActor @Sendable () -> Void) -> Void
 
     init(
-        read: @escaping @MainActor () throws -> DockShelf? = DockReader.shelf,
+        read: @escaping @MainActor () -> DockRead = DockReader.read,
         trusted: @escaping () -> Bool = AXIsProcessTrusted,
         after: @escaping After = DockWatcher.afterSleeping
     ) {
@@ -135,7 +145,9 @@ final class DockWatcher {
 
     static func afterSleeping(_ delay: Duration, _ work: @escaping @MainActor @Sendable () -> Void) {
         Task { @MainActor in
-            try? await Task.sleep(for: delay)
+            // A tenth of the delay lets the system batch long timers, and is
+            // within what a Dock slide or a trust check can bear.
+            try? await Task.sleep(for: delay, tolerance: delay / 10)
             work()
         }
     }
@@ -177,20 +189,46 @@ final class DockWatcher {
     /// but still a round trip to the Dock, so callers ask only at moments
     /// the creature is on it or heading there.
     func refresh() {
-        var next: DockShelf?
-        if wanted && isTrusted {
-            do {
-                next = try read()
-                retriesSpent = nil
-            } catch {
-                readAgain()
-            }
+        var next: DockRead?
+        if wanted && isTrusted { next = read() }
+        if next == .unreadable {
+            readAgain()
         } else {
             retriesSpent = nil
         }
-        guard next != shelf else { return }
-        shelf = next
+        checkTrustLater()
+        guard next != lastRead else { return }
+        lastRead = next
         onChange?()
+    }
+
+    /// Checks trust once `trustCheck` or `quickTrustCheck` has passed, while
+    /// the Dock is wanted and the process untrusted, unless a check is
+    /// already due. Nothing is scheduled otherwise.
+    private func checkTrustLater() {
+        guard wanted, !isTrusted, !trustCheckDue else { return }
+        trustCheckDue = true
+        let serial = trustCheckSerial
+        let quick = quickTrustChecksLeft > 0
+        if quick { quickTrustChecksLeft -= 1 }
+        after(quick ? Self.quickTrustCheck : Self.trustCheck) { [weak self] in
+            guard let self, serial == trustCheckSerial else { return }
+            trustCheckDue = false
+            guard wanted, !isTrusted else { return }
+            recheckTrust()
+            checkTrustLater()
+        }
+    }
+
+    /// The user has just asked macOS for Accessibility, so the grant is
+    /// likely to come within the next couple of minutes. A slow check
+    /// already due is dropped so the quick ones start now.
+    func accessRequested() {
+        trustCheckSerial += 1
+        trustCheckDue = false
+        quickTrustChecksLeft = Self.quickTrustChecks
+        recheckTrust()
+        checkTrustLater()
     }
 
     /// Reads the Dock once a retry delay has passed, unless a retry is

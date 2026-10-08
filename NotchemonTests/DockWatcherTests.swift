@@ -38,35 +38,43 @@ struct DockWatcherTests {
     /// Hands out the Dock as it would read at each successive read, then keeps the last.
     @MainActor
     final class Dock {
-        enum Answer {
-            case shelf(DockShelf?)
-            case unreadable
-        }
-
-        var script: [Answer]
+        var script: [DockRead]
         var reads = 0
 
         init(_ shelves: DockShelf?...) {
-            script = shelves.map(Answer.shelf)
+            script = shelves.map { $0.map(DockRead.shelf) ?? .noShelf(.noRoom) }
         }
 
-        init(answers: Answer...) {
+        init(answers: DockRead...) {
             script = answers
         }
 
-        func read() throws -> DockShelf? {
+        func read() -> DockRead {
             reads += 1
-            switch script.count > 1 ? script.removeFirst() : script.first ?? .shelf(nil) {
-            case .shelf(let shelf): return shelf
-            case .unreadable: throw DockReader.Unreadable()
-            }
+            return script.count > 1 ? script.removeFirst() : script.first ?? .noShelf(.noRoom)
+        }
+    }
+
+    /// Answers whether the process is trusted and counts how often it was asked.
+    @MainActor
+    final class Trust {
+        var granted: Bool
+        var checks = 0
+
+        init(_ granted: Bool) {
+            self.granted = granted
+        }
+
+        func check() -> Bool {
+            checks += 1
+            return granted
         }
     }
 
     let timers = ManualTimers()
 
-    func watcher(_ dock: Dock) -> DockWatcher {
-        let watcher = DockWatcher(read: dock.read, trusted: { true }, after: timers.after)
+    func watcher(_ dock: Dock, trust: Trust = Trust(true)) -> DockWatcher {
+        let watcher = DockWatcher(read: dock.read, trusted: trust.check, after: timers.after)
         watcher.setWanted(true)
         return watcher
     }
@@ -180,6 +188,88 @@ struct DockWatcherTests {
         #expect(dock.reads == 1)
     }
 
+    @Test func whileUntrustedAndWantedTrustIsCheckedEveryThirtySecondsAndNothingIsRead() {
+        let dock = Dock(Self.hidden)
+        let trust = Trust(false)
+        let watcher = watcher(dock, trust: trust)
+        #expect(watcher.lastRead == nil)
+        #expect(dock.reads == 0)
+        let before = trust.checks
+        timers.advance(by: DockWatcher.trustCheck - .seconds(1))
+        #expect(trust.checks == before)
+        timers.advance(by: .seconds(1))
+        #expect(trust.checks == before + 1)
+        timers.advance(by: DockWatcher.trustCheck * 3)
+        #expect(trust.checks == before + 4)
+        #expect(dock.reads == 0)
+    }
+
+    @Test func aGrantReadsTheDockAtOnceAndStopsTheChecks() {
+        let dock = Dock(Self.hidden)
+        let trust = Trust(false)
+        let watcher = watcher(dock, trust: trust)
+        var changes = 0
+        watcher.onChange = { changes += 1 }
+        trust.granted = true
+        timers.advance(by: DockWatcher.trustCheck)
+        #expect(watcher.isTrusted)
+        #expect(dock.reads == 1)
+        #expect(watcher.shelf == Self.hidden)
+        #expect(changes == 1)
+        let after = trust.checks
+        timers.advance(by: .seconds(3600))
+        #expect(trust.checks == after)
+    }
+
+    @Test func noLongerWantingTheDockStopsTheChecks() {
+        let trust = Trust(false)
+        let watcher = watcher(Dock(Self.hidden), trust: trust)
+        timers.advance(by: DockWatcher.trustCheck)
+        let before = trust.checks
+        watcher.setWanted(false)
+        timers.advance(by: .seconds(3600))
+        #expect(trust.checks == before)
+    }
+
+    @Test func whileTrustedNoChecksRun() {
+        let trust = Trust(true)
+        _ = watcher(Dock(Self.hidden), trust: trust)
+        let before = trust.checks
+        timers.advance(by: .seconds(3600))
+        #expect(trust.checks == before)
+    }
+
+    @Test func askingForAccessChecksEveryTwoSecondsForTwoMinutesThenEveryThirty() {
+        let trust = Trust(false)
+        let watcher = watcher(Dock(Self.hidden), trust: trust)
+        timers.advance(by: .seconds(10))
+        watcher.accessRequested()
+        let before = trust.checks
+        timers.advance(by: DockWatcher.quickTrustCheck)
+        #expect(trust.checks == before + 1)
+        timers.advance(by: DockWatcher.quickTrustCheck * (DockWatcher.quickTrustChecks - 1))
+        #expect(trust.checks == before + DockWatcher.quickTrustChecks)
+        timers.advance(by: DockWatcher.trustCheck - .seconds(1))
+        #expect(trust.checks == before + DockWatcher.quickTrustChecks)
+        timers.advance(by: .seconds(1))
+        #expect(trust.checks == before + DockWatcher.quickTrustChecks + 1)
+    }
+
+    @Test func aGrantDuringTheQuickChecksReadsTheDockAndEndsThem() {
+        let dock = Dock(Self.shown)
+        let trust = Trust(false)
+        let watcher = watcher(dock, trust: trust)
+        watcher.accessRequested()
+        timers.advance(by: DockWatcher.quickTrustCheck * 5)
+        trust.granted = true
+        timers.advance(by: DockWatcher.quickTrustCheck)
+        #expect(watcher.shelf == Self.shown)
+        let after = trust.checks
+        timers.advance(by: .seconds(3600))
+        #expect(trust.checks == after)
+        #expect(dock.reads == 1)
+    }
+
     @Test func aRetryDueAfterTheDockIsNoLongerWantedReadsNothing() {
         let dock = Dock(answers: .unreadable)
         let watcher = watcher(dock)
@@ -198,7 +288,7 @@ struct DockWatcherTests {
     }
 
     @Test func theDockLaunchingIsReadAtOnceAndAgainASecondLater() {
-        let dock = Dock(answers: .shelf(nil), .shelf(nil), .shelf(Self.hidden))
+        let dock = Dock(answers: .noShelf(.noRoom), .noShelf(.noRoom), .shelf(Self.hidden))
         let watcher = watcher(dock)
         watcher.applicationLaunched(bundleIdentifier: DockReader.bundleIdentifier)
         #expect(dock.reads == 2)

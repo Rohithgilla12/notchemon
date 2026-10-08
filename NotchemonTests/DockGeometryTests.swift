@@ -178,3 +178,15 @@ struct DockGeometryTests {
         #expect(shown.cursorShowsDock(CGPoint(x: 60, y: 1)) == true)
     }
 }
+
+extension DockGeometryTests {
+    @Test func aReadSaysWhyThereIsNoShelf() {
+        #expect(DockGeometry.read(reading(nil), screens: [macBookPro]) == .unreadable)
+        #expect(DockGeometry.read(reading(shownDock, orientation: .left), screens: [macBookPro]) == .noShelf(.sideDock))
+        #expect(DockGeometry.read(reading(shownDock), screens: []) == .noShelf(.noRoom))
+        let narrow = CGRect(x: 800, y: 0, width: 100, height: 90)
+        #expect(DockGeometry.read(reading(narrow), screens: [macBookPro]) == .noShelf(.noRoom))
+        #expect(DockGeometry.read(reading(shownDock), screens: [macBookPro], isFullScreen: { _ in true }) == .noShelf(.fullScreen))
+        #expect(DockGeometry.read(reading(shownDock), screens: [macBookPro]).shelf?.ground == 90)
+    }
+}
