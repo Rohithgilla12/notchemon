@@ -221,7 +221,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Swift 6 rejects reading the kAXTrustedCheckOptionPrompt global as
         // shared mutable state, so its value is spelled out.
         _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-        dockWatcher.recheckTrust()
+        dockWatcher.accessRequested()
+    }
+
+    /// macOS ties an Accessibility grant to the signature of the build that
+    /// was granted, so a grant to an older or development build shows as on
+    /// yet does not apply to this one. The app cannot fix that; it can only say so.
+    func explainStaleDockAccess() {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Accessibility is on, but Notchemon still won't walk the Dock?"
+        alert.informativeText = "macOS keeps an Accessibility grant for the exact build it was made for. A grant to an older or development build of Notchemon shows as on in System Settings but does not apply to this one.\n\nIn Privacy & Security > Accessibility, select Notchemon, remove it with the − button, then add it again or choose Allow Dock Walking… once more."
+        alert.addButton(withTitle: "Open Accessibility Settings")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func openNotesFolder() {

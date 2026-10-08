@@ -40,8 +40,10 @@ struct MenuBarContent: View {
                 Text("Top Edge and Dock").tag(WanderRange.topEdgeAndDock)
             }
             .pickerStyle(.inline)
-            if model.snapshot.preferences.wander.includesDock, !app.dockWatcher.isTrusted {
+            Text(DockWalkingStatus.line(wanted: wantsDock, trusted: app.dockWatcher.isTrusted, read: app.dockWatcher.lastRead))
+            if wantsDock, !app.dockWatcher.isTrusted {
                 Button("Allow Dock Walking…", action: app.requestDockAccess)
+                Button("Accessibility shows it on but it still won't walk?", action: app.explainStaleDockAccess)
             }
             Divider()
             Toggle("Hop When Cursor Comes Near", isOn: preference(\.hopsOnApproach))
@@ -60,6 +62,8 @@ struct MenuBarContent: View {
         Button("Quit Notchemon") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
     }
+
+    private var wantsDock: Bool { model.snapshot.preferences.wander.includesDock }
 
     private func preference<Value>(_ keyPath: WritableKeyPath<Preferences, Value>) -> Binding<Value> {
         Binding(
