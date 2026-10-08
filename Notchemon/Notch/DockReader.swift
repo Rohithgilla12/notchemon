@@ -27,19 +27,21 @@ enum DockReader {
         return DockReading(listFrame: listFrame(), orientation: orientation, autoHides: defaults?.bool(forKey: "autohide") ?? false)
     }
 
+    /// At most this many of the Dock's top-level elements are checked for its icon list.
+    static let childrenChecked = 4
+
     /// The Dock's icon list, which spans its whole visible shelf.
     private static func listFrame() -> CGRect? {
         guard AXIsProcessTrusted(),
               let dock = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first,
               let primary = NSScreen.screens.first
         else { return nil }
+        let budget = DockReadBudget(startingAt: ProcessInfo.processInfo.systemUptime)
         let app = AXUIElementCreateApplication(dock.processIdentifier)
-        // A busy Dock would otherwise hold the main thread for the default six seconds.
-        AXUIElementSetMessagingTimeout(app, 0.25)
-        guard let children: [AXUIElement] = attribute(kAXChildrenAttribute, of: app),
-              let list = children.first(where: { (attribute(kAXRoleAttribute, of: $0) as String?) == kAXListRole }),
-              let position: AXValue = attribute(kAXPositionAttribute, of: list),
-              let size: AXValue = attribute(kAXSizeAttribute, of: list)
+        guard let children: [AXUIElement] = attribute(kAXChildrenAttribute, of: app, within: budget),
+              let list = children.prefix(childrenChecked).first(where: { (attribute(kAXRoleAttribute, of: $0, within: budget) as String?) == kAXListRole }),
+              let position: AXValue = attribute(kAXPositionAttribute, of: list, within: budget),
+              let size: AXValue = attribute(kAXSizeAttribute, of: list, within: budget)
         else { return nil }
         var origin = CGPoint.zero
         var extent = CGSize.zero
@@ -47,10 +49,35 @@ enum DockReader {
         return DockGeometry.appKitFrame(axPosition: origin, size: extent, primaryHeight: primary.frame.height)
     }
 
-    private static func attribute<Value>(_ name: String, of element: AXUIElement) -> Value? {
+    private static func attribute<Value>(_ name: String, of element: AXUIElement, within budget: DockReadBudget) -> Value? {
+        guard let timeout = budget.timeout(at: ProcessInfo.processInfo.systemUptime) else { return nil }
+        // A timeout holds only for the element it is set on, and the elements
+        // the Dock hands out start at the six-second default.
+        AXUIElementSetMessagingTimeout(element, timeout)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
         return value as? Value
+    }
+}
+
+/// Bounds how long one read of the Dock can hold the main thread, however
+/// many Accessibility calls it makes or how slowly a busy Dock answers them.
+struct DockReadBudget {
+    static let total: TimeInterval = 0.5
+    /// A timeout of zero means the six-second default, so a call is not
+    /// started with less than this left.
+    static let shortestCall: TimeInterval = 0.01
+
+    let deadline: TimeInterval
+
+    init(startingAt now: TimeInterval) {
+        deadline = now + Self.total
+    }
+
+    /// How long the next call may wait, or nil once the read is out of time.
+    func timeout(at now: TimeInterval) -> Float? {
+        let left = deadline - now
+        return left >= Self.shortestCall ? Float(left) : nil
     }
 }
 
