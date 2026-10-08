@@ -14,7 +14,7 @@ struct GroundPath: Equatable {
 
     /// How long a rise onto the Dock or a drop off it takes, close to the
     /// Dock's own slide so the creature keeps pace with it.
-    static let climb: TimeInterval = 0.3
+    static let climb: TimeInterval = 0.25
 
     /// Where the sprite stands once every key has played.
     var final: Double { keys[keys.count - 1].height }

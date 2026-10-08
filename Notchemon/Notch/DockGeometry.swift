@@ -27,11 +27,22 @@ struct GroundStep: Sendable, Equatable {
 /// An auto-hiding Dock, which the creature walks under along the screen's
 /// bottom edge and climbs onto while it is shown.
 struct AutoHidingDock: Sendable, Equatable {
+    enum Slide: Sendable, Equatable {
+        /// Wholly below the screen.
+        case hidden
+        /// Part way in or out. It takes about a quarter of a second either way.
+        case sliding
+        /// Wholly on the screen.
+        case shown
+    }
+
     /// The icon list's left and right edges in global x.
     let span: ClosedRange<CGFloat>
     /// The list's top edge in global y once it has slid fully into view.
     let top: CGFloat
-    let revealed: Bool
+    let slide: Slide
+
+    var revealed: Bool { slide == .shown }
 }
 
 /// Where the creature walks along the bottom of a screen with a bottom Dock.
@@ -85,6 +96,15 @@ struct DockShelf: Sendable, Equatable {
         CGPoint(x: centreX + x, y: ground + (step?.height(at: x) ?? 0) + Self.spriteSide / 2)
     }
 
+    /// Whether a cursor at `point` should have an auto-hiding Dock shown,
+    /// or nil for a Dock that stays shown. It slides up once the cursor
+    /// reaches the screen's bottom edge and back down once it leaves the Dock.
+    func cursorShowsDock(_ point: CGPoint) -> Bool? {
+        guard let autoHide else { return nil }
+        guard (screen.minX..<screen.maxX).contains(point.x), point.y >= screen.minY else { return false }
+        if point.y <= screen.minY + DockGeometry.revealEdge { return true }
+        return autoHide.slide != .hidden && autoHide.span.contains(point.x) && point.y <= autoHide.top
+    }
 }
 
 enum DockGeometry {
@@ -94,6 +114,12 @@ enum DockGeometry {
     static let screenMargin: CGFloat = 8
     /// A Dock with less room than this to walk is not worth stepping onto.
     static let minimumWalk: CGFloat = 80
+    /// How far above the screen's bottom a shown auto-hiding Dock's list
+    /// sits. Hidden, it reports only its size, so its shown top is taken
+    /// from this, as measured on macOS 27.
+    static let shownLift: CGFloat = 10
+    /// How close to the screen's bottom the cursor comes before an auto-hiding Dock slides up.
+    static let revealEdge: CGFloat = 3
 
     /// Nil unless the Dock sits at the bottom of one of `screens` with room
     /// to walk. A Dock that stays shown is a shelf along its top; an
@@ -107,15 +133,16 @@ enum DockGeometry {
     }
 
     /// A hidden Dock lies just below its screen, so the screen is the one
-    /// whose bottom edge the list's frame straddles or touches.
+    /// whose bottom edge the list's frame lies within a Dock's height of.
     private static func autoHidingShelf(_ frame: CGRect, screens: [CGRect]) -> DockShelf? {
         let screen = screens.first {
-            (frame.minY...frame.maxY).contains($0.minY) && ($0.minX..<$0.maxX).contains(frame.midX)
+            frame.maxY >= $0.minY && frame.minY <= $0.minY + frame.height && ($0.minX..<$0.maxX).contains(frame.midX)
         }
         guard let screen else { return nil }
+        let slide: AutoHidingDock.Slide = frame.minY >= screen.minY ? .shown : frame.maxY <= screen.minY ? .hidden : .sliding
+        let top = slide == .shown ? frame.maxY : screen.minY + shownLift + frame.height
+        let dock = AutoHidingDock(span: frame.minX...frame.maxX, top: top, slide: slide)
         let margin = edgeInset + screenMargin
-        // More than half in view counts as shown, so a read that lands mid-slide settles on the nearer end.
-        let dock = AutoHidingDock(span: frame.minX...frame.maxX, top: screen.minY + frame.height, revealed: frame.midY >= screen.minY)
         return shelf(on: screen, ground: screen.minY, walkable: (screen.minX + margin)...(screen.maxX - margin), autoHide: dock)
     }
 

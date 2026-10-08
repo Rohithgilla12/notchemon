@@ -6,7 +6,7 @@ import Testing
 struct GroundPathTests {
     let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     /// This Mac's auto-hiding Dock shown, measured from the middle of the walk along the screen's bottom.
-    let shown = GroundStep(span: -744...744, height: 90)
+    let shown = GroundStep(span: -744...744, height: 100)
     let climb = GroundPath.climb
 
     func heights(_ path: GroundPath) -> [Double] { path.keys.map(\.height) }
@@ -20,10 +20,10 @@ struct GroundPathTests {
 
     @Test func aRevealRaisesACreatureInsideTheSpanOntoTheDockOverOneClimb() {
         let path = GroundPath.plan(.still(300), on: shown, from: 0, at: t0)
-        #expect(heights(path) == [0, 90])
+        #expect(heights(path) == [0, 100])
         #expect(times(path) == [0, climb])
-        #expect(path.height(at: t0 + climb / 2) == 45)
-        #expect(path.height(at: t0 + 5) == 90)
+        #expect(path.height(at: t0 + climb / 2) == 50)
+        #expect(path.height(at: t0 + 5) == 100)
     }
 
     @Test func aRevealLeavesACreatureOutsideTheSpanOnTheFloor() {
@@ -32,16 +32,16 @@ struct GroundPathTests {
     }
 
     @Test func aHideDropsItBackToTheFloorFromWhereverItStands() {
-        let path = GroundPath.plan(.still(300), on: nil, from: 90, at: t0)
-        #expect(heights(path) == [90, 0])
+        let path = GroundPath.plan(.still(300), on: nil, from: 100, at: t0)
+        #expect(heights(path) == [100, 0])
         #expect(times(path) == [0, climb])
-        let midRise = GroundPath.plan(.still(300), on: nil, from: 45, at: t0)
-        #expect(heights(midRise) == [45, 0])
+        let midRise = GroundPath.plan(.still(300), on: nil, from: 50, at: t0)
+        #expect(heights(midRise) == [50, 0])
     }
 
     @Test func aViewMadeOnAShownDockStartsOnItWithoutClimbing() {
         let path = GroundPath.plan(.arrive(300, start: t0), on: shown, from: nil, at: t0)
-        #expect(heights(path) == [90])
+        #expect(heights(path) == [100])
     }
 
     @Test func aRevealMidWalkRisesNowAndDropsAsTheWalkLeavesTheSpan() {
@@ -49,9 +49,9 @@ struct GroundPathTests {
         let now = t0 + 10
         let path = GroundPath.plan(.walk(walk), on: shown, from: 0, at: now)
         let leaves = (744.0 + 800) / 35
-        #expect(heights(path) == [0, 90, 90, 0])
+        #expect(heights(path) == [0, 100, 100, 0])
         #expect(times(path) == [10, 10 + climb, leaves - climb / 2, leaves + climb / 2].map { ($0 * 1000).rounded() / 1000 })
-        #expect(path.height(at: t0 + leaves) == 45)
+        #expect(path.height(at: t0 + leaves) == 50)
         #expect(path.final == 0)
     }
 
@@ -61,7 +61,7 @@ struct GroundPathTests {
         let path = GroundPath.plan(.walk(walk), on: shown, from: 0, at: t0)
         let enters = 56.0 / 35
         let leaves = (800.0 + 744) / 35
-        #expect(heights(path) == [0, 0, 90, 90, 0])
+        #expect(heights(path) == [0, 0, 100, 100, 0])
         #expect(times(path) == [0, enters - climb / 2, enters + climb / 2, leaves - climb / 2, leaves + climb / 2].map { ($0 * 1000).rounded() / 1000 })
     }
 
@@ -69,7 +69,7 @@ struct GroundPathTests {
         let below = RoamWalk(on: .dock, from: 760, to: 830, start: t0, speed: 35)
         #expect(heights(GroundPath.plan(.walk(below), on: shown, from: 0, at: t0)) == [0])
         let along = RoamWalk(on: .dock, from: -500, to: 500, start: t0, speed: 35)
-        #expect(heights(GroundPath.plan(.walk(along), on: shown, from: 90, at: t0)) == [90])
+        #expect(heights(GroundPath.plan(.walk(along), on: shown, from: 100, at: t0)) == [100])
     }
 
     @Test func aDockPoseChangesWithTheShownDock() throws {
@@ -98,7 +98,7 @@ struct GroundPathTests {
         #expect(after === stride)
         let rise = try #require(sprite.animation(forKey: "ground") as? CAKeyframeAnimation)
         #expect(rise.isAdditive)
-        #expect(rise.values as? [Double] == [0, 90, 90, 0])
+        #expect(rise.values as? [Double] == [0, 100, 100, 0])
         #expect(sprite.position.y == 22)
     }
 }
