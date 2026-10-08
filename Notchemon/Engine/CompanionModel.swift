@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import Observation
+import SwiftUI
 
 /// Main-actor mirror of the engine's latest snapshot, plus the intents views
 /// send back. Views read this; they never talk to the engine directly.
@@ -20,6 +21,7 @@ final class CompanionModel {
     @ObservationIgnored private var lastSentFacing: Facing??
     @ObservationIgnored private var proximity: CursorProximity?
     @ObservationIgnored private var lastHop = Date.distantPast
+    @ObservationIgnored private var animatesNextStashChange = false
 
     init(engine: CreatureEngine) {
         self.engine = engine
@@ -39,7 +41,12 @@ final class CompanionModel {
         if let sound = next.focusSound(after: snapshot), let name = sound.systemSoundName {
             NSSound(named: name)?.play()
         }
-        snapshot = next
+        if animatesNextStashChange, next.stash != snapshot.stash {
+            animatesNextStashChange = false
+            withAnimation(.easeOut(duration: 0.15)) { snapshot = next }
+        } else {
+            snapshot = next
+        }
         if preferencesChanged { onPreferencesChanged?(next.preferences) }
         onSnapshot?()
         if isChoosing(next.phase), !wasChoosing {
@@ -109,7 +116,25 @@ final class CompanionModel {
     }
 
     func removeFromStash(_ url: URL) {
-        Task { await engine.removeFromStash(url) }
+        changeStash(animated: true) { await self.engine.removeFromStash(url) }
+    }
+
+    func clearStash(animated: Bool) {
+        changeStash(animated: animated) { await self.engine.clearStash() }
+    }
+
+    func undoClearStash(animated: Bool) {
+        changeStash(animated: animated) { await self.engine.undoClearStash() }
+    }
+
+    /// The change arrives later as a published snapshot. A request that
+    /// changes nothing publishes no stash change, so it must drop the flag
+    /// itself or the next unrelated change would animate.
+    private func changeStash(animated: Bool, _ change: @escaping @MainActor () async -> Bool) {
+        animatesNextStashChange = animated
+        Task {
+            if await !change() { animatesNextStashChange = false }
+        }
     }
 
     /// Forwards the cursor only when the facing it implies changes, so mouse

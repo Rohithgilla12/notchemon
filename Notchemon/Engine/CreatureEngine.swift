@@ -15,6 +15,7 @@ enum Banner: Sendable, Equatable {
     /// `portrait` is the new form's large art for the reveal, when it loaded.
     case evolved(into: String, portrait: CGImage?)
     case stashFull
+    case stashCleared(undo: [Data])
 }
 
 struct StarterOption: Sendable, Identifiable {
@@ -120,6 +121,7 @@ actor CreatureEngine {
 
     static let celebrationLength: Duration = .seconds(2)
     static let bannerLength: Duration = .seconds(4)
+    static let undoLength: Duration = .seconds(5)
     static let retryInterval: Duration = .seconds(30)
 
     init(
@@ -308,11 +310,11 @@ actor CreatureEngine {
         await sample()
     }
 
-    private func showBanner(_ banner: Banner) {
+    private func showBanner(_ banner: Banner, for length: Duration = CreatureEngine.bannerLength) {
         snapshot.banner = banner
         bannerTask?.cancel()
         bannerTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.bannerLength)
+            try? await Task.sleep(for: length)
             guard !Task.isCancelled else { return }
             await self?.clearBanner()
         }
@@ -341,12 +343,48 @@ actor CreatureEngine {
         return result.refused == 0
     }
 
-    func removeFromStash(_ url: URL) async {
-        state.stash = FileStash.remove(url, from: state.stash, codec: bookmarks)
+    /// This and the clear and undo below return whether the stash changed.
+    @discardableResult
+    func removeFromStash(_ url: URL) async -> Bool {
+        let left = FileStash.remove(url, from: state.stash, codec: bookmarks)
+        guard left != state.stash else { return false }
+        state.stash = left
         persist()
         refreshStash()
         publish()
         await sample()
+        return true
+    }
+
+    @discardableResult
+    func clearStash() async -> Bool {
+        guard !state.stash.isEmpty else { return false }
+        let cleared = state.stash
+        state.stash = []
+        persist()
+        refreshStash()
+        showBanner(.stashCleared(undo: cleared), for: Self.undoLength)
+        publish()
+        await sample()
+        return true
+    }
+
+    @discardableResult
+    func undoClearStash() async -> Bool {
+        guard case .stashCleared(let cleared) = snapshot.banner else { return false }
+        let result = FileStash.restore(cleared, into: state.stash, capacity: CompanionState.stashCapacity, codec: bookmarks)
+        state.stash = result.bookmarks
+        persist()
+        refreshStash()
+        if result.refused > 0 {
+            showBanner(.stashFull)
+        } else {
+            bannerTask?.cancel()
+            snapshot.banner = nil
+        }
+        publish()
+        await sample()
+        return true
     }
 
     private func refreshStash() {

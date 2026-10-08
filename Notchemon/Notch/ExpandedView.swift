@@ -21,7 +21,7 @@ struct ExpandedView: View {
         }
         .overlay(alignment: .bottom) {
             if let banner = model.snapshot.banner {
-                BannerView(banner: banner)
+                BannerView(banner: banner) { model.undoClearStash(animated: true) }
                     .padding(.bottom, 10)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -155,13 +155,21 @@ private struct StashRow: View {
             } else {
                 ForEach(model.snapshot.stash) { item in
                     StashItemView(url: item.url) { model.removeFromStash($0) }
-                        .frame(width: 30, height: 30)
-                        .help(item.name)
+                        .frame(width: StashItemNSView.side, height: StashItemNSView.side)
+                        .padding(.top, -StashItemNSView.badgeOverhang)
+                        .padding(.trailing, -StashItemNSView.badgeOverhang)
+                        .transition(.opacity)
                 }
-                Spacer(minLength: 0)
-                Text("\(model.snapshot.stash.count)/\(CompanionState.stashCapacity)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.5))
+                HStack(spacing: 4) {
+                    Button("Clear Stash") { model.clearStash(animated: true) }
+                        .buttonStyle(.plain)
+                        .help("Empty the stash. The files stay where they are.")
+                    Text("\(model.snapshot.stash.count)/\(CompanionState.stashCapacity)")
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.5))
+                .fixedSize()
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .frame(height: 30)
@@ -215,8 +223,18 @@ private struct EvolutionReveal: View {
 
 private struct BannerView: View {
     let banner: Banner
+    let onUndo: () -> Void
 
     var body: some View {
+        if case .stashCleared = banner {
+            Button(action: onUndo) { capsule }
+                .buttonStyle(.plain)
+        } else {
+            capsule
+        }
+    }
+
+    private var capsule: some View {
         Text(text)
             .font(.system(size: 12, weight: .semibold))
             .padding(.horizontal, 12)
@@ -229,6 +247,7 @@ private struct BannerView: View {
         case .levelUp(let level): "Level up! Now level \(level)"
         case .evolved(let name, _): "Evolved into \(name)!"
         case .stashFull: "Stash is full (\(CompanionState.stashCapacity) items)"
+        case .stashCleared: "Stash cleared · Undo"
         }
     }
 
@@ -237,6 +256,7 @@ private struct BannerView: View {
         case .levelUp: .green
         case .evolved: .purple
         case .stashFull: .orange
+        case .stashCleared: .gray
         }
     }
 }

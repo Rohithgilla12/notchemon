@@ -26,6 +26,7 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **Quick note.** Type in the panel and press Enter to append `- [YYYY-MM-DD HH:mm] text` to `~/Documents/Notchemon/notes.md`.
 - **System stats.** The open panel shows CPU load, memory in use, free disk space, and, on a Mac with a battery, its charge. It samples every 2 seconds only while the panel is open.
 - **File stash.** Drop up to five files on the notch, closed or open. The creature holds them as bookmarks, so a stashed file survives a rename or move. Drag an icon out of the panel to drop the file elsewhere, which also removes it from the stash. Click an icon to open the file. When the stash is full, the notch shakes and refuses the drop.
+- **Removing from the stash.** Hover an icon and click its × badge, or right-click it and choose Remove from Stash. The context menu also has Open, Reveal in Finder, and Copy Path. Clear Stash, in the panel and in the menu-bar menu, empties the stash. For 5 seconds after, the panel banner and the menu-bar menu both offer Undo. Removing never moves, deletes, or trashes the file.
 - **Menu bar.** The menu bar item offers start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, floating notes, choose creature (this resets progress, after confirmation), open notes folder, and quit.
 - **Macs without a notch.** The app draws a black virtual notch at the top centre of the built-in display, or of the main display in clamshell mode. You can turn this off.
 

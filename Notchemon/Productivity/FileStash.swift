@@ -69,6 +69,17 @@ enum FileStash {
         return bookmarks.filter { codec.resolve($0)?.url.standardizedFileURL != target }
     }
 
+    static func restore(_ cleared: [Data], into current: [Data], capacity: Int, codec: any BookmarkCodec) -> StashAddResult {
+        let cleared = cleared.filter { codec.resolve($0) != nil }
+        let restoring = Set(cleared.compactMap { codec.resolve($0)?.url.standardizedFileURL })
+        let newer = current.filter { bookmark in
+            guard let url = codec.resolve(bookmark)?.url.standardizedFileURL else { return false }
+            return !restoring.contains(url)
+        }
+        let restored = Array(cleared.prefix(max(0, capacity - newer.count)))
+        return StashAddResult(bookmarks: restored + newer, added: restored.count, refused: cleared.count - restored.count)
+    }
+
     /// Drops bookmarks whose files are gone and re-creates stale ones, so the
     /// stash heals itself.
     static func items(_ bookmarks: [Data], codec: any BookmarkCodec) -> (items: [StashItem], live: [Data]) {

@@ -293,6 +293,98 @@ struct EngineTests {
         #expect(FileBookmarks().resolve(after[0])?.url.lastPathComponent == "final.txt")
     }
 
+    private func files(_ names: String...) throws -> [URL] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return try names.map { name in
+            let url = directory.appendingPathComponent(name)
+            try Data(name.utf8).write(to: url)
+            return url
+        }
+    }
+
+    private func persistedNames() -> [String] {
+        store.load().stash.compactMap { FileBookmarks().resolve($0)?.url.lastPathComponent }
+    }
+
+    @Test func removingPersistsAndLeavesTheFileInPlace() async throws {
+        let urls = try files("a.txt", "b.txt")
+        let engine = await started(engine())
+        #expect(await engine.addToStash(urls))
+        await engine.removeFromStash(urls[0])
+        #expect(persistedNames() == ["b.txt"])
+        #expect(await engine.currentSnapshot.stash.map(\.name) == ["b.txt"])
+        #expect(FileManager.default.fileExists(atPath: urls[0].path))
+    }
+
+    @Test func removingAFileNotHeldChangesNothing() async throws {
+        let urls = try files("a.txt", "b.txt")
+        let engine = await started(engine())
+        #expect(await engine.addToStash([urls[0]]))
+        #expect(await engine.removeFromStash(urls[1]) == false)
+        #expect(persistedNames() == ["a.txt"])
+    }
+
+    @Test func clearingEmptiesThePersistedStashAndOffersUndo() async throws {
+        let urls = try files("a.txt", "b.txt")
+        let engine = await started(engine())
+        #expect(await engine.addToStash(urls))
+        let held = store.load().stash
+        await engine.clearStash()
+        #expect(store.load().stash.isEmpty)
+        #expect(await engine.currentSnapshot.stash.isEmpty)
+        #expect(await engine.currentSnapshot.banner == .stashCleared(undo: held))
+        #expect(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    @Test func clearingAnEmptyStashOffersNoUndo() async {
+        let engine = await started(engine())
+        await engine.clearStash()
+        #expect(await engine.currentSnapshot.banner == nil)
+    }
+
+    @Test func undoRestoresTheSameBookmarksInOrder() async throws {
+        let engine = await started(engine())
+        #expect(await engine.addToStash(try files("c.txt", "a.txt", "b.txt")))
+        let held = store.load().stash
+        await engine.clearStash()
+        await engine.undoClearStash()
+        #expect(store.load().stash == held)
+        #expect(await engine.currentSnapshot.stash.map(\.name) == ["c.txt", "a.txt", "b.txt"])
+        #expect(await engine.currentSnapshot.banner == nil)
+    }
+
+    @Test func undoAfterReaddingKeepsOneCopyInItsOldSlot() async throws {
+        let urls = try files("a.txt", "b.txt", "new.txt")
+        let engine = await started(engine())
+        #expect(await engine.addToStash(Array(urls[0...1])))
+        await engine.clearStash()
+        #expect(await engine.addToStash([urls[2], urls[1]]))
+        await engine.undoClearStash()
+        #expect(persistedNames() == ["a.txt", "b.txt", "new.txt"])
+    }
+
+    @Test func undoKeepsFilesStashedSinceAndRefusesWhatNoLongerFits() async throws {
+        let urls = try files("1", "2", "3", "4", "5", "x", "y")
+        let engine = await started(engine())
+        #expect(await engine.addToStash(Array(urls[0...4])))
+        await engine.clearStash()
+        #expect(await engine.addToStash(Array(urls[5...6])))
+        await engine.undoClearStash()
+        #expect(persistedNames() == ["1", "2", "3", "x", "y"])
+        #expect(await engine.currentSnapshot.banner == .stashFull)
+    }
+
+    @Test func undoDoesNothingOnceTheBannerIsGone() async throws {
+        let urls = try files("a.txt", "b.txt")
+        let engine = await started(engine())
+        #expect(await engine.addToStash([urls[0]]))
+        await engine.clearStash()
+        #expect(await engine.addToStash([urls[1]]))
+        await engine.award(1_000)
+        await engine.undoClearStash()
+        #expect(persistedNames() == ["b.txt"])
+    }
+
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
         try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, stash: []))
         let engine = engine()
@@ -683,6 +775,36 @@ struct FileStashTests {
         let held = FileStash.add(urls("a", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
         let left = FileStash.remove(urls("a")[0], from: held, codec: PathCodec())
         #expect(FileStash.items(left, codec: PathCodec()).items.map(\.name) == ["b"])
+    }
+
+    @Test func restoreFillsAnEmptyStashInOriginalOrder() {
+        let cleared = FileStash.add(urls("c", "a", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let result = FileStash.restore(cleared, into: [], capacity: 5, codec: PathCodec())
+        #expect(result == StashAddResult(bookmarks: cleared, added: 3, refused: 0))
+    }
+
+    @Test func restoreDropsTheNewerCopyOfAFileStashedAgain() {
+        let cleared = FileStash.add(urls("a", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let since = FileStash.add(urls("new", "b"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let result = FileStash.restore(cleared, into: since, capacity: 5, codec: PathCodec())
+        #expect(FileStash.items(result.bookmarks, codec: PathCodec()).items.map(\.name) == ["a", "b", "new"])
+    }
+
+    @Test func restoreKeepsFilesStashedSinceAndRefusesTheNewestCleared() {
+        let cleared = FileStash.add(urls("1", "2", "3", "4", "5"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let since = FileStash.add(urls("x", "y"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let result = FileStash.restore(cleared, into: since, capacity: 5, codec: PathCodec())
+        #expect(FileStash.items(result.bookmarks, codec: PathCodec()).items.map(\.name) == ["1", "2", "3", "x", "y"])
+        #expect(result.added == 3)
+        #expect(result.refused == 2)
+    }
+
+    @Test func restoreLeavesDeletedFilesOutOfTheCapacityCount() {
+        let cleared = FileStash.add(urls("1", "2", "3", "4", "5"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let since = FileStash.add(urls("x"), to: [], capacity: 5, codec: PathCodec()).bookmarks
+        let result = FileStash.restore(cleared, into: since, capacity: 5, codec: PathCodec(missing: ["/tmp/2"]))
+        #expect(FileStash.items(result.bookmarks, codec: PathCodec()).items.map(\.name) == ["1", "3", "4", "5", "x"])
+        #expect(result.refused == 0)
     }
 
     @Test func vanishedFilesHealOutOfTheStash() {

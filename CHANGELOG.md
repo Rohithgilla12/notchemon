@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Ways to remove files from the stash. Hover an icon and click its × badge, or right-click it and choose Remove from Stash. The context menu also has Open, Reveal in Finder, and Copy Path. Removing drops only the stash entry; the file stays where it is.
+- Clear Stash, next to the stash count in the panel and in the menu-bar menu. After a clear, the panel shows "Stash cleared · Undo" for 5 seconds, and the menu-bar menu shows Undo Clear Stash. Undo puts the files back in their old order and keeps any file stashed since.
+- Each stash icon shows its file name as a tooltip.
+
 ### Fixed
 
 - Dock walking now starts once Accessibility is granted while the app runs. The app checked for the grant only when it became active or when macOS announced it, which a menu-bar app rarely sees, so the grant went unnoticed until a relaunch. While Dock walking is wanted and the permission is missing, the app now checks every 30 seconds, and every 2 seconds for two minutes after you choose Allow Dock Walking….
