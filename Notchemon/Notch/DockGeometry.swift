@@ -30,6 +30,26 @@ struct DockShelf: Sendable, Equatable {
         let half = Double(walkable.upperBound - walkable.lowerBound) / 2
         return -half...half
     }
+
+    /// The creature's box stands on the Dock with the same side as the peek
+    /// below the notch, so it is drawn at the same scale.
+    static let spriteSide = NotchGeometry.peekHeight
+
+    /// The window the creature walks in: as wide as the Dock, its bottom on
+    /// the Dock's top edge, and tall enough above the box for a hop.
+    var panel: CGRect {
+        CGRect(
+            x: walkable.lowerBound - DockGeometry.edgeInset,
+            y: top,
+            width: walkable.upperBound - walkable.lowerBound + 2 * DockGeometry.edgeInset,
+            height: 2 * Self.spriteSide
+        )
+    }
+
+    /// The creature's centre in global screen coordinates, `x` points along the Dock.
+    func spriteCentre(x: Double) -> CGPoint {
+        CGPoint(x: centreX + x, y: top + Self.spriteSide / 2)
+    }
 }
 
 enum DockGeometry {

@@ -58,6 +58,14 @@ struct DockGeometryTests {
         if let shelf { #expect(shelf.walkable.upperBound - shelf.walkable.lowerBound == DockGeometry.minimumWalk) }
     }
 
+    @Test func theDockWindowSpansTheDockWithItsBottomOnTheTopEdgeAndTheCreatureCentredOnItsSpot() throws {
+        let shelf = try #require(DockGeometry.shelf(reading(shownDock), screens: [macBookPro]))
+        #expect(shelf.panel == CGRect(x: 120, y: 90, width: 1488, height: 88))
+        #expect(shelf.spriteCentre(x: 0) == CGPoint(x: 864, y: 112))
+        #expect(shelf.spriteCentre(x: -722) == CGPoint(x: 142, y: 112))
+        #expect(shelf.panel.minX + DockGeometry.edgeInset == shelf.spriteCentre(x: shelf.range.lowerBound).x)
+    }
+
     @Test func accessibilityFramesFlipIntoAppKitCoordinates() {
         #expect(DockGeometry.appKitFrame(axPosition: CGPoint(x: 120, y: 1027), size: CGSize(width: 1488, height: 90), primaryHeight: 1117) == shownDock)
         #expect(DockGeometry.appKitFrame(axPosition: CGPoint(x: 120, y: 1117), size: CGSize(width: 1488, height: 90), primaryHeight: 1117)
