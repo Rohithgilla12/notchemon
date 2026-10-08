@@ -1,5 +1,10 @@
 import AppKit
 
+enum NotesPalette {
+    /// A warm coral that reads on the dark material in any wallpaper.
+    static let accent = NSColor(srgbRed: 1, green: 0.42, blue: 0.37, alpha: 1)
+}
+
 /// The dark translucent surface shared by the notes window and its slash menu.
 enum NotesMaterial {
     static let windowCornerRadius: CGFloat = 16

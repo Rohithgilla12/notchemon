@@ -77,11 +77,11 @@ struct MarkdownTheme {
         case .syntax:
             storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
         case .listMarker:
-            storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: range)
+            storage.addAttribute(.foregroundColor, value: NotesPalette.accent.withAlphaComponent(0.7), range: range)
         case .checkbox(let checked):
             storage.addAttributes([
                 .notesCheckbox: checked,
-                .foregroundColor: NSColor.controlAccentColor,
+                .foregroundColor: NotesPalette.accent,
                 .font: NSFont.monospacedSystemFont(ofSize: size - 1, weight: .bold),
                 .cursor: NSCursor.pointingHand,
             ], range: range)
@@ -135,6 +135,7 @@ final class NotesTextView: NSTextView {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
         textView.drawsBackground = false
+        textView.insertionPointColor = NotesPalette.accent
         textView.textContainerInset = NSSize(width: 28, height: 20)
         textView.textContainer?.lineFragmentPadding = 0
         textView.isVerticallyResizable = true
