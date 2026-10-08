@@ -13,6 +13,7 @@ enum NotesMaterial {
 
     /// Always `.active`: Notchemon is rarely the active app, and an inactive
     /// material renders as flat grey.
+    @MainActor
     static func makeView(cornerRadius: CGFloat) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .hudWindow
