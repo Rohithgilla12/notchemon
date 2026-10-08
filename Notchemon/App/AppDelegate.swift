@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var windowController: NotchWindowController?
     private var dockController: DockWindowController?
     private var hotKey: HotKey?
+    private var notesHotKey: HotKey?
     private var cursorNearHome = false
 
     override init() {
@@ -69,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dockWatcher.start(wanted: model.snapshot.preferences.wander.includesDock)
         hotKey = HotKey.controlOptionN { [weak controller] in controller?.toggleFromHotkey() }
         Task { await model.run() }
+        notesHotKey = HotKey.controlOptionCommandN { FloatingNotes.shared.toggle() }
     }
 
     private func showDock() {
