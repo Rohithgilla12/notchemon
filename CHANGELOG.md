@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-08
+
+### Added
+
+- **Click to Open** in the menu-bar menu. When it is on, the notch opens on a click instead of on hover, and stays open until you click empty panel space or the notch again.
+- Focus sounds. A completed focus session can play Chime, Fanfare, or Ping. The default is Off.
+- System stats in the expanded notch: CPU, memory, free disk space, and battery. The battery row is hidden on Macs without one. Stats are sampled only while the panel is open.
+
+### Changed
+
+- The asset check now also fails on franchise and species names in sources and in the built app, with a small explicit allowlist for PokéAPI attribution and the IP disclaimer.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added
