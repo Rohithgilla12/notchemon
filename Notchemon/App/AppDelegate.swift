@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the creature, not the cursor, so it looks again from where it is.
         roamer.onLookAgain = { [weak self, weak controller] in
             guard let self else { return }
-            controller?.setCreatureExtent(roamer.phase.farthest)
+            controller?.setCreatureExtent(roamer.phase.farthestAlongTopEdge)
             cursorMoved(to: NSEvent.mouseLocation)
         }
         model.onSnapshot = { [weak self] in self?.refreshRoam() }
@@ -72,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roamer.watch(fromHome)
         refreshRoam()
         let expanded = presentation.isExpanded
-        let centre = metrics.spriteCentre(expanded: expanded, roamX: roamer.phase.x(at: Date()), panelFrame: layout.expanded)
+        let centre = metrics.spriteCentre(expanded: expanded, roamX: roamer.phase.spot(at: Date()).x, panelFrame: layout.expanded)
         model.cursorMoved(to: point, spriteCentre: centre, panelExpanded: expanded)
     }
 
@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasCreature: model.activeSpecies != nil
         )
         let reach = Double(presentation.layout?.roamReach ?? 0)
-        roamer.update(range: -reach...reach, homing: RoamRules.homing(conditions))
+        roamer.update(range: -reach...reach, dock: nil, homing: RoamRules.homing(conditions))
     }
 
     func confirmNewStarter() {

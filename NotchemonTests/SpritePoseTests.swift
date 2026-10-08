@@ -21,10 +21,14 @@ struct SpritePoseTests {
         return snapshot
     }
 
+    func topEdgePose(_ snapshot: CompanionSnapshot, _ roam: RoamPhase, expanded: Bool) throws -> SpritePose {
+        try #require(SpritePose(snapshot, roam: roam, on: .topEdge, expanded: expanded))
+    }
+
     @Test(arguments: [(-200.0, Facing.left), (200, .right)])
     func walkingPlaysTheWalkFacingTheWayItGoesAndMovesAlongTheStrip(to: Double, facing: Facing) throws {
-        let walk = RoamWalk(from: 0, to: to, start: t0, speed: RoamRules.walkSpeed)
-        let pose = SpritePose(snapshot(), roam: .walking(walk), expanded: false)
+        let walk = RoamWalk(on: .topEdge, from: 0, to: to, start: t0, speed: RoamRules.walkSpeed)
+        let pose = try topEdgePose(snapshot(), .walking(walk), expanded: false)
         let show = try #require(pose.show)
         #expect(show.loop.frames.first === (facing == .left ? left : right).frames.first)
         #expect(show.loopState == .walking)
@@ -36,7 +40,7 @@ struct SpritePoseTests {
     }
 
     @Test func restingAwayKeepsItsIdleLoopWhereItStopped() throws {
-        let pose = SpritePose(snapshot(), roam: .resting(at: -150, until: t0 + 5), expanded: false)
+        let pose = try topEdgePose(snapshot(), .resting(at: .topEdge(-150), until: t0 + 5), expanded: false)
         #expect(pose.show?.loop.frames.first === idle.frames.first)
         #expect(pose.show?.loopState == .idle)
         #expect(pose.track == .still(-150))
@@ -44,22 +48,22 @@ struct SpritePoseTests {
     }
 
     @Test func theOpenPanelShowsTheCreatureInItsSlotWhereverItWandered() throws {
-        let walk = RoamWalk(from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
-        for roam in [RoamPhase.walking(walk), .resting(at: 300, until: t0 + 5)] {
-            let pose = SpritePose(snapshot(), roam: roam, expanded: true)
+        let walk = RoamWalk(on: .topEdge, from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
+        for roam in [RoamPhase.walking(walk), .resting(at: .topEdge(300), until: t0 + 5)] {
+            let pose = try topEdgePose(snapshot(), roam, expanded: true)
             #expect(pose.track == .still(0))
             #expect(pose.show?.loopState == .idle)
             #expect(pose.fit == .contain)
         }
     }
 
-    @Test func asleepItTucksUpOnlyOnceItIsHome() {
-        let returning = RoamPhase.returning(RoamWalk(from: 200, to: 0, start: t0, speed: RoamRules.walkSpeed))
-        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: returning, expanded: false).tucked)
-        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .asleep(at: 200), expanded: false).tucked)
-        #expect(SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: false).tucked)
-        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: true).tucked)
-        #expect(!SpritePose(snapshot(), roam: .home, expanded: false).tucked)
+    @Test func asleepItTucksUpOnlyOnceItIsHome() throws {
+        let returning = RoamPhase.returning(RoamWalk(on: .topEdge, from: 200, to: 0, start: t0, speed: RoamRules.walkSpeed))
+        #expect(try !topEdgePose(snapshot(behaviour: .sleeping), returning, expanded: false).tucked)
+        #expect(try !topEdgePose(snapshot(behaviour: .sleeping), .asleep(at: .topEdge(200)), expanded: false).tucked)
+        #expect(try topEdgePose(snapshot(behaviour: .sleeping), .home, expanded: false).tucked)
+        #expect(try !topEdgePose(snapshot(behaviour: .sleeping), .home, expanded: true).tucked)
+        #expect(try !topEdgePose(snapshot(), .home, expanded: false).tucked)
     }
 
     @Test func asleepAwayFromHomeItPlaysTheSleepLoopWhereItStopped() throws {
@@ -67,14 +71,14 @@ struct SpritePoseTests {
         sleeping.sprite?.loop = sleep
         sleeping.sprite?.loopState = .sleeping
         sleeping.sprite?.playback = .cycle
-        let asleep = SpritePose(sleeping, roam: .asleep(at: -150), expanded: false)
+        let asleep = try topEdgePose(sleeping, .asleep(at: .topEdge(-150)), expanded: false)
         #expect(asleep.show?.loopState == .sleeping)
         #expect(asleep.show?.loop.frames.first === sleep.frames.first)
         #expect(asleep.track == .still(-150))
         #expect(!asleep.tucked)
 
-        let walk = RoamWalk(from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
-        let midWalk = SpritePose(sleeping, roam: .walking(walk), expanded: false)
+        let walk = RoamWalk(on: .topEdge, from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
+        let midWalk = try topEdgePose(sleeping, .walking(walk), expanded: false)
         #expect(midWalk.show?.loopState == .sleeping)
         #expect(midWalk.show?.loop.frames.first === sleep.frames.first)
         #expect(midWalk.show?.facing == .down)
@@ -88,9 +92,39 @@ struct SpritePoseTests {
         let metrics = PanelMetrics(layout: layout)
         let home = metrics.spriteCentre(expanded: false, roamX: 0, panelFrame: layout.expanded)
         #expect(home == CGPoint(x: 864, y: 1063))
-        let walk = RoamPhase.walking(RoamWalk(from: 0, to: -350, start: t0, speed: RoamRules.walkSpeed))
-        let midWalk = metrics.spriteCentre(expanded: false, roamX: walk.x(at: t0 + 2), panelFrame: layout.expanded)
+        let walk = RoamPhase.walking(RoamWalk(on: .topEdge, from: 0, to: -350, start: t0, speed: RoamRules.walkSpeed))
+        let midWalk = metrics.spriteCentre(expanded: false, roamX: walk.spot(at: t0 + 2).x, panelFrame: layout.expanded)
         #expect(midWalk == CGPoint(x: 794, y: 1063))
         #expect(metrics.spriteCentre(expanded: true, roamX: -70, panelFrame: layout.expanded) == metrics.spriteCentre(expanded: true, roamX: 0, panelFrame: layout.expanded))
+    }
+
+    @Test func eachPerchShowsTheCreatureOnlyWhileItIsThere() throws {
+        let walk = RoamWalk(on: .dock, from: 0, to: -200, start: t0, speed: RoamRules.walkSpeed)
+        let onDock = try #require(SpritePose(snapshot(), roam: .walking(walk), on: .dock, expanded: false))
+        #expect(onDock.track == .walk(walk))
+        #expect(onDock.show?.loopState == .walking)
+        #expect(onDock.show?.facing == .left)
+        #expect(onDock.fit == .peek)
+        #expect(SpritePose(snapshot(), roam: .walking(walk), on: .topEdge, expanded: false) == nil)
+        #expect(SpritePose(snapshot(), roam: .home, on: .dock, expanded: false) == nil)
+        #expect(SpritePose(snapshot(), roam: .resting(at: .topEdge(40), until: t0), on: .dock, expanded: false) == nil)
+        #expect(try #require(SpritePose(snapshot(), roam: .asleep(at: .dock(40)), on: .dock, expanded: false)).track == .still(40))
+    }
+
+    @Test func theOpenPanelShowsTheCreatureInTheNotchEvenFromTheDock() throws {
+        let resting = RoamPhase.resting(at: .dock(120), until: t0 + 5)
+        #expect(try topEdgePose(snapshot(), resting, expanded: true).track == .still(0))
+        #expect(SpritePose(snapshot(), roam: resting, on: .dock, expanded: true) == nil)
+    }
+
+    @Test func aHopLeavesOnePerchThenArrivesOnTheOtherHalfwayThrough() throws {
+        let hop = RoamPhase.transferring(from: .topEdge(-300), to: .dock(80), start: t0)
+        let leaving = try topEdgePose(snapshot(), hop, expanded: false)
+        #expect(leaving.track == .leave(-300, start: t0))
+        #expect(!leaving.fidgets)
+        #expect(leaving.show?.loopState == .idle)
+        let arriving = try #require(SpritePose(snapshot(), roam: hop, on: .dock, expanded: false))
+        #expect(arriving.track == .arrive(80, start: t0 + RoamRules.transferHalf))
+        #expect(!arriving.tucked)
     }
 }

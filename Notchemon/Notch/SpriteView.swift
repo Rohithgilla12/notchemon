@@ -1,10 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Where the sprite stands along the strip, in points from its box's centre.
+/// Where the sprite stands along its perch, in points from its box's centre.
 enum SpriteTrack: Equatable {
     case still(Double)
     case walk(RoamWalk)
+    /// Hops up and fades out at x, from `start`.
+    case leave(Double, start: Date)
+    /// Drops in and fades in at x, from `start`.
+    case arrive(Double, start: Date)
 }
 
 /// What the sprite should show. One-shot effects are counters: the view
@@ -29,34 +33,57 @@ struct SpritePose: Equatable {
 }
 
 extension SpritePose {
-    /// The open panel shows the creature in its own slot wherever it was
-    /// wandering. Closed, it walks or rests along the strip. Asleep, it
-    /// sleeps where it stopped and tucks up behind the notch only if that is
-    /// home.
-    init(_ snapshot: CompanionSnapshot, roam: RoamPhase, expanded: Bool) {
-        let walk = expanded ? nil : roam.walk
+    /// The pose on `perch`'s window, or nil when the creature is not there.
+    /// The open panel shows it in its own slot wherever it was wandering.
+    /// Closed, it walks or rests along whichever perch it is on and hops
+    /// between them. Asleep, it sleeps where it stopped and tucks up behind
+    /// the notch only if that is home.
+    init?(_ snapshot: CompanionSnapshot, roam: RoamPhase, on perch: Perch, expanded: Bool) {
+        let track: SpriteTrack
+        if expanded {
+            guard perch == .topEdge else { return nil }
+            track = .still(0)
+        } else {
+            guard let found = Self.track(of: roam, on: perch) else { return nil }
+            track = found
+        }
         var show = snapshot.sprite
-        if let walk, snapshot.behaviour != .sleeping, let cycle = show?.walk {
+        if case .walk(let walk) = track, snapshot.behaviour != .sleeping, let cycle = show?.walk {
             show?.loop = cycle.frames(toward: walk.direction)
             show?.loopState = .walking
             show?.playback = .cycle
             show?.facing = walk.direction
         }
         let tucked = snapshot.behaviour == .sleeping && !expanded && roam == .home
-        let track: SpriteTrack = switch roam {
-        case _ where expanded, .home: .still(0)
-        case .resting(let x, _), .asleep(let x): .still(x)
-        case .walking(let walk), .returning(let walk): .walk(walk)
-        }
+        let still = if case .still = track { true } else { false }
         self.init(
             show: show,
             tucked: tucked,
             flashToken: snapshot.evolutionCount,
-            fidgets: snapshot.preferences.fidgets && !tucked && walk == nil,
+            fidgets: snapshot.preferences.fidgets && !tucked && still,
             fit: expanded ? .contain : .peek,
             idleStyle: snapshot.preferences.idleStyle,
             track: track
         )
+    }
+
+    private static func track(of roam: RoamPhase, on perch: Perch) -> SpriteTrack? {
+        switch roam {
+        case .home:
+            perch == .topEdge ? .still(0) : nil
+        case .resting(let spot, _), .asleep(let spot):
+            spot.perch == perch ? .still(spot.x) : nil
+        case .walking(let walk), .returning(let walk):
+            walk.perch == perch ? .walk(walk) : nil
+        case .transferring(let from, let to, let start):
+            if from.perch == perch {
+                .leave(from.x, start: start)
+            } else if to.perch == perch {
+                .arrive(to.x, start: start + RoamRules.transferHalf)
+            } else {
+                nil
+            }
+        }
     }
 }
 
@@ -136,11 +163,13 @@ final class SpriteHostView: NSView {
     /// A walk is one linear animation the render server plays, timed from
     /// the walk's own start so a view made mid-walk joins it in step. It is
     /// additive, relative to where the walk ends, so the box moving under it
-    /// does not throw it off.
+    /// does not throw it off. A hop between perches is timed the same way.
     private func follow(_ track: SpriteTrack) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         sprite.removeAnimation(forKey: "walk")
+        sprite.removeAnimation(forKey: "transfer")
+        sprite.opacity = 1
         switch track {
         case .still(let x):
             offset = x
@@ -155,9 +184,37 @@ final class SpriteHostView: NSView {
             stride.timingFunction = CAMediaTimingFunction(name: .linear)
             stride.fillMode = .backwards
             sprite.add(stride, forKey: "walk")
+        case .leave(let x, let start):
+            offset = x
+            sprite.opacity = 0
+            sprite.add(Self.hop(arriving: false, at: start), forKey: "transfer")
+        case .arrive(let x, let start):
+            offset = x
+            sprite.add(Self.hop(arriving: true, at: start), forKey: "transfer")
         }
         sprite.position = CGPoint(x: bounds.midX + offset, y: bounds.midY)
         CATransaction.commit()
+    }
+
+    static let hopRise: CGFloat = 10
+
+    /// Filled backwards, so an arrival stays hidden until it begins and a
+    /// leaving creature stays in view until it goes.
+    private static func hop(arriving: Bool, at start: Date) -> CAAnimationGroup {
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = arriving ? 0 : 1
+        fade.toValue = arriving ? 1 : 0
+        let rise = CABasicAnimation(keyPath: "position.y")
+        rise.fromValue = arriving ? hopRise : 0
+        rise.toValue = arriving ? 0 : hopRise
+        rise.isAdditive = true
+        let hop = CAAnimationGroup()
+        hop.animations = [fade, rise]
+        hop.duration = RoamRules.transferHalf
+        hop.beginTime = CACurrentMediaTime() + start.timeIntervalSinceNow
+        hop.timingFunction = CAMediaTimingFunction(name: arriving ? .easeOut : .easeIn)
+        hop.fillMode = .backwards
+        return hop
     }
 
     /// One wake-up every 5 to 15 s; nothing runs in between.

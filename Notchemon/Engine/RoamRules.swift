@@ -1,13 +1,41 @@
 import Foundation
 
-/// One straight walk at a steady pace. Positions here and in `RoamPhase` are
-/// x offsets in points from the notch centre, rightwards positive.
+/// What the creature walks along.
+enum Perch: Sendable, Equatable {
+    /// The strip below the menu bar, where home is.
+    case topEdge
+    /// The top of the Dock.
+    case dock
+}
+
+/// Where the creature stands. On the top edge x is in points from the notch
+/// centre; on the Dock it is from the middle of the Dock's shelf. Either
+/// way rightwards is positive.
+struct RoamSpot: Sendable, Equatable {
+    var perch: Perch
+    var x: Double
+
+    static let home = RoamSpot(perch: .topEdge, x: 0)
+    static func topEdge(_ x: Double) -> RoamSpot { RoamSpot(perch: .topEdge, x: x) }
+    static func dock(_ x: Double) -> RoamSpot { RoamSpot(perch: .dock, x: x) }
+}
+
+/// One straight walk along one perch at a steady pace.
 struct RoamWalk: Sendable, Equatable {
+    let perch: Perch
     let from: Double
     let to: Double
     let start: Date
     /// Points per second.
     let speed: Double
+
+    init(on perch: Perch, from: Double, to: Double, start: Date, speed: Double) {
+        self.perch = perch
+        self.from = from
+        self.to = to
+        self.start = start
+        self.speed = speed
+    }
 
     var duration: TimeInterval { abs(to - from) / speed }
     var end: Date { start + duration }
@@ -21,8 +49,8 @@ struct RoamWalk: Sendable, Equatable {
 
     /// When this walk carries the creature's centre into and out of the
     /// circle of `radius` around `cursor`, which is measured from the centre
-    /// at home, in order. A walk that starts inside only leaves: the cursor
-    /// was already measured where the walk set off.
+    /// at x 0 on this walk's perch, in order. A walk that starts inside only
+    /// leaves: the cursor was already measured where the walk set off.
     func crossings(of cursor: CursorOffset, radius: Double) -> [Date] {
         let span = radius * radius - cursor.dy * cursor.dy
         guard span > 0, duration > 0 else { return [] }
@@ -35,41 +63,61 @@ struct RoamWalk: Sendable, Equatable {
     }
 }
 
-/// Where the creature is along the strip below the menu bar. Every phase
-/// gives its position at any instant, so nothing has to tick while it walks.
+/// Where the creature is and what it is doing there. Every phase gives its
+/// spot at any instant, so nothing has to tick while it moves.
 enum RoamPhase: Sendable, Equatable {
     /// Under the notch, kept there by `Homing`.
     case home
-    case resting(at: Double, until: Date)
+    case resting(at: RoamSpot, until: Date)
     /// Asleep where it stopped, away from home. It rests there on waking.
-    case asleep(at: Double)
+    case asleep(at: RoamSpot)
     /// On the way to a spot to rest at.
     case walking(RoamWalk)
-    /// On the way home, to stay there.
+    /// On the way home along the top edge, to stay there.
     case returning(RoamWalk)
+    /// Hopping out at `from` and, `RoamRules.transferHalf` later, in at `to`
+    /// on the other perch.
+    case transferring(from: RoamSpot, to: RoamSpot, start: Date)
 
-    func x(at now: Date) -> Double {
+    func spot(at now: Date) -> RoamSpot {
         switch self {
-        case .home: 0
-        case .resting(let x, _), .asleep(let x): x
-        case .walking(let walk), .returning(let walk): walk.x(at: now)
+        case .home: .home
+        case .resting(let spot, _), .asleep(let spot): spot
+        case .walking(let walk), .returning(let walk): RoamSpot(perch: walk.perch, x: walk.x(at: now))
+        case .transferring(let from, let to, let start): now < start + RoamRules.transferHalf ? from : to
         }
+    }
+
+    /// The perch the creature is on, or is hopping to.
+    var perch: Perch {
+        switch self {
+        case .home: .topEdge
+        case .resting(let spot, _), .asleep(let spot), .transferring(_, let spot, _): spot.perch
+        case .walking(let walk), .returning(let walk): walk.perch
+        }
+    }
+
+    /// Whether the creature shows on `perch` at any point in this phase.
+    func touches(_ perch: Perch) -> Bool {
+        if case .transferring(let from, let to, _) = self { return from.perch == perch || to.perch == perch }
+        return self.perch == perch
     }
 
     var walk: RoamWalk? {
         switch self {
         case .walking(let walk), .returning(let walk): walk
-        case .home, .resting, .asleep: nil
+        case .home, .resting, .asleep, .transferring: nil
         }
     }
 
-    /// The most this phase takes the creature from home, so the window can
-    /// keep all of it in view.
-    var farthest: Double {
+    /// The most this phase takes the creature from home along the top edge,
+    /// so the notch window can keep all of it in view.
+    var farthestAlongTopEdge: Double {
         switch self {
         case .home: 0
-        case .resting(let x, _), .asleep(let x): abs(x)
-        case .walking(let walk), .returning(let walk): max(abs(walk.from), abs(walk.to))
+        case .resting(let spot, _), .asleep(let spot): spot.perch == .topEdge ? abs(spot.x) : 0
+        case .walking(let walk), .returning(let walk): walk.perch == .topEdge ? max(abs(walk.from), abs(walk.to)) : 0
+        case .transferring(let from, let to, _): [from, to].filter { $0.perch == .topEdge }.map { abs($0.x) }.max() ?? 0
         }
     }
 
@@ -80,6 +128,7 @@ enum RoamPhase: Sendable, Equatable {
         case .home, .asleep: nil
         case .resting(_, let until): until
         case .walking(let walk), .returning(let walk): walk.end
+        case .transferring(_, _, let start): start + 2 * RoamRules.transferHalf
         }
     }
 }
@@ -113,9 +162,18 @@ struct HomingConditions: Sendable, Equatable {
 
 struct RoamInputs: Sendable, Equatable {
     var now: Date
-    /// Where the creature may stand. Always contains home.
+    /// Where the creature may stand on the top edge. Always contains home.
     var range: ClosedRange<Double>
+    /// Where it may stand on the Dock, or nil when it may not go there.
+    var dock: ClosedRange<Double>? = nil
     var homing: Homing
+
+    func range(of perch: Perch) -> ClosedRange<Double>? {
+        switch perch {
+        case .topEdge: range
+        case .dock: dock
+        }
+    }
 }
 
 /// Wandering is a function of the current phase and inputs: the caller asks
@@ -128,6 +186,11 @@ enum RoamRules {
     static let runSpeed: Double = 70
     /// How often a walk from a resting spot heads back to rest at home.
     static let homeChance = 0.25
+    /// How often a finished rest hops to the other perch instead of walking,
+    /// when both perches are open.
+    static let transferChance = 0.25
+    /// How long the hop out takes, and then the hop in.
+    static let transferHalf: TimeInterval = 0.35
 
     static func homing(_ conditions: HomingConditions) -> Homing {
         if conditions.panelOpen || conditions.fullScreen || !conditions.hasCreature { return .snap }
@@ -141,68 +204,113 @@ enum RoamRules {
 
     static func next(_ phase: RoamPhase, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
         let now = inputs.now
+        if case .transferring(_, let to, _) = phase {
+            // A hop under way finishes unless it lands on a Dock that has
+            // gone; the hop out cannot be taken back.
+            if inputs.homing == .snap || inputs.range(of: to.perch) == nil { return .home }
+            guard let deadline = phase.deadline, now >= deadline else { return phase }
+            return next(.resting(at: to, until: now + .random(in: rest, using: &rng)), inputs, using: &rng)
+        }
         switch inputs.homing {
         case .snap:
             return .home
         case .stay:
-            let x = phase.x(at: now)
-            return x == 0 ? .home : .asleep(at: x)
+            let spot = phase.spot(at: now)
+            if spot == .home || inputs.range(of: spot.perch) == nil { return .home }
+            return .asleep(at: spot)
         case .walk, .run:
-            let speed = inputs.homing == .run ? runSpeed : walkSpeed
-            switch phase {
-            case .home:
-                return .home
-            case .returning(let walk) where walk.speed == speed:
-                return now >= walk.end ? .home : phase
-            case .resting, .asleep, .walking, .returning:
-                let x = phase.x(at: now)
-                return x == 0 ? .home : .returning(RoamWalk(from: x, to: 0, start: now, speed: speed))
-            }
+            return goHome(phase, inputs, speed: inputs.homing == .run ? runSpeed : walkSpeed, using: &rng)
         case .free:
             return wander(phase, inputs, using: &rng)
         }
     }
 
-    private static func wander(_ phase: RoamPhase, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
+    /// Home is on the top edge, so from the Dock the creature hops up first.
+    private static func goHome(_ phase: RoamPhase, _ inputs: RoamInputs, speed: Double, using rng: inout some RandomNumberGenerator) -> RoamPhase {
         let now = inputs.now
-        let range = inputs.range
+        let spot = phase.spot(at: now)
+        if spot.perch == .dock { return transfer(from: spot, to: .topEdge, inputs, using: &rng) }
         switch phase {
         case .home:
-            return .resting(at: 0, until: now + .random(in: rest, using: &rng))
-        case .asleep(let x):
-            guard range.contains(x) else { return walkBack(from: x, inputs) }
-            return .resting(at: x, until: now + .random(in: rest, using: &rng))
-        case .resting(let x, let until):
-            guard range.contains(x) else { return walkBack(from: x, inputs) }
-            return now < until ? phase : stroll(from: x, inputs, using: &rng)
+            return .home
+        case .returning(let walk) where walk.speed == speed:
+            return now >= walk.end ? .home : phase
+        case .resting, .asleep, .walking, .returning, .transferring:
+            return spot.x == 0 ? .home : .returning(RoamWalk(on: .topEdge, from: spot.x, to: 0, start: now, speed: speed))
+        }
+    }
+
+    private static func wander(_ phase: RoamPhase, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
+        let now = inputs.now
+        let spot = phase.spot(at: now)
+        // The Dock went away under the creature, so it hops up to the top edge.
+        guard let range = inputs.range(of: spot.perch) else { return transfer(from: spot, to: .topEdge, inputs, using: &rng) }
+        switch phase {
+        case .home:
+            return .resting(at: .home, until: now + .random(in: rest, using: &rng))
+        case .asleep:
+            guard range.contains(spot.x) else { return walkBack(from: spot, to: range, at: now) }
+            return .resting(at: spot, until: now + .random(in: rest, using: &rng))
+        case .resting(_, let until):
+            guard range.contains(spot.x) else { return walkBack(from: spot, to: range, at: now) }
+            return now < until ? phase : afterRest(at: spot, in: range, inputs, using: &rng)
         case .walking(let walk), .returning(let walk):
             guard range.contains(walk.to) else {
-                let x = walk.x(at: now)
-                return range.contains(x) ? .resting(at: x, until: now + .random(in: rest, using: &rng)) : walkBack(from: x, inputs)
+                return range.contains(spot.x) ? .resting(at: spot, until: now + .random(in: rest, using: &rng)) : walkBack(from: spot, to: range, at: now)
             }
-            return now < walk.end ? .walking(walk) : .resting(at: walk.to, until: now + .random(in: rest, using: &rng))
+            return now < walk.end ? .walking(walk) : .resting(at: RoamSpot(perch: walk.perch, x: walk.to), until: now + .random(in: rest, using: &rng))
+        case .transferring:
+            return phase
         }
     }
 
     /// The range narrowed past the creature, so it walks in to the nearest edge.
-    private static func walkBack(from x: Double, _ inputs: RoamInputs) -> RoamPhase {
-        .walking(RoamWalk(from: x, to: x.clamped(to: inputs.range), start: inputs.now, speed: walkSpeed))
+    private static func walkBack(from spot: RoamSpot, to range: ClosedRange<Double>, at now: Date) -> RoamPhase {
+        .walking(RoamWalk(on: spot.perch, from: spot.x, to: spot.x.clamped(to: range), start: now, speed: walkSpeed))
     }
 
-    private static func stroll(from x: Double, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
-        let headsHome = abs(x) >= minimumStride && Double.random(in: 0..<1, using: &rng) < homeChance
-        guard let target = headsHome ? 0 : target(from: x, in: inputs.range, using: &rng) else {
-            return .resting(at: x, until: inputs.now + .random(in: rest, using: &rng))
+    /// With both perches open it sometimes hops across, and always does when
+    /// its own perch has no room for a stride.
+    private static func afterRest(at spot: RoamSpot, in range: ClosedRange<Double>, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
+        let other: Perch = spot.perch == .topEdge ? .dock : .topEdge
+        if inputs.range(of: other) != nil {
+            let cramped = room(from: spot.x, in: range) == nil
+            if cramped || Double.random(in: 0..<1, using: &rng) < transferChance {
+                return transfer(from: spot, to: other, inputs, using: &rng)
+            }
         }
-        return .walking(RoamWalk(from: x, to: target, start: inputs.now, speed: walkSpeed))
+        return stroll(from: spot, in: range, inputs, using: &rng)
+    }
+
+    /// Lands anywhere on `perch`, which is open: the top edge always is.
+    private static func transfer(from spot: RoamSpot, to perch: Perch, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
+        let range = inputs.range(of: perch) ?? 0...0
+        let landing = RoamSpot(perch: perch, x: .random(in: range, using: &rng))
+        return .transferring(from: spot, to: landing, start: inputs.now)
+    }
+
+    /// Only the top edge has home on it to head back to.
+    private static func stroll(from spot: RoamSpot, in range: ClosedRange<Double>, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
+        let x = spot.x
+        let headsHome = spot.perch == .topEdge && abs(x) >= minimumStride && Double.random(in: 0..<1, using: &rng) < homeChance
+        guard let target = headsHome ? 0 : target(from: x, in: range, using: &rng) else {
+            return .resting(at: spot, until: inputs.now + .random(in: rest, using: &rng))
+        }
+        return .walking(RoamWalk(on: spot.perch, from: x, to: target, start: inputs.now, speed: walkSpeed))
+    }
+
+    /// How much of `range` lies at least `minimumStride` away on the left and
+    /// on the right, or nil when there is none.
+    private static func room(from x: Double, in range: ClosedRange<Double>) -> (left: Double, right: Double)? {
+        let left = max(0, x - minimumStride - range.lowerBound)
+        let right = max(0, range.upperBound - x - minimumStride)
+        return left + right > 0 ? (left, right) : nil
     }
 
     /// Anywhere in range at least `minimumStride` away, or nil when the range
     /// is too narrow for that.
     private static func target(from x: Double, in range: ClosedRange<Double>, using rng: inout some RandomNumberGenerator) -> Double? {
-        let left = max(0, x - minimumStride - range.lowerBound)
-        let right = max(0, range.upperBound - x - minimumStride)
-        guard left + right > 0 else { return nil }
+        guard let (left, right) = room(from: x, in: range) else { return nil }
         let pick = Double.random(in: 0..<(left + right), using: &rng)
         return pick < left ? range.lowerBound + pick : x + minimumStride + pick - left
     }
