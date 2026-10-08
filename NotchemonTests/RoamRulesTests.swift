@@ -198,6 +198,42 @@ struct RoamRulesTests {
     }
 }
 
+struct CursorCrossingTests {
+    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    let radius = BehaviourRules.watchRadius
+
+    /// Seconds after `t0`, so float rounding in the times does not matter.
+    func crossings(_ walk: RoamWalk, cursor: CursorOffset) -> [Double] {
+        walk.crossings(of: cursor, radius: radius).map { ($0.timeIntervalSince(t0) * 1e6).rounded() / 1e6 }
+    }
+
+    @Test func approachingAStillCursorEntersItsRadiusOnce() {
+        let walk = RoamWalk(from: 0, to: 400, start: t0, speed: 50)
+        #expect(crossings(walk, cursor: CursorOffset(dx: 300, dy: 0)) == [3])
+    }
+
+    @Test func passingACursorEntersAndLeavesWhereTheCircleMeetsTheStrip() {
+        let cursor = CursorOffset(dx: 0, dy: 90)
+        #expect(crossings(RoamWalk(from: -400, to: 400, start: t0, speed: 50), cursor: cursor) == [5.6, 10.4])
+        #expect(crossings(RoamWalk(from: 400, to: -400, start: t0, speed: 50), cursor: cursor) == [5.6, 10.4])
+    }
+
+    @Test(arguments: [CursorOffset(dx: 700, dy: 0), CursorOffset(dx: 100, dy: 200), CursorOffset(dx: -300, dy: 0)])
+    func aWalkThatNeverReachesTheCursorHasNoCrossings(cursor: CursorOffset) {
+        #expect(crossings(RoamWalk(from: 0, to: 400, start: t0, speed: 50), cursor: cursor).isEmpty)
+    }
+
+    @Test func startingInsideOnlyLeaves() {
+        let walk = RoamWalk(from: 0, to: 400, start: t0, speed: 50)
+        #expect(crossings(walk, cursor: CursorOffset(dx: 50, dy: 0)) == [4])
+        #expect(crossings(walk, cursor: CursorOffset(dx: 300, dy: 0)).allSatisfy { $0 > 0 })
+    }
+
+    @Test func aWalkThatStaysInsideNeverCrosses() {
+        #expect(crossings(RoamWalk(from: 0, to: 100, start: t0, speed: 50), cursor: CursorOffset(dx: 50, dy: 0)).isEmpty)
+    }
+}
+
 struct HomingTests {
     static let free = HomingConditions(
         wander: .topEdge, panelOpen: false, sleeping: false, focusing: false, fullScreen: false, cursorNearHome: false, hasCreature: true

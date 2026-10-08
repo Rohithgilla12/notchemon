@@ -18,6 +18,21 @@ struct RoamWalk: Sendable, Equatable {
         let progress = min(max(now.timeIntervalSince(start) / duration, 0), 1)
         return from + (to - from) * progress
     }
+
+    /// When this walk carries the creature's centre into and out of the
+    /// circle of `radius` around `cursor`, which is measured from the centre
+    /// at home, in order. A walk that starts inside only leaves: the cursor
+    /// was already measured where the walk set off.
+    func crossings(of cursor: CursorOffset, radius: Double) -> [Date] {
+        let span = radius * radius - cursor.dy * cursor.dy
+        guard span > 0, duration > 0 else { return [] }
+        let halfChord = span.squareRoot()
+        return [cursor.dx - halfChord, cursor.dx + halfChord]
+            .map { ($0 - from) / (to - from) * duration }
+            .filter { $0 > 0 && $0 < duration }
+            .sorted()
+            .map { start + $0 }
+    }
 }
 
 /// Where the creature is along the strip below the menu bar. Every phase

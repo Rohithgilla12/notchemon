@@ -10,7 +10,7 @@ struct RoamerTests {
         let roamer = Roamer()
         var seen: [RoamPhase] = []
         var afterNested: RoamPhase?
-        roamer.onPhaseChanged = {
+        roamer.onLookAgain = {
             seen.append(roamer.phase)
             guard seen.count == 1 else { return }
             roamer.update(range: range, homing: .walk)

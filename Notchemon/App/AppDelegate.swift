@@ -37,8 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         windowController = controller
         controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
-        // Arriving or setting off moves the creature, not the cursor, so it looks again from where it is.
-        roamer.onPhaseChanged = { [weak self, weak controller] in
+        // Arriving, setting off, or walking up to or past a still cursor moves
+        // the creature, not the cursor, so it looks again from where it is.
+        roamer.onLookAgain = { [weak self, weak controller] in
             guard let self else { return }
             controller?.setCreatureExtent(roamer.phase.farthest)
             cursorMoved(to: NSEvent.mouseLocation)
@@ -61,11 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// calls it running back to greet it.
     private func cursorMoved(to point: CGPoint) {
         guard let layout = presentation.layout, let metrics = presentation.metrics else {
+            roamer.watch(nil)
             refreshRoam()
             return
         }
         let home = metrics.spriteCentre(expanded: false, roamX: 0, panelFrame: layout.expanded)
-        cursorNearHome = hypot(point.x - home.x, point.y - home.y) <= BehaviourRules.watchRadius
+        let fromHome = CursorOffset(dx: point.x - home.x, dy: point.y - home.y)
+        cursorNearHome = hypot(fromHome.dx, fromHome.dy) <= BehaviourRules.watchRadius
+        roamer.watch(fromHome)
         refreshRoam()
         let expanded = presentation.isExpanded
         let centre = metrics.spriteCentre(expanded: expanded, roamX: roamer.phase.x(at: Date()), panelFrame: layout.expanded)
