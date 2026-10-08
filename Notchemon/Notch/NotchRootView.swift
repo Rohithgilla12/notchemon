@@ -23,15 +23,7 @@ struct NotchRootView: View {
                     }
                     .frame(width: shapeSize.width, height: shapeSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
-                            if !presentation.isExpanded {
-                                presentation.mode = .expanded(.pinned)
-                            } else {
-                                presentation.mode = .collapsed
-                            }
-                        }
-                    }
+                    .gesture(panelClick, including: presentation.clickToOpen ? .all : .none)
 
                 if expanded {
                     ExpandedView(model: model, presentation: presentation, metrics: metrics)
@@ -50,6 +42,16 @@ struct NotchRootView: View {
                     .frame(width: metrics.notchSize.width, height: metrics.notchSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
 
+                if presentation.clickToOpen {
+                    // Above the creature and the notch cap, which would otherwise take the click.
+                    let height: CGFloat = expanded ? metrics.notchSize.height : metrics.notchSize.height + metrics.peekHeight
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(width: metrics.notchSize.width, height: height)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .gesture(panelClick)
+                }
+
                 if let focus = model.snapshot.focus {
                     FocusRing(session: focus, radius: radius)
                         .frame(width: shapeSize.width + 4, height: shapeSize.height + 2)
@@ -66,6 +68,10 @@ struct NotchRootView: View {
             }
             .frame(width: metrics.windowSize.width, height: metrics.windowSize.height, alignment: .top)
         }
+    }
+
+    private var panelClick: some Gesture {
+        TapGesture().onEnded { presentation.onClick?() }
     }
 
     private func accept(_ urls: [URL]) -> Bool {

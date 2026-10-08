@@ -95,6 +95,43 @@ struct HoverPolicyTests {
             == HoverDecision(mode: .expanded(.pinned), hitTestable: true, collapse: .unchanged))
     }
 
+    @Test func clickToOpenMakesTheNotchClickableWithoutOpeningIt() {
+        let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout, clickToOpen: true)
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: true, collapse: .cancel))
+    }
+
+    @Test func clickToOpenLeavesMenuBarIconsBesideTheNotchClickable() {
+        let decision = HoverPolicy.react(to: menuBarIcon, mode: .collapsed, layout: layout, clickToOpen: true)
+        #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .cancel))
+    }
+
+    @Test func aClickOnTheClosedNotchOpensItAndAnotherClickClosesIt() {
+        #expect(HoverPolicy.click(mode: .collapsed) == .expanded(.clicked))
+        #expect(HoverPolicy.click(mode: .expanded(.clicked)) == .collapsed)
+        #expect(HoverPolicy.click(mode: .expanded(.hover)) == .collapsed)
+        #expect(HoverPolicy.click(mode: .expanded(.pinned)) == .collapsed)
+    }
+
+    @Test(arguments: [CGPoint(x: 100, y: 100), CGPoint(x: 700, y: 1000), CGPoint(x: 1000, y: 1100)])
+    func aClickedPanelStaysOpenWhereverTheCursorGoes(point: CGPoint) {
+        let decision = HoverPolicy.react(to: point, mode: .expanded(.clicked), layout: layout, clickToOpen: true)
+        #expect(decision.mode == .expanded(.clicked))
+        #expect(decision.collapse == .cancel)
+        #expect(decision.hitTestable == layout.expanded.contains(point))
+    }
+
+    @Test func aClickedPanelTakesClicksOnlyUnderTheCursor() {
+        #expect(HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.clicked), layout: layout, clickToOpen: true).hitTestable)
+        #expect(!HoverPolicy.react(to: CGPoint(x: 100, y: 100), mode: .expanded(.clicked), layout: layout, clickToOpen: true).hitTestable)
+    }
+
+    @Test func turningClickToOpenOffMakesAClickedPanelBehaveAsPinned() {
+        let away = HoverPolicy.react(to: CGPoint(x: 100, y: 100), mode: .expanded(.clicked), layout: layout)
+        #expect(away == HoverDecision(mode: .expanded(.clicked), hitTestable: false, collapse: .cancel))
+        let visited = HoverPolicy.react(to: inExpandedOnly, mode: .expanded(.clicked), layout: layout)
+        #expect(visited.mode == .expanded(.hover))
+    }
+
     @Test func heldButtonOverTheNotchNeitherExpandsNorCatchesClicks() {
         let decision = HoverPolicy.react(to: onNotch, mode: .collapsed, layout: layout, buttonHeld: true)
         #expect(decision == HoverDecision(mode: .collapsed, hitTestable: false, collapse: .unchanged))

@@ -23,7 +23,7 @@ struct MenuBarContent: View {
         }
         Toggle("Sleep When Idle", isOn: preference(\.sleepEnabled))
         Toggle("Virtual Notch on Displays Without One", isOn: preference(\.virtualNotchEnabled))
-        Toggle("Poké Ball Mode (Click to open)", isOn: preference(\.pokeballMode))
+        Toggle("Click to Open", isOn: preference(\.clickToOpen))
         Menu("Motion") {
             Picker("Idle Style", selection: preference(\.idleStyle)) {
                 ForEach(IdleStyle.allCases, id: \.self) { style in

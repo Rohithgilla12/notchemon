@@ -32,7 +32,7 @@ struct Preferences: Codable, Sendable, Equatable {
     var focusSound = FocusSound.off
     var sleepEnabled = true
     var virtualNotchEnabled = true
-    var pokeballMode = false
+    var clickToOpen = false
     var idleStyle = IdleStyle.calm
     var hopsOnApproach = true
     var fidgets = true
@@ -84,7 +84,7 @@ extension Preferences {
         focusSound = (try? container.decodeIfPresent(FocusSound.self, forKey: .focusSound)) ?? defaults.focusSound
         sleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .sleepEnabled) ?? defaults.sleepEnabled
         virtualNotchEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualNotchEnabled) ?? defaults.virtualNotchEnabled
-        pokeballMode = try container.decodeIfPresent(Bool.self, forKey: .pokeballMode) ?? defaults.pokeballMode
+        clickToOpen = try container.decodeIfPresent(Bool.self, forKey: .clickToOpen) ?? defaults.clickToOpen
         // A style from a newer version reads as the default, not as a broken file.
         idleStyle = (try? container.decodeIfPresent(IdleStyle.self, forKey: .idleStyle)) ?? defaults.idleStyle
         hopsOnApproach = try container.decodeIfPresent(Bool.self, forKey: .hopsOnApproach) ?? defaults.hopsOnApproach
