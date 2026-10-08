@@ -107,7 +107,7 @@ To start fresh, quit the app and delete `~/Library/Application Support/Notchemon
 
 ## Asset guardrail
 
-The repository and the app bundle must never contain creature sprites, cries, names, or data files. `scripts/check-no-assets.sh` fails on any image or audio file. It also fails on any of the default starters' names in the repository or in a built app:
+The repository and the app bundle must never contain creature sprites, cries, names, or data files. `scripts/check-no-assets.sh` fails on any image or audio file. It also fails on any of the default starters' names in the repository or in a built app. It fails on the franchise's own names too, so the code and the UI stay creature-neutral and the original-creature provider can replace the content. The `allowed_names` list in the script admits only the disclaimer above, the data source's name, and its endpoint paths, each in the files that need them, and the check prints every hit it allows:
 
 ```sh
 scripts/check-no-assets.sh .build/dd/Build/Products/Debug/Notchemon.app

@@ -118,5 +118,39 @@ end" "$(cat "$work/repo/Casks/notchemon.rb")"
 "$scripts/update-cask.sh" 0.10.0 not-a-sha "$work/repo/Casks/notchemon.rb" 2>/dev/null
 check "cask refuses a bad sha256" "1" "$?"
 
+# Names are planted through printf escapes so this file passes the check too.
+names_fixture() {
+  rm -rf "$work/names"
+  mkdir -p "$work/names/scripts" "$work/names/Notchemon"
+  cp "$scripts/check-no-assets.sh" "$work/names/scripts/"
+  printf 'struct PokeAPICreatureProvider {}\n' >"$work/names/Notchemon/PokeAPICreatureProvider.swift"
+}
+
+names_check() {
+  "$work/names/scripts/check-no-assets.sh" >/dev/null 2>&1
+}
+
+names_fixture
+names_check
+check "name check passes the data source's identifiers" "0" "$?"
+printf 'let title = "R\x6ftom Dex"\n' >"$work/names/Notchemon/Stats.swift"
+names_check
+check "name check fails on a species name" "1" "$?"
+
+names_fixture
+printf 'let title = "Pok\xc3\xa9 Ball Mode"\n' >"$work/names/Notchemon/Menu.swift"
+names_check
+check "name check fails on the ball's name" "1" "$?"
+
+names_fixture
+printf 'var p\x6fkeballMode = false\n' >"$work/names/Notchemon/Preferences.swift"
+names_check
+check "name check fails on a ball name in an identifier" "1" "$?"
+
+names_fixture
+printf 'let note = "Pok\xc3\xa9mon is a trademark of Nintendo, The Pok\xc3\xa9mon Company"\n' >"$work/names/Notchemon/Other.swift"
+names_check
+check "name check allows the disclaimer only where it belongs" "1" "$?"
+
 echo "test-scripts: $passed passed, $failed failed"
 [[ $failed -eq 0 ]]
