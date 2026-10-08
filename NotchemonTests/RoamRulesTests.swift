@@ -203,6 +203,16 @@ struct RoamRulesTests {
         #expect(RoamPhase.asleep(at: .topEdge(-300)).deadline == nil)
     }
 
+    @Test func aSleeperPastTheEndOfANarrowedRangeIsMovedToItsEnd() {
+        var rng = SeededRandom(state: 25)
+        let narrowDock = RoamInputs(now: t0 + 10, range: range, dock: -300...300, homing: .stay)
+        #expect(RoamRules.next(.asleep(at: .dock(500)), narrowDock, using: &rng) == .asleep(at: .dock(300)))
+        #expect(RoamRules.next(.asleep(at: .dock(-420)), narrowDock, using: &rng) == .asleep(at: .dock(-300)))
+        #expect(RoamRules.next(.asleep(at: .topEdge(-900)), inputs(homing: .stay), using: &rng) == .asleep(at: .topEdge(-800)))
+        let pastTheEnd = RoamPhase.walking(RoamWalk(on: .dock, from: 0, to: 400, start: t0, speed: 35))
+        #expect(RoamRules.next(pastTheEnd, narrowDock, using: &rng) == .asleep(at: .dock(300)))
+    }
+
     @Test func fallingAsleepAtHomeStaysHome() {
         var rng = SeededRandom(state: 23)
         #expect(RoamRules.next(.home, inputs(homing: .stay), using: &rng) == .home)

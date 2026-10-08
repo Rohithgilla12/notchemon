@@ -219,8 +219,10 @@ enum RoamRules {
             return .home
         case .stay:
             let spot = phase.spot(at: now)
-            if spot == .home || inputs.range(of: spot.perch) == nil { return .home }
-            return .asleep(at: spot)
+            guard spot != .home, let range = inputs.range(of: spot.perch) else { return .home }
+            // A range that narrows past a sleeper moves it to the new end
+            // rather than waking it to walk there.
+            return .asleep(at: RoamSpot(perch: spot.perch, x: spot.x.clamped(to: range)))
         case .walk, .run:
             return goHome(phase, inputs, speed: inputs.homing == .run ? runSpeed : walkSpeed, using: &rng)
         case .free:
