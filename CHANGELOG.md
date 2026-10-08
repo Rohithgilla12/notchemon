@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
 ### Added
 
 - Wandering. While the notch is closed, the creature walks along the strip below the menu bar, across the whole top edge by default. The Wander picker in the Motion submenu narrows it to near the notch or turns it off.
