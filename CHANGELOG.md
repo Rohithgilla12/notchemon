@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Wandering. While the notch is closed, the creature walks along the strip below the menu bar, across the whole top edge by default. The Wander picker in the Motion submenu narrows it to near the notch or turns it off.
 - Dock walking. The creature also walks along the top of a visible bottom Dock and hops between it and the top edge. Top Edge and Dock is the new default Wander setting, and On the Dock keeps it there. It needs Accessibility permission, which the app requests only from the Allow Dock Walking… menu item.
+- Auto-hiding Dock. When the Dock hides automatically, the creature walks along the bottom edge of the screen. It rises onto the Dock while the Dock is shown and it is above the Dock, and drops back when the Dock hides.
 - Animated SpriteCollab sprites, fetched at runtime and cached, with idle, sleep, hop, wake, and pose animations in eight facings. The creature turns to face the cursor.
 - Fallback to PokéAPI's Showdown, Gen 5, and still sprites for species or animations that SpriteCollab lacks.
 - Large portraits in the starter picker and an evolution reveal.
