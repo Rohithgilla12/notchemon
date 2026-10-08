@@ -118,7 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             focusing: snapshot.focus != nil,
             fullScreen: presentation.isFullScreen,
             cursorNearHome: cursorNearHome,
-            hasCreature: model.activeSpecies != nil
+            hasCreature: model.activeSpecies != nil,
+            perch: roamer.phase.perch
         )
         let reach = Double(presentation.layout?.roamReach ?? 0)
         roamer.update(range: -reach...reach, dock: dockWatcher.shelf?.range, homing: RoamRules.homing(conditions))

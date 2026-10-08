@@ -158,6 +158,8 @@ struct HomingConditions: Sendable, Equatable {
     var cursorNearHome: Bool
     /// False until a starter is chosen.
     var hasCreature: Bool
+    /// Where the creature is, or is hopping to.
+    var perch: Perch
 }
 
 struct RoamInputs: Sendable, Equatable {
@@ -197,7 +199,8 @@ enum RoamRules {
         // Asleep it stays put even for a cursor at home: moving the mouse
         // wakes it within a second, and then it runs to greet it.
         if conditions.sleeping { return .stay }
-        if conditions.cursorNearHome { return .run }
+        // From the Dock a cursor at the notch is far from the creature, not a greeting.
+        if conditions.cursorNearHome, conditions.perch == .topEdge { return .run }
         if conditions.wander == .off || conditions.focusing { return .walk }
         return .free
     }

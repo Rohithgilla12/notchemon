@@ -271,7 +271,7 @@ struct CursorCrossingTests {
 
 struct HomingTests {
     static let free = HomingConditions(
-        wander: .topEdge, panelOpen: false, sleeping: false, focusing: false, fullScreen: false, cursorNearHome: false, hasCreature: true
+        wander: .topEdge, panelOpen: false, sleeping: false, focusing: false, fullScreen: false, cursorNearHome: false, hasCreature: true, perch: .topEdge
     )
 
     static func with(_ change: (inout HomingConditions) -> Void) -> HomingConditions {
@@ -293,6 +293,17 @@ struct HomingTests {
         (with { $0.hasCreature = false }, .snap),
         (with { $0.panelOpen = true; $0.cursorNearHome = true }, .snap),
         (with { $0.fullScreen = true; $0.wander = .off }, .snap),
+        (with { $0.wander = .dock }, .free),
+        (with { $0.wander = .topEdgeAndDock }, .free),
+        (with { $0.perch = .dock }, .free),
+        (with { $0.perch = .dock; $0.cursorNearHome = true }, .free),
+        (with { $0.perch = .dock; $0.panelOpen = true }, .snap),
+        (with { $0.perch = .dock; $0.fullScreen = true }, .snap),
+        (with { $0.perch = .dock; $0.hasCreature = false }, .snap),
+        (with { $0.perch = .dock; $0.sleeping = true }, .stay),
+        (with { $0.perch = .dock; $0.focusing = true }, .walk),
+        (with { $0.perch = .dock; $0.wander = .off }, .walk),
+        (with { $0.perch = .dock; $0.focusing = true; $0.cursorNearHome = true }, .walk),
     ])
     func eachConditionCallsTheCreatureHome(conditions: HomingConditions, expected: Homing) {
         #expect(RoamRules.homing(conditions) == expected)
