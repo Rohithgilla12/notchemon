@@ -19,6 +19,15 @@ struct NotesView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .overlay(alignment: .top) {
+            if notes.switcherOpen {
+                QuickSwitcher(session: session) { id in
+                    notes.closeSwitcher(opening: id)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 38)
+            }
+        }
         .frame(minWidth: NotesWindowFrame.minimumSize.width, minHeight: NotesWindowFrame.minimumSize.height)
         // The title bar is hidden; the header takes its place.
         .ignoresSafeArea()
