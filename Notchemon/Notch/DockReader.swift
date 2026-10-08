@@ -48,17 +48,39 @@ enum DockReader {
 }
 
 /// Keeps the Dock's shelf current while the wander setting includes the
-/// Dock. It reads only when asked or when something that moves or resizes
-/// the Dock happens, never on a timer.
+/// Dock. It reads only when asked or when something that moves, resizes,
+/// shows or hides the Dock happens, never on a timer.
 @MainActor
 @Observable
 final class DockWatcher {
     private(set) var shelf: DockShelf?
-    private(set) var isTrusted = AXIsProcessTrusted()
+    private(set) var isTrusted: Bool
     @ObservationIgnored var onChange: (() -> Void)?
 
     @ObservationIgnored private var wanted = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private let read: @MainActor () -> DockShelf?
+    @ObservationIgnored private let trusted: () -> Bool
+    @ObservationIgnored private var cursor: CGPoint?
+    /// Reads that follow an auto-hiding Dock through one slide.
+    @ObservationIgnored private var confirming: Task<Void, Never>?
+    /// What the cursor last called for that a whole confirm could not see
+    /// happen, so moving on without changing that call reads nothing more.
+    @ObservationIgnored private var gaveUpOn: Bool?
+
+    /// The Dock's Accessibility elements send no move notification as it
+    /// slides (registering for one fails as unsupported), so a slide is
+    /// confirmed by reading the Dock this long after the cursor sets one
+    /// off, then every `confirmStep` until it stops, up to `confirmReads` times.
+    static let confirmDelay: Duration = .milliseconds(300)
+    static let confirmStep: Duration = .milliseconds(100)
+    static let confirmReads = 8
+
+    init(read: @escaping @MainActor () -> DockShelf? = DockReader.shelf, trusted: @escaping () -> Bool = AXIsProcessTrusted) {
+        self.read = read
+        self.trusted = trusted
+        isTrusted = trusted()
+    }
 
     func start(wanted: Bool) {
         self.wanted = wanted
@@ -66,6 +88,10 @@ final class DockWatcher {
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
             observe(workspace, name) { $0.refresh() }
+        }
+        // Choosing an app from a shown auto-hiding Dock hides it with the cursor still over it.
+        observe(workspace, NSWorkspace.didActivateApplicationNotification) { watcher in
+            if watcher.shelf?.autoHide?.slide == .shown { watcher.confirmSlide() }
         }
         observe(.default, NSApplication.didChangeScreenParametersNotification) { $0.refresh() }
         observe(.default, NSApplication.didBecomeActiveNotification) { $0.recheckTrust() }
@@ -91,16 +117,59 @@ final class DockWatcher {
     /// but still a round trip to the Dock, so callers ask only at moments
     /// the creature is on it or heading there.
     func refresh() {
-        let next = wanted && isTrusted ? DockReader.shelf() : nil
+        let next = wanted && isTrusted ? read() : nil
         guard next != shelf else { return }
         shelf = next
         onChange?()
     }
 
+    /// Called on every cursor move, so it reads nothing unless the cursor
+    /// calls for an auto-hiding Dock to be shown and it is not, or the reverse.
+    func cursorMoved(to point: CGPoint) {
+        cursor = point
+        guard let shows = cursorShowsDock else { return }
+        if shows != gaveUpOn { gaveUpOn = nil }
+        guard shows != (shelf?.autoHide?.slide == .shown), gaveUpOn == nil else { return }
+        confirmSlide()
+    }
+
+    /// Whether the cursor calls for an auto-hiding Dock to be shown, or nil
+    /// when there is no such Dock or no cursor seen yet.
+    private var cursorShowsDock: Bool? {
+        cursor.flatMap { shelf?.cursorShowsDock($0) }
+    }
+
+    /// Reads the Dock through one slide, until it has stopped and either
+    /// moved from where it was or agrees with the cursor. A Dock that slid
+    /// one way but should now slide back is followed by another confirm.
+    private func confirmSlide() {
+        guard confirming == nil, let from = shelf?.autoHide?.slide else { return }
+        confirming = Task { [weak self] in
+            try? await Task.sleep(for: Self.confirmDelay)
+            var settled = false
+            for read in 1...Self.confirmReads {
+                guard let self else { return }
+                refresh()
+                guard let slide = shelf?.autoHide?.slide else { break }
+                settled = slide != .sliding && (slide != from || (slide == .shown) == cursorShowsDock)
+                if settled || read == Self.confirmReads { break }
+                try? await Task.sleep(for: Self.confirmStep)
+            }
+            guard let self else { return }
+            confirming = nil
+            if settled {
+                gaveUpOn = nil
+                if let cursor { cursorMoved(to: cursor) }
+            } else {
+                gaveUpOn = cursorShowsDock
+            }
+        }
+    }
+
     func recheckTrust() {
-        let trusted = AXIsProcessTrusted()
-        guard trusted != isTrusted else { return }
-        isTrusted = trusted
+        let granted = trusted()
+        guard granted != isTrusted else { return }
+        isTrusted = granted
         refresh()
     }
 

@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the Dock too, so it faces and hops at the cursor from its own spot. A
     /// cursor near home calls it running back to greet it.
     private func cursorMoved(to point: CGPoint) {
+        dockWatcher.cursorMoved(to: point)
         guard let layout = presentation.layout, let metrics = presentation.metrics else {
             roamer.watch(nil)
             refreshRoam()
