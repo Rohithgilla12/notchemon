@@ -129,7 +129,7 @@ struct SpriteChoreographyTests {
         #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: true, style: .calm) } == [.idle, .sleeping, .celebrating, .wake])
     }
 
-    @Test func belowTheNotchTheCreatureNeverPlaysWakeOrSleepInSight() {
+    @Test func belowTheNotchWakeNeverPlaysAndSleepNeverShapesTheFit() {
         #expect(SpriteState.allCases.filter { SpriteChoreography.plays($0, panelExpanded: false, style: .calm) } == [.idle, .celebrating, .hop, .walking])
     }
 

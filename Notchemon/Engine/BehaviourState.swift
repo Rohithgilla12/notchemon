@@ -131,12 +131,15 @@ enum SpriteChoreography {
     /// Which anims are seen in each panel mode, so each mode sizes and stands
     /// the creature for those alone. The hop greets a cursor arriving at the
     /// closed notch, and its tall arc would shrink the creature in the panel.
-    /// Below the notch a sleeping creature is tucked out of sight and pops
-    /// out to show it woke, so Sleep and Wake are never seen there. The
-    /// creature walks only along the strip below the closed notch. A lying
-    /// creature's tail can hang well below its ground point, so the sitting
-    /// anim counts only in the style that shows it, and the other styles keep
-    /// their ground line.
+    /// Below the notch a creature asleep at home is tucked out of sight and
+    /// pops out to show it woke. Away from home it sleeps in sight on the
+    /// standing ground line, but Sleep and Wake stay out of the fit so they
+    /// never lift that line for every other anim. Some Wakes curl 11 rows
+    /// below the ground, so a creature waking away from home skips Wake and
+    /// goes straight back to its loop. The creature walks only along the
+    /// strip below the closed notch. A lying creature's tail can hang well
+    /// below its ground point, so the sitting anim counts only in the style
+    /// that shows it, and the other styles keep their ground line.
     static func plays(_ state: SpriteState, panelExpanded: Bool, style: IdleStyle) -> Bool {
         switch state {
         case .idle, .celebrating: true

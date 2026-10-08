@@ -110,6 +110,7 @@ struct RoamRulesTests {
         .resting(at: 300, until: .distantFuture),
         .walking(RoamWalk(from: 0, to: 300, start: Date(timeIntervalSince1970: 1_800_000_000), speed: 35)),
         .returning(RoamWalk(from: 300, to: 0, start: Date(timeIntervalSince1970: 1_800_000_000), speed: 70)),
+        .asleep(at: -300),
     ])
     func snappingHomeIsImmediate(phase: RoamPhase) {
         var rng = SeededRandom(state: 7)
@@ -189,6 +190,40 @@ struct RoamRulesTests {
         #expect(RoamPhase.walking(RoamWalk(from: 600, to: 200, start: t0, speed: 35)).farthest == 600)
         #expect(RoamPhase.walking(RoamWalk(from: -100, to: -500, start: t0, speed: 35)).farthest == 500)
         #expect(RoamPhase.returning(RoamWalk(from: 300, to: 0, start: t0, speed: 70)).farthest == 300)
+        #expect(RoamPhase.asleep(at: -250).farthest == 250)
+    }
+
+    @Test func fallingAsleepStopsTheCreatureWhereItStands() {
+        var rng = SeededRandom(state: 21)
+        let walking = RoamPhase.walking(RoamWalk(from: 0, to: 140, start: t0, speed: 35))
+        #expect(RoamRules.next(walking, inputs(at: 2, homing: .stay), using: &rng) == .asleep(at: 70))
+        #expect(RoamRules.next(.resting(at: -300, until: t0 + 5), inputs(homing: .stay), using: &rng) == .asleep(at: -300))
+        #expect(RoamRules.next(.asleep(at: -300), inputs(at: 600, homing: .stay), using: &rng) == .asleep(at: -300))
+        #expect(RoamPhase.asleep(at: -300).x(at: t0) == -300)
+        #expect(RoamPhase.asleep(at: -300).deadline == nil)
+    }
+
+    @Test func fallingAsleepAtHomeStaysHome() {
+        var rng = SeededRandom(state: 23)
+        #expect(RoamRules.next(.home, inputs(homing: .stay), using: &rng) == .home)
+        #expect(RoamRules.next(.resting(at: 0, until: t0 + 5), inputs(homing: .stay), using: &rng) == .home)
+    }
+
+    @Test(arguments: 0..<20)
+    func wakingRestsWhereItSleptThenRoams(seed: UInt64) {
+        var rng = SeededRandom(state: seed)
+        guard case .resting(let x, let until) = RoamRules.next(.asleep(at: 300), inputs(at: 60), using: &rng) else {
+            Issue.record("waking rests where it slept")
+            return
+        }
+        #expect(x == 300)
+        #expect((4...15).contains(until.timeIntervalSince(t0 + 60)))
+    }
+
+    @Test func wakingOutsideARangeThatNarrowedWhileItSleptWalksBackIn() {
+        var rng = SeededRandom(state: 25)
+        #expect(RoamRules.next(.asleep(at: 600), inputs(range: -200...200), using: &rng)
+            == .walking(RoamWalk(from: 600, to: 200, start: t0, speed: RoamRules.walkSpeed)))
     }
 
     @Test func deadlinesAreWhenEachPhaseEndsByItself() {
@@ -249,10 +284,10 @@ struct HomingTests {
         (free, Homing.free),
         (with { $0.wander = .nearNotch }, .free),
         (with { $0.wander = .off }, .walk),
-        (with { $0.sleeping = true }, .walk),
+        (with { $0.sleeping = true }, .stay),
         (with { $0.focusing = true }, .walk),
         (with { $0.cursorNearHome = true }, .run),
-        (with { $0.cursorNearHome = true; $0.sleeping = true }, .run),
+        (with { $0.cursorNearHome = true; $0.sleeping = true }, .stay),
         (with { $0.panelOpen = true }, .snap),
         (with { $0.fullScreen = true }, .snap),
         (with { $0.hasCreature = false }, .snap),

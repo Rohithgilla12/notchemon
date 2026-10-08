@@ -247,7 +247,7 @@ final class SpriteLayer: CALayer {
         image.setAffineTransform(mirrored ? CGAffineTransform(scaleX: -1, y: 1) : .identity)
     }
 
-    /// Asleep, the creature ducks up behind the notch; any input pops it out.
+    /// Asleep at home, the creature ducks up behind the notch; any input pops it out.
     func setTucked(_ tucked: Bool) {
         guard tucked != self.tucked else { return }
         self.tucked = tucked

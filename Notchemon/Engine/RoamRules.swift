@@ -41,6 +41,8 @@ enum RoamPhase: Sendable, Equatable {
     /// Under the notch, kept there by `Homing`.
     case home
     case resting(at: Double, until: Date)
+    /// Asleep where it stopped, away from home. It rests there on waking.
+    case asleep(at: Double)
     /// On the way to a spot to rest at.
     case walking(RoamWalk)
     /// On the way home, to stay there.
@@ -49,7 +51,7 @@ enum RoamPhase: Sendable, Equatable {
     func x(at now: Date) -> Double {
         switch self {
         case .home: 0
-        case .resting(let x, _): x
+        case .resting(let x, _), .asleep(let x): x
         case .walking(let walk), .returning(let walk): walk.x(at: now)
         }
     }
@@ -57,7 +59,7 @@ enum RoamPhase: Sendable, Equatable {
     var walk: RoamWalk? {
         switch self {
         case .walking(let walk), .returning(let walk): walk
-        case .home, .resting: nil
+        case .home, .resting, .asleep: nil
         }
     }
 
@@ -66,24 +68,28 @@ enum RoamPhase: Sendable, Equatable {
     var farthest: Double {
         switch self {
         case .home: 0
-        case .resting(let x, _): abs(x)
+        case .resting(let x, _), .asleep(let x): abs(x)
         case .walking(let walk), .returning(let walk): max(abs(walk.from), abs(walk.to))
         }
     }
 
-    /// When the phase ends by itself. Home ends only when the inputs change.
+    /// When the phase ends by itself. Home and sleep end only when the
+    /// inputs change.
     var deadline: Date? {
         switch self {
-        case .home: nil
+        case .home, .asleep: nil
         case .resting(_, let until): until
         case .walking(let walk), .returning(let walk): walk.end
         }
     }
 }
 
-/// Whether the creature may wander, and if not, how it gets home.
+/// Whether the creature may wander, and if not, how it gets home or that it
+/// stays put.
 enum Homing: Sendable, Equatable {
     case free
+    /// Stops where it is, because it fell asleep.
+    case stay
     case walk
     /// Hurries home to greet the cursor.
     case run
@@ -91,7 +97,7 @@ enum Homing: Sendable, Equatable {
     case snap
 }
 
-/// Everything that can call the creature home.
+/// Everything that can call the creature home or hold it where it is.
 struct HomingConditions: Sendable, Equatable {
     var wander: WanderRange
     /// Expanded by hover, the hotkey, or onboarding.
@@ -125,8 +131,11 @@ enum RoamRules {
 
     static func homing(_ conditions: HomingConditions) -> Homing {
         if conditions.panelOpen || conditions.fullScreen || !conditions.hasCreature { return .snap }
+        // Asleep it stays put even for a cursor at home: moving the mouse
+        // wakes it within a second, and then it runs to greet it.
+        if conditions.sleeping { return .stay }
         if conditions.cursorNearHome { return .run }
-        if conditions.wander == .off || conditions.sleeping || conditions.focusing { return .walk }
+        if conditions.wander == .off || conditions.focusing { return .walk }
         return .free
     }
 
@@ -135,6 +144,9 @@ enum RoamRules {
         switch inputs.homing {
         case .snap:
             return .home
+        case .stay:
+            let x = phase.x(at: now)
+            return x == 0 ? .home : .asleep(at: x)
         case .walk, .run:
             let speed = inputs.homing == .run ? runSpeed : walkSpeed
             switch phase {
@@ -142,7 +154,7 @@ enum RoamRules {
                 return .home
             case .returning(let walk) where walk.speed == speed:
                 return now >= walk.end ? .home : phase
-            case .resting, .walking, .returning:
+            case .resting, .asleep, .walking, .returning:
                 let x = phase.x(at: now)
                 return x == 0 ? .home : .returning(RoamWalk(from: x, to: 0, start: now, speed: speed))
             }
@@ -157,6 +169,9 @@ enum RoamRules {
         switch phase {
         case .home:
             return .resting(at: 0, until: now + .random(in: rest, using: &rng))
+        case .asleep(let x):
+            guard range.contains(x) else { return walkBack(from: x, inputs) }
+            return .resting(at: x, until: now + .random(in: rest, using: &rng))
         case .resting(let x, let until):
             guard range.contains(x) else { return walkBack(from: x, inputs) }
             return now < until ? phase : stroll(from: x, inputs, using: &rng)

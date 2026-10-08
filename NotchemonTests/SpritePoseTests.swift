@@ -9,6 +9,7 @@ struct SpritePoseTests {
     let idle = SpriteFrames(frames: [FakeProvider.image()], durations: [1])
     let left = SpriteFrames(frames: [FakeProvider.image()], durations: [0.2], directional: true)
     let right = SpriteFrames(frames: [FakeProvider.image()], durations: [0.2], directional: true)
+    let sleep = SpriteFrames(frames: [FakeProvider.image(), FakeProvider.image()], durations: [0.5, 0.5])
 
     func snapshot(behaviour: Behaviour = .idle) -> CompanionSnapshot {
         var snapshot = CompanionSnapshot()
@@ -55,9 +56,28 @@ struct SpritePoseTests {
     @Test func asleepItTucksUpOnlyOnceItIsHome() {
         let returning = RoamPhase.returning(RoamWalk(from: 200, to: 0, start: t0, speed: RoamRules.walkSpeed))
         #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: returning, expanded: false).tucked)
+        #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .asleep(at: 200), expanded: false).tucked)
         #expect(SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: false).tucked)
         #expect(!SpritePose(snapshot(behaviour: .sleeping), roam: .home, expanded: true).tucked)
         #expect(!SpritePose(snapshot(), roam: .home, expanded: false).tucked)
+    }
+
+    @Test func asleepAwayFromHomeItPlaysTheSleepLoopWhereItStopped() throws {
+        var sleeping = snapshot(behaviour: .sleeping)
+        sleeping.sprite?.loop = sleep
+        sleeping.sprite?.loopState = .sleeping
+        sleeping.sprite?.playback = .cycle
+        let asleep = SpritePose(sleeping, roam: .asleep(at: -150), expanded: false)
+        #expect(asleep.show?.loopState == .sleeping)
+        #expect(asleep.show?.loop.frames.first === sleep.frames.first)
+        #expect(asleep.track == .still(-150))
+        #expect(!asleep.tucked)
+
+        let walk = RoamWalk(from: 0, to: 300, start: t0, speed: RoamRules.walkSpeed)
+        let midWalk = SpritePose(sleeping, roam: .walking(walk), expanded: false)
+        #expect(midWalk.show?.loopState == .sleeping)
+        #expect(midWalk.show?.loop.frames.first === sleep.frames.first)
+        #expect(midWalk.show?.facing == .down)
     }
 
     @Test func theCursorIsMeasuredFromTheCreaturesLiveSpot() throws {

@@ -30,26 +30,23 @@ struct SpritePose: Equatable {
 
 extension SpritePose {
     /// The open panel shows the creature in its own slot wherever it was
-    /// wandering. Closed, it walks or rests along the strip, and asleep it
-    /// tucks up behind the notch only once it is home.
+    /// wandering. Closed, it walks or rests along the strip. Asleep, it
+    /// sleeps where it stopped and tucks up behind the notch only if that is
+    /// home.
     init(_ snapshot: CompanionSnapshot, roam: RoamPhase, expanded: Bool) {
         let walk = expanded ? nil : roam.walk
         var show = snapshot.sprite
-        if let walk, let cycle = show?.walk {
+        if let walk, snapshot.behaviour != .sleeping, let cycle = show?.walk {
             show?.loop = cycle.frames(toward: walk.direction)
             show?.loopState = .walking
             show?.playback = .cycle
             show?.facing = walk.direction
         }
         let tucked = snapshot.behaviour == .sleeping && !expanded && roam == .home
-        let track: SpriteTrack = if expanded {
-            .still(0)
-        } else if let walk {
-            .walk(walk)
-        } else if case .resting(let x, _) = roam {
-            .still(x)
-        } else {
-            .still(0)
+        let track: SpriteTrack = switch roam {
+        case _ where expanded, .home: .still(0)
+        case .resting(let x, _), .asleep(let x): .still(x)
+        case .walking(let walk), .returning(let walk): .walk(walk)
         }
         self.init(
             show: show,
