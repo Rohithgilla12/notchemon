@@ -17,7 +17,7 @@ Status key:
 | Creature in the notch, starter picker, levels, evolution | Shipped | Sprites come from SpriteCollab and PokéAPI at runtime and are never bundled. |
 | Walks along the top edge, sleeps, and wakes | Shipped | |
 | Motion settings: calm, lively, or sitting idle; hop on approach; fidgets | Shipped | |
-| Walks on the Dock, including auto-hiding Docks | In progress | PR #1. |
+| Walks on the Dock, including auto-hiding Docks | Shipped | Needs Accessibility, granted from the Motion menu. |
 | Rests on top of the floating notes window | Later | Treats the notes window as another perch. |
 | Reacts to Now Playing (dances while music plays) | Later | Depends on Now Playing. |
 
@@ -37,7 +37,7 @@ Status key:
 | Feature | Status | Notes |
 | --- | --- | --- |
 | Quick note in the panel | Shipped | Appends to `~/Documents/Notchemon/notes.md`. |
-| Floating notes, Raycast style | In progress | A floating Markdown notes window with its own hotkey. |
+| Floating notes, Raycast style | Shipped | ⌃⌥⌘N. Markdown files in `~/Documents/Notchemon/Notes/`, with a slash menu. |
 | Focus timer with ring and XP | Shipped | |
 | Focus sounds for the timer | Later | |
 | File stash ("shelf") | Shipped | Holds up to 5 files. |
@@ -69,6 +69,6 @@ Status key:
 | --- | --- | --- |
 | No telemetry, no account, data stays on the Mac | Shipped | |
 | Open source (MIT) | Shipped | |
-| Auto-updates (Sparkle), Launch at Login, About window, DMG, tagged releases | In progress | PR #2. |
-| Homebrew cask | In progress | Works once the repo and its releases are public. |
+| Auto-updates (Sparkle), Launch at Login, About window, DMG, tagged releases | Shipped | Updates go live after the signing keys are set and the repo is public. |
+| Homebrew cask | Planned | Works once the repo and its releases are public. |
 | Paid licence, lifetime purchase, or seat limits | Out of scope | Guardrail 3: non-commercial, always. |
