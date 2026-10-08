@@ -49,7 +49,7 @@ enum DockReader {
 
 /// Keeps the Dock's shelf current while the wander setting includes the
 /// Dock. It reads only when asked or when something that moves, resizes,
-/// shows or hides the Dock happens, never on a timer.
+/// shows, or hides the Dock happens. Nothing runs between those.
 @MainActor
 @Observable
 final class DockWatcher {
@@ -89,7 +89,7 @@ final class DockWatcher {
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
             observe(workspace, name) { $0.refresh() }
         }
-        // Choosing an app from a shown auto-hiding Dock hides it with the cursor still over it.
+        // Clicking an app in a shown auto-hiding Dock can hide it with the cursor still over it.
         observe(workspace, NSWorkspace.didActivateApplicationNotification) { watcher in
             if watcher.shelf?.autoHide?.slide == .shown { watcher.confirmSlide() }
         }
