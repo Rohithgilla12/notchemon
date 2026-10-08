@@ -253,6 +253,7 @@ final class NotesTextView: NSTextView {
     }
 
     let highlighter = MarkdownHighlighter()
+    private(set) lazy var slashMenu = SlashMenu(textView: self)
 
     var activeLines: NSRange {
         guard let storage = textStorage else { return NSRange(location: 0, length: 0) }
@@ -271,7 +272,39 @@ final class NotesTextView: NSTextView {
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         // Mid-drag, revealing markup would move the text under the pointer.
-        if !stillSelecting { revealMarkup() }
+        guard !stillSelecting else { return }
+        revealMarkup()
+        slashMenu.refresh()
+    }
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        super.insertText(string, replacementRange: replacementRange)
+        let typed = (string as? String) ?? (string as? NSAttributedString)?.string
+        guard typed == "/", let storage = textStorage else { return }
+        let slash = selectedRange().location - 1
+        if SlashCommand.opens(at: slash, in: storage.mutableString) { slashMenu.open(at: slash) }
+    }
+
+    override func doCommand(by selector: Selector) {
+        if slashMenu.handle(selector) { return }
+        super.doCommand(by: selector)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        slashMenu.close()
+        return super.resignFirstResponder()
+    }
+
+    /// Replaces the typed `/query` with the command's Markdown as one undo step.
+    func apply(_ command: SlashCommand, replacing trigger: NSRange) {
+        guard let storage = textStorage else { return }
+        let edit = command.apply(to: storage.mutableString, trigger: trigger)
+        breakUndoCoalescing()
+        guard shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+        storage.replaceCharacters(in: edit.range, with: edit.replacement)
+        didChangeText()
+        setSelectedRange(edit.selection)
+        breakUndoCoalescing()
     }
 
     /// Shows the markup on the caret's lines and hides it everywhere else.
@@ -292,8 +325,9 @@ final class NotesTextView: NSTextView {
         pasteAsPlainText(sender)
     }
 
-    // NSTextView turns Esc into completion; here it hides the window.
+    // NSTextView turns Esc into completion; here it closes the slash menu or hides the window.
     override func cancelOperation(_ sender: Any?) {
+        if slashMenu.isOpen { return slashMenu.close() }
         window?.cancelOperation(sender)
     }
 
