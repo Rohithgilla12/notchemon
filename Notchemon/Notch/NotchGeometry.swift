@@ -51,7 +51,10 @@ enum NotchGeometry {
 
     /// Returns nil when the screen has no notch and the virtual notch is off.
     /// Full screen keeps the creature home, so the strip shrinks to the notch.
-    static func layout(for screen: ScreenMetrics, virtualNotchEnabled: Bool, fullScreen: Bool = false, wander: WanderRange) -> NotchLayout? {
+    /// `covering` is how far from home the creature stands or walks: past a
+    /// range that just narrowed, the strip stays wide enough to show it
+    /// walking back in.
+    static func layout(for screen: ScreenMetrics, virtualNotchEnabled: Bool, fullScreen: Bool = false, wander: WanderRange, covering: CGFloat = 0) -> NotchLayout? {
         let kind: NotchKind
         let size: CGSize
         if screen.safeAreaTop > 0 {
@@ -82,7 +85,7 @@ enum NotchGeometry {
             height: expandedHeight
         )
         let reach = fullScreen ? 0 : roamReach(wander, screenWidth: screen.frame.width)
-        let halfStrip = reach + roamEdgeInset
+        let halfStrip = max(reach, covering) + roamEdgeInset
         let strip = CGRect(x: notch.midX - halfStrip, y: collapsed.minY, width: 2 * halfStrip, height: collapsed.height)
         let panel = expanded.union(strip.intersection(screen.frame))
         return NotchLayout(kind: kind, notch: notch, collapsed: collapsed, expanded: expanded, roamReach: reach, panel: panel)

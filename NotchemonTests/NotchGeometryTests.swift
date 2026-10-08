@@ -84,6 +84,16 @@ struct NotchGeometryTests {
         #expect(layout.notch.midX + layout.roamReach + NotchGeometry.roamEdgeInset <= external.frame.maxX)
     }
 
+    @Test func theWindowKeepsACreatureWalkingBackIntoANarrowedRangeInView() throws {
+        let narrowed = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false, wander: .nearNotch, covering: 600))
+        #expect(narrowed.roamReach == 200)
+        #expect(narrowed.panel == CGRect(x: 864 - 660, y: 905, width: 1320, height: 212))
+        let inside = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false, wander: .nearNotch, covering: 150))
+        #expect(inside == NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false, wander: .nearNotch))
+        let offScreen = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false, wander: .nearNotch, covering: 900))
+        #expect(offScreen.panel == CGRect(x: 0, y: 905, width: 1728, height: 212))
+    }
+
     @Test func fullScreenKeepsTheCreatureUnderTheNotch() throws {
         let layout = try #require(NotchGeometry.layout(for: macBookPro, virtualNotchEnabled: false, fullScreen: true, wander: .topEdge))
         #expect(layout.roamReach == 0)

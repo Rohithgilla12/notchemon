@@ -152,17 +152,43 @@ struct RoamRulesTests {
         #expect(x == 0)
     }
 
-    @Test func aScreenThatShrinksPullsTheCreatureBackInside() {
+    @Test func aRangeThatShrinksPastTheCreatureWalksItBackToTheNearestEdge() throws {
         var rng = SeededRandom(state: 17)
         let narrow: ClosedRange<Double> = -200...200
-        let rest = RoamRules.next(.resting(at: 600, until: t0 + 5), inputs(range: narrow), using: &rng)
-        #expect(rest == .resting(at: 200, until: t0 + 5))
+        #expect(RoamRules.next(.resting(at: 600, until: t0 + 5), inputs(range: narrow), using: &rng)
+            == .walking(RoamWalk(from: 600, to: 200, start: t0, speed: RoamRules.walkSpeed)))
+        #expect(RoamRules.next(.resting(at: -600, until: t0 + 5), inputs(range: narrow), using: &rng)
+            == .walking(RoamWalk(from: -600, to: -200, start: t0, speed: RoamRules.walkSpeed)))
+
+        let outbound = RoamPhase.walking(RoamWalk(from: 100, to: 660, start: t0, speed: RoamRules.walkSpeed))
+        let back = RoamRules.next(outbound, inputs(at: 8, range: narrow), using: &rng)
+        let walk = try #require(back.walk)
+        #expect(back == .walking(RoamWalk(from: 380, to: 200, start: t0 + 8, speed: RoamRules.walkSpeed)))
+        let arrival = walk.end.timeIntervalSince(t0)
+        #expect(RoamRules.next(back, inputs(at: arrival - 0.1, range: narrow), using: &rng) == back)
+        guard case .resting(let x, _) = RoamRules.next(back, inputs(at: arrival, range: narrow), using: &rng) else {
+            Issue.record("the walk back rests at the edge it reached")
+            return
+        }
+        #expect(x == 200)
+    }
+
+    @Test func aWalkWhoseTargetLeavesTheRangeStopsWhereItIsWhenThatIsStillInside() {
+        var rng = SeededRandom(state: 19)
         let walk = RoamPhase.walking(RoamWalk(from: 100, to: 700, start: t0, speed: 35))
-        guard case .resting(let x, _) = RoamRules.next(walk, inputs(at: 2, range: narrow), using: &rng) else {
-            Issue.record("expected a rest inside the new range")
+        guard case .resting(let x, _) = RoamRules.next(walk, inputs(at: 2, range: -200...200), using: &rng) else {
+            Issue.record("expected a rest where it stood")
             return
         }
         #expect(x == 170)
+    }
+
+    @Test func farthestIsTheMostAPhaseTakesTheCreatureFromHome() {
+        #expect(RoamPhase.home.farthest == 0)
+        #expect(RoamPhase.resting(at: -420, until: t0).farthest == 420)
+        #expect(RoamPhase.walking(RoamWalk(from: 600, to: 200, start: t0, speed: 35)).farthest == 600)
+        #expect(RoamPhase.walking(RoamWalk(from: -100, to: -500, start: t0, speed: 35)).farthest == 500)
+        #expect(RoamPhase.returning(RoamWalk(from: 300, to: 0, start: t0, speed: 70)).farthest == 300)
     }
 
     @Test func deadlinesAreWhenEachPhaseEndsByItself() {

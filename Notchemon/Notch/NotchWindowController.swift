@@ -12,6 +12,8 @@ final class NotchWindowController {
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
     private var wander: WanderRange
+    private var screen: ScreenMetrics?
+    private var creatureExtent: CGFloat = 0
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
     private var pressPoll: Timer?
@@ -61,12 +63,31 @@ final class NotchWindowController {
 
     func relayout() {
         guard let screen = NSScreen.notchHost else {
+            self.screen = nil
             apply(layout: nil)
             return
         }
-        let fullScreen = FullScreenDetector.isFullScreen(screen)
-        presentation.isFullScreen = fullScreen
-        apply(layout: NotchGeometry.layout(for: screen.metrics, virtualNotchEnabled: virtualNotchEnabled, fullScreen: fullScreen, wander: wander))
+        self.screen = screen.metrics
+        presentation.isFullScreen = FullScreenDetector.isFullScreen(screen)
+        apply(layout: layout())
+    }
+
+    /// How far from home the creature stands or walks. It changes with every
+    /// phase but moves the window only while the creature is outside its range.
+    func setCreatureExtent(_ extent: CGFloat) {
+        guard extent != creatureExtent else { return }
+        creatureExtent = extent
+        let next = layout()
+        guard next != presentation.layout else { return }
+        apply(layout: next)
+    }
+
+    private func layout() -> NotchLayout? {
+        screen.flatMap {
+            NotchGeometry.layout(
+                for: $0, virtualNotchEnabled: virtualNotchEnabled, fullScreen: presentation.isFullScreen, wander: wander, covering: creatureExtent
+            )
+        }
     }
 
     func toggleFromHotkey() {

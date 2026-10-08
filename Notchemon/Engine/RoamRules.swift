@@ -46,6 +46,16 @@ enum RoamPhase: Sendable, Equatable {
         }
     }
 
+    /// The most this phase takes the creature from home, so the window can
+    /// keep all of it in view.
+    var farthest: Double {
+        switch self {
+        case .home: 0
+        case .resting(let x, _): abs(x)
+        case .walking(let walk), .returning(let walk): max(abs(walk.from), abs(walk.to))
+        }
+    }
+
     /// When the phase ends by itself. Home ends only when the inputs change.
     var deadline: Date? {
         switch self {
@@ -133,15 +143,20 @@ enum RoamRules {
         case .home:
             return .resting(at: 0, until: now + .random(in: rest, using: &rng))
         case .resting(let x, let until):
-            // The screen changed under a creature resting off its new edge.
-            guard range.contains(x) else { return .resting(at: x.clamped(to: range), until: until) }
+            guard range.contains(x) else { return walkBack(from: x, inputs) }
             return now < until ? phase : stroll(from: x, inputs, using: &rng)
         case .walking(let walk), .returning(let walk):
             guard range.contains(walk.to) else {
-                return .resting(at: walk.x(at: now).clamped(to: range), until: now + .random(in: rest, using: &rng))
+                let x = walk.x(at: now)
+                return range.contains(x) ? .resting(at: x, until: now + .random(in: rest, using: &rng)) : walkBack(from: x, inputs)
             }
             return now < walk.end ? .walking(walk) : .resting(at: walk.to, until: now + .random(in: rest, using: &rng))
         }
+    }
+
+    /// The range narrowed past the creature, so it walks in to the nearest edge.
+    private static func walkBack(from x: Double, _ inputs: RoamInputs) -> RoamPhase {
+        .walking(RoamWalk(from: x, to: x.clamped(to: inputs.range), start: inputs.now, speed: walkSpeed))
     }
 
     private static func stroll(from x: Double, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {

@@ -38,7 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = controller
         controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
         // Arriving or setting off moves the creature, not the cursor, so it looks again from where it is.
-        roamer.onPhaseChanged = { [weak self] in self?.cursorMoved(to: NSEvent.mouseLocation) }
+        roamer.onPhaseChanged = { [weak self, weak controller] in
+            guard let self else { return }
+            controller?.setCreatureExtent(roamer.phase.farthest)
+            cursorMoved(to: NSEvent.mouseLocation)
+        }
         model.onSnapshot = { [weak self] in self?.refreshRoam() }
         model.onPreferencesChanged = { [weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
