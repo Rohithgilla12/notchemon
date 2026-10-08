@@ -18,6 +18,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - **Launch at Login** menu toggle, off by default.
 - About window with the version, licence, disclaimer, and credits.
 - Signed and notarised DMG beside the zip, a release job that publishes both with a Sparkle appcast on `v*` tags, `scripts/bump-version.sh`, and [docs/releasing.md](docs/releasing.md).
+- Floating notes, toggled with ⌃⌥⌘N or the **Floating Notes** menu item. Each note is a Markdown file in `~/Documents/Notchemon/Notes/`, with live styling, clickable tasks, a ⌘P quick switcher, auto-save, and conflict copies when another editor changes a note you are editing. The quick-note field can open it. `NotchemonNotesFolder` points it at another folder.
+- When a note cannot be saved at quit, the app stays open and asks: **Try Again**, **Save a Copy…**, or **Quit Anyway**. It asks at logout and shutdown too.
 
 ### Changed
 

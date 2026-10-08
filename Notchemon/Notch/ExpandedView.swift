@@ -87,6 +87,17 @@ private struct ToolsColumn: View {
                 .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
                 .focused($noteFocused)
                 .onSubmit { model.submitNote() }
+                .overlay(alignment: .trailing) {
+                    Button {
+                        FloatingNotes.shared.show(seed: model.noteDraft)
+                        model.noteDraft = ""
+                    } label: {
+                        Image(systemName: "macwindow.on.rectangle").font(.system(size: 10)).foregroundStyle(.white.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                    .help("Open in Floating Notes")
+                }
             StashRow(model: model)
             if let attribution = model.snapshot.sprite?.loop.attribution {
                 SpriteCreditLine(attribution: attribution)

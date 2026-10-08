@@ -24,7 +24,7 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger.
 - **Quick note.** Type in the panel and press Enter to append `- [YYYY-MM-DD HH:mm] text` to `~/Documents/Notchemon/notes.md`.
 - **File stash.** Drop up to five files on the notch, closed or open. The creature holds them as bookmarks, so a stashed file survives a rename or move. Drag an icon out of the panel to drop the file elsewhere, which also removes it from the stash. Click an icon to open the file. When the stash is full, the notch shakes and refuses the drop.
-- **Menu bar.** The menu bar item offers start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, choose creature (this resets progress, after confirmation), open notes folder, and quit.
+- **Menu bar.** The menu bar item offers start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, floating notes, choose creature (this resets progress, after confirmation), open notes folder, and quit.
 - **Macs without a notch.** The app draws a black virtual notch at the top centre of the built-in display, or of the main display in clamshell mode. You can turn this off.
 
 ## Permissions
@@ -45,6 +45,35 @@ The app notices the change when macOS announces it or the next time the app beco
 - **Updates.** Notchemon updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle asks whether to check for updates automatically. **Check for Updates…** in the menu checks at any time. Each update is signed with an EdDSA key, and the app checks that signature before it unpacks the update.
 - **Launch at Login.** Off by default. Turn it on from the menu. If you turn it off in System Settings › General › Login Items, the menu offers to open that pane, because only System Settings can turn it back on.
 - **About Notchemon.** Shows the version, the licence, the disclaimer, and the credits.
+
+## Floating notes
+
+Press ⌃⌥⌘N anywhere, or choose **Floating Notes** in the menu, to open a small translucent notes window. It floats above other windows on every Space and beside full-screen apps, and the cursor lands at the end of the note you last had open. Press ⌃⌥⌘N again or Escape to hide it. Like ⌃⌥N, the hotkey uses Carbon and needs no permission.
+
+- **Notes are Markdown files.** Each note is one file in `~/Documents/Notchemon/Notes/`, and its first line is the title. The file gets its name, `YYYYMMDD-title.md`, at the first save. A new note saves once you end its title line, or after 3 seconds without typing. Renaming the title later keeps the file name, so the note stays easy to find in Finder and other editors. The quick-note log, `~/Documents/Notchemon/notes.md`, is separate and the window never opens it.
+- **Saving.** Notes save 0.5 seconds after you stop typing, and when the window hides, loses focus, or the app quits. Every write is atomic.
+- **Quitting with unsaved notes.** If a note cannot be saved at quit, for example because the disk is full or the folder is missing, the app stays open. It shows the notes window and an alert that names each note and the error. **Try Again** saves again and quits if that works. **Save a Copy…** asks where to save each note, then quits. **Quit Anyway** quits and loses the unsaved changes. A save that takes more than 5 seconds counts as failed. At logout, restart, or shutdown the same alert appears, and macOS waits for your answer.
+- **Edits in other editors.** While the window is open, it checks the folder every 2 seconds. A note without unsaved edits reloads. If the file changed while you had unsaved edits, your text is saved as a new `…-conflict.md` note and stays open, and the original file keeps the other editor's text. A file deleted elsewhere leaves the list, unless you were editing it; then your text is written back.
+- **Live Markdown.** Headings, bold, italic, strikethrough, inline code, links, bullets, numbered lists, quotes, rules, and `- [ ]` and `- [x]` tasks are styled as you type. Markup such as `**` and `# ` is hidden except on the line holding the cursor, where it shows faintly. Bullets show as dots and tasks as boxes; click a box to tick it. The file on disk stays plain Markdown. Pasted text arrives as plain text. **Monospaced Font** is in the ⋯ menu.
+- **Slash menu.** Type `/` at the start of a line or after a space to add a heading, bold, italic, strikethrough, code, a checklist, a bulleted or numbered list, a quote, or a divider. Keep typing to filter, use the arrow keys to choose, and press Return or Tab to apply. Escape closes the menu.
+- **Window.** Drag the title strip to move the window and drag an edge to resize it. The search, new note, pin, and ⋯ buttons appear while the pointer is over the title strip. It opens on the display under the pointer and remembers its frame on each display. **Keep on Top**, the pin, is on by default.
+
+| Shortcut | Action |
+| --- | --- |
+| ⌘N | New note. |
+| ⌘P or ⌘K | Quick switcher. Titles match fuzzily, and note text matches when it holds every word you type. Arrow keys move, Return opens, and Escape closes. |
+| ⌘[ and ⌘] | Previous and next note. |
+| ⌘⌫ | Move the note to the Trash, after a confirmation. |
+| Escape | Hide the window. |
+
+The quick-note field in the notch panel has a small window button. It opens floating notes and turns any text you typed into a new note.
+
+To try floating notes against a scratch folder, set `NotchemonNotesFolder`:
+
+```sh
+defaults write com.rohithgilla.Notchemon NotchemonNotesFolder /tmp/notchemon-notes
+defaults delete com.rohithgilla.Notchemon NotchemonNotesFolder
+```
 
 ## Build
 

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Notchemon
 
+@MainActor
 struct AboutTests {
     @Test func disclaimerMatchesTheReadme() throws {
         let readme = URL(fileURLWithPath: #filePath)

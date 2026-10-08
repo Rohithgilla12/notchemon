@@ -44,6 +44,8 @@ struct MenuBarContent: View {
         Divider()
         Button("Open Notch") { app.windowController?.expandPinned(focusNote: true) }
             .keyboardShortcut("n", modifiers: [.control, .option])
+        Button("Floating Notes") { FloatingNotes.shared.toggle() }
+            .keyboardShortcut("n", modifiers: [.control, .option, .command])
         Button("Choose Creature…", action: app.confirmNewStarter)
         Button("Open Notes Folder", action: app.openNotesFolder)
         Divider()

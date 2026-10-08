@@ -9,12 +9,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let roamer = Roamer()
     let dockWatcher = DockWatcher()
     let model: CompanionModel
+    let notes: FloatingNotes
     private(set) var windowController: NotchWindowController?
     private var dockController: DockWindowController?
     private var hotKey: HotKey?
+    private var notesHotKey: HotKey?
     private var cursorNearHome = false
+    private let quitPrompt: any QuitPrompt
+    private let endsSession: @MainActor () -> Bool
+    private let terminate: @MainActor () -> Void
+    private var quitState = QuitState.running
 
-    override init() {
+    private enum QuitState {
+        case running
+        case asking
+        case approved
+    }
+
+    override convenience init() {
+        let notes = FloatingNotes.shared
+        self.init(
+            notes: notes,
+            quitPrompt: AlertQuitPrompt(notes: notes),
+            endsSession: { QuitReason.endsSession(NSAppleEventManager.shared().currentAppleEvent) },
+            terminate: { NSApp.terminate(nil) }
+        )
+    }
+
+    init(
+        notes: FloatingNotes,
+        quitPrompt: any QuitPrompt,
+        endsSession: @escaping @MainActor () -> Bool,
+        terminate: @escaping @MainActor () -> Void
+    ) {
+        self.notes = notes
+        self.quitPrompt = quitPrompt
+        self.endsSession = endsSession
+        self.terminate = terminate
         let defaults = UserDefaults.standard
         let sessionSeconds = defaults.double(forKey: Self.debugSessionSecondsKey)
         let sleepSeconds = defaults.double(forKey: Self.debugSleepSecondsKey)
@@ -68,7 +99,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.start()
         dockWatcher.start(wanted: model.snapshot.preferences.wander.includesDock)
         hotKey = HotKey.controlOptionN { [weak controller] in controller?.toggleFromHotkey() }
+        notesHotKey = HotKey.controlOptionCommandN { [notes] in notes.toggle() }
         Task { await model.run() }
+    }
+
+    /// Quitting waits until every note is saved, copied elsewhere, or
+    /// knowingly discarded, so a failed save never loses text silently.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        switch quitState {
+        case .approved: return .terminateNow
+        case .asking: return .terminateCancel
+        case .running: break
+        }
+        guard case .ask(let failures) = QuitDecision.after(saving: notes.session.flush()) else { return .terminateNow }
+        quitState = .asking
+        if endsSession() {
+            // Cancelling would abandon the logout, restart, or shutdown, and
+            // macOS holds it until this returns, so the alert runs right here.
+            resolveQuit(failures)
+            quitState = .approved
+            return .terminateNow
+        }
+        DispatchQueue.main.async { [self] in
+            resolveQuit(failures)
+            quitState = .approved
+            terminate()
+        }
+        return .terminateCancel
+    }
+
+    private func resolveQuit(_ failures: [NoteSaveFailure]) {
+        var decision = QuitDecision.ask(failures)
+        while case .ask(let failures) = decision {
+            decision = QuitDecision.after(
+                quitPrompt.choose(for: failures),
+                for: failures,
+                retry: { notes.session.flush() },
+                copy: quitPrompt.saveCopy(of:)
+            )
+        }
     }
 
     private func showDock() {
