@@ -25,6 +25,7 @@ final class NotesPanel: NSPanel {
         isReleasedWhenClosed = false
         isOpaque = false
         backgroundColor = .clear
+        hasShadow = true
         minSize = NotesWindowFrame.minimumSize
         animationBehavior = .utilityWindow
     }

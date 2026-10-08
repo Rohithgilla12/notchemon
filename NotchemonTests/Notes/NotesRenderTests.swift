@@ -49,7 +49,7 @@ struct NotesRenderTests {
         let switcher = NSHostingView(rootView: QuickSwitcher(session: notes.session, query: "milk", onClose: { _ in }).frame(width: 400).padding(10))
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 420, height: 200), styleMask: [.borderless], backing: .buffered, defer: true)
         window.contentView = switcher
-        try render(window, appearance: .darkAqua, to: folder.appendingPathComponent("quick-switcher-search.png"))
+        try render(window, appearance: .darkAqua, to: folder.appendingPathComponent("quick-switcher-search.png"), material: false)
 
         notes.openSwitcher()
         try render(notes.preparePanel(), appearance: .darkAqua, to: folder.appendingPathComponent("quick-switcher-in-window.png"))
@@ -121,7 +121,10 @@ struct NotesRenderTests {
     }
 
 
-    private func render(_ window: NSWindow, appearance: NSAppearance.Name, to url: URL) throws {
+    /// Captures the window's frame view and composites it over a sample
+    /// wallpaper. The behind-window material only renders on screen, so a
+    /// dark tint in the window's shape stands in for it.
+    private func render(_ window: NSWindow, appearance: NSAppearance.Name, to url: URL, material: Bool = true) throws {
         window.appearance = NSAppearance(named: appearance)
         let view = try #require(window.contentView)
         for _ in 0..<3 {
@@ -130,18 +133,28 @@ struct NotesRenderTests {
         }
         let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
-        // The window material only renders on screen, so a flat backdrop stands in for it.
-        let backdrop: NSColor = appearance == .darkAqua ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.93, alpha: 1)
+        let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+        let margin = 24 * scale
         let composite = try #require(NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide, pixelsHigh: rep.pixelsHigh, bitsPerSample: 8,
+            bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide + Int(margin * 2), pixelsHigh: rep.pixelsHigh + Int(margin * 2), bitsPerSample: 8,
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ))
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: composite)
-        let bounds = CGRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh)
-        backdrop.setFill()
-        bounds.fill()
-        rep.draw(in: bounds)
+        let canvas = CGRect(x: 0, y: 0, width: composite.pixelsWide, height: composite.pixelsHigh)
+        let wallpaper = NSGradient(colors: [
+            NSColor(srgbRed: 0.42, green: 0.22, blue: 0.14, alpha: 1),
+            NSColor(srgbRed: 0.20, green: 0.16, blue: 0.20, alpha: 1),
+            NSColor(srgbRed: 0.10, green: 0.55, blue: 0.25, alpha: 1),
+        ])
+        wallpaper?.draw(in: canvas, angle: -60)
+        let windowRect = CGRect(x: margin, y: margin, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh))
+        if material {
+            let radius = NotesMaterial.windowCornerRadius * scale
+            NSColor(white: 0.11, alpha: 0.72).setFill()
+            NSBezierPath(roundedRect: windowRect, xRadius: radius, yRadius: radius).fill()
+        }
+        rep.draw(in: windowRect)
         NSGraphicsContext.restoreGraphicsState()
         try #require(composite.representation(using: .png, properties: [:])).write(to: url)
     }

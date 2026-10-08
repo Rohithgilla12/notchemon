@@ -154,10 +154,7 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
     func preparePanel() -> NotesPanel {
         if let panel { return panel }
         let panel = NotesPanel(contentRect: CGRect(origin: .zero, size: NotesWindowFrame.defaultSize))
-        let background = NSVisualEffectView()
-        background.material = .popover
-        background.blendingMode = .behindWindow
-        background.state = .active
+        let background = NotesMaterial.makeView(cornerRadius: NotesMaterial.windowCornerRadius)
         let hosting = NSHostingView(rootView: NotesView(notes: self))
         hosting.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(hosting)
@@ -283,6 +280,11 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
 
     func windowDidEndLiveResize(_ notification: Notification) {
         saveFrame()
+    }
+
+    // The shadow is computed from the window's alpha once; a new size needs a new one.
+    func windowDidResize(_ notification: Notification) {
+        panel?.invalidateShadow()
     }
 }
 
