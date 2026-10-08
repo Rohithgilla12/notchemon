@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct NotesView: View {
@@ -7,7 +8,6 @@ struct NotesView: View {
         let session = notes.session
         VStack(spacing: 0) {
             NotesHeader(notes: notes)
-            Divider().opacity(0.5)
             NoteEditor(session: session, handle: notes.editor, monospaced: notes.monospaced)
             if let error = session.lastError {
                 Text(error)
@@ -25,7 +25,7 @@ struct NotesView: View {
                     notes.closeSwitcher(opening: id)
                 }
                 .padding(.horizontal, 10)
-                .padding(.top, 38)
+                .padding(.top, NotesHeader.height)
             }
         }
         .frame(minWidth: NotesWindowFrame.minimumSize.width, minHeight: NotesWindowFrame.minimumSize.height)
@@ -34,46 +34,95 @@ struct NotesView: View {
     }
 }
 
-private struct NotesHeader: View {
+/// A quiet centred title. The actions fade in only while the pointer is over
+/// the strip; their shortcuts work either way.
+struct NotesHeader: View {
+    static let height: CGFloat = 40
+    private static let actionsWidth: CGFloat = 104
+
     let notes: FloatingNotes
+    @State private var hovering: Bool
+
+    init(notes: FloatingNotes, hovering: Bool = false) {
+        self.notes = notes
+        _hovering = State(initialValue: hovering)
+    }
 
     var body: some View {
-        let session = notes.session
-        let position = session.notes.firstIndex { $0.id == session.selectedID }.map { $0 + 1 } ?? 0
-        HStack(spacing: 2) {
-            Text(session.current?.title ?? "Notes")
-                .font(.system(size: 12, weight: .semibold))
+        ZStack {
+            HeaderStrip { hovering = $0 }
+            Text(notes.session.current?.title ?? "Notes")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(nsColor: .secondaryLabelColor).opacity(0.5))
                 .lineLimit(1)
-                .truncationMode(.tail)
-            Text("\(position)/\(session.notes.count)")
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 6)
-            Spacer(minLength: 8)
-            HeaderButton(symbol: "magnifyingglass", help: "Find a note (⌘P)") { notes.openSwitcher() }
-            HeaderButton(symbol: "square.and.pencil", help: "New note (⌘N)") { notes.newNote() }
-            HeaderButton(symbol: notes.keepOnTop ? "pin.fill" : "pin", help: notes.keepOnTop ? "Keep on Top is on" : "Keep on Top is off") {
-                notes.setKeepOnTop(!notes.keepOnTop)
+                .truncationMode(.middle)
+                .padding(.horizontal, Self.actionsWidth)
+                .allowsHitTesting(false)
+            HStack(spacing: 2) {
+                Spacer(minLength: 0)
+                actions
             }
-            Menu {
-                Toggle("Keep on Top", isOn: Binding(get: { notes.keepOnTop }, set: { notes.setKeepOnTop($0) }))
-                Toggle("Monospaced Font", isOn: Binding(get: { notes.monospaced }, set: { notes.setMonospaced($0) }))
-                Divider()
-                Button("Show in Finder") { notes.revealFolder() }
-                Button("Move to Trash…") { notes.confirmDelete() }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More")
+            .padding(.trailing, 10)
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
+            .animation(.easeOut(duration: 0.15), value: hovering)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .frame(height: 34)
+        .frame(height: Self.height)
         .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder private var actions: some View {
+        HeaderButton(symbol: "magnifyingglass", help: "Find a note (⌘P)") { notes.openSwitcher() }
+        HeaderButton(symbol: "square.and.pencil", help: "New note (⌘N)") { notes.newNote() }
+        HeaderButton(symbol: notes.keepOnTop ? "pin.fill" : "pin", help: notes.keepOnTop ? "Keep on Top is on" : "Keep on Top is off") {
+            notes.setKeepOnTop(!notes.keepOnTop)
+        }
+        Menu {
+            Toggle("Keep on Top", isOn: Binding(get: { notes.keepOnTop }, set: { notes.setKeepOnTop($0) }))
+            Toggle("Monospaced Font", isOn: Binding(get: { notes.monospaced }, set: { notes.setMonospaced($0) }))
+            Divider()
+            Button("Show in Finder") { notes.revealFolder() }
+            Button("Move to Trash…") { notes.confirmDelete() }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More")
+    }
+}
+
+/// The header's AppKit backing: it drags the window and reports hover from a
+/// tracking area, which fires even while another app is active.
+private struct HeaderStrip: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HeaderStripView {
+        let view = HeaderStripView()
+        view.onHover = onHover
+        return view
+    }
+
+    func updateNSView(_ view: HeaderStripView, context: Context) {
+        view.onHover = onHover
+    }
+}
+
+final class HeaderStripView: NSView {
+    var onHover: ((Bool) -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
     }
 }
 

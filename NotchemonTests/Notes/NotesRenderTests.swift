@@ -46,6 +46,16 @@ struct NotesRenderTests {
             try render(notes.preparePanel(), appearance: appearance, to: folder.appendingPathComponent("styled-note-\(suffix).png"))
         }
 
+        for hovering in [false, true] {
+            let frame = CGRect(x: 0, y: 0, width: 420, height: NotesHeader.height)
+            let header = NSHostingView(rootView: NotesHeader(notes: notes, hovering: hovering))
+            header.frame = frame
+            let strip = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: true)
+            strip.contentView = NSView(frame: frame)
+            strip.contentView?.addSubview(header)
+            try render(strip, appearance: .darkAqua, to: folder.appendingPathComponent(hovering ? "header-hover.png" : "header-idle.png"))
+        }
+
         let switcher = NSHostingView(rootView: QuickSwitcher(session: notes.session, query: "milk", onClose: { _ in }).frame(width: 400).padding(10))
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 420, height: 200), styleMask: [.borderless], backing: .buffered, defer: true)
         window.contentView = switcher
@@ -121,12 +131,17 @@ struct NotesRenderTests {
     }
 
 
-    /// Captures the window's frame view and composites it over a sample
-    /// wallpaper. The behind-window material only renders on screen, so a
-    /// dark tint in the window's shape stands in for it.
+    /// Captures the window's content over a sample wallpaper. The behind-window
+    /// material only renders on screen, so a dark tint in the window's shape
+    /// stands in for it, drawn under the content for the capture.
     private func render(_ window: NSWindow, appearance: NSAppearance.Name, to url: URL, material: Bool = true) throws {
         window.appearance = NSAppearance(named: appearance)
         let view = try #require(window.contentView)
+        let margin: CGFloat = 24
+        let standIn = WallpaperStandIn(frame: view.bounds, margin: margin, material: material)
+        standIn.autoresizingMask = [.width, .height]
+        view.addSubview(standIn, positioned: .below, relativeTo: view.subviews.first)
+        defer { standIn.removeFromSuperview() }
         for _ in 0..<3 {
             view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
@@ -134,27 +149,15 @@ struct NotesRenderTests {
         let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
         let scale = CGFloat(rep.pixelsWide) / view.bounds.width
-        let margin = 24 * scale
         let composite = try #require(NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide + Int(margin * 2), pixelsHigh: rep.pixelsHigh + Int(margin * 2), bitsPerSample: 8,
+            bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide + Int(margin * scale * 2), pixelsHigh: rep.pixelsHigh + Int(margin * scale * 2), bitsPerSample: 8,
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ))
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: composite)
         let canvas = CGRect(x: 0, y: 0, width: composite.pixelsWide, height: composite.pixelsHigh)
-        let wallpaper = NSGradient(colors: [
-            NSColor(srgbRed: 0.42, green: 0.22, blue: 0.14, alpha: 1),
-            NSColor(srgbRed: 0.20, green: 0.16, blue: 0.20, alpha: 1),
-            NSColor(srgbRed: 0.10, green: 0.55, blue: 0.25, alpha: 1),
-        ])
-        wallpaper?.draw(in: canvas, angle: -60)
-        let windowRect = CGRect(x: margin, y: margin, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh))
-        if material {
-            let radius = NotesMaterial.windowCornerRadius * scale
-            NSColor(white: 0.11, alpha: 0.72).setFill()
-            NSBezierPath(roundedRect: windowRect, xRadius: radius, yRadius: radius).fill()
-        }
-        rep.draw(in: windowRect)
+        WallpaperStandIn.wallpaper.draw(in: canvas, angle: -60)
+        rep.draw(in: CGRect(x: margin * scale, y: margin * scale, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh)))
         NSGraphicsContext.restoreGraphicsState()
         try #require(composite.representation(using: .png, properties: [:])).write(to: url)
     }
@@ -168,5 +171,38 @@ struct NotesRenderTests {
         let median = sorted[sorted.count / 2]
         let p95 = sorted[Int(Double(sorted.count) * 0.95)]
         return "median \(ms(median)), p95 \(ms(p95)), max \(ms(sorted[sorted.count - 1])) (n=\(sorted.count))"
+    }
+}
+
+/// Paints the slice of the sample wallpaper behind a captured view, plus a
+/// stand-in for the window material, so the capture lines up with the canvas.
+private final class WallpaperStandIn: NSView {
+    static let wallpaper = NSGradient(colors: [
+        NSColor(srgbRed: 0.42, green: 0.22, blue: 0.14, alpha: 1),
+        NSColor(srgbRed: 0.20, green: 0.16, blue: 0.20, alpha: 1),
+        NSColor(srgbRed: 0.10, green: 0.55, blue: 0.25, alpha: 1),
+    ])!
+
+    let margin: CGFloat
+    let material: Bool
+
+    init(frame: CGRect, margin: CGFloat, material: Bool) {
+        self.margin = margin
+        self.material = material
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Self.wallpaper.draw(in: bounds.insetBy(dx: -margin, dy: -margin), angle: -60)
+        guard material else { return }
+        let radius = NotesMaterial.windowCornerRadius
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25), xRadius: radius, yRadius: radius)
+        NSColor(white: 0.11, alpha: 0.72).setFill()
+        shape.fill()
+        NotesMaterial.highlight.setStroke()
+        shape.lineWidth = 0.5
+        shape.stroke()
     }
 }
