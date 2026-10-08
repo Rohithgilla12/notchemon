@@ -56,6 +56,42 @@ struct NoteEditorTests {
         #expect(editor.storage.isEqual(to: editor.styledFromScratch))
     }
 
+    @Test(arguments: [
+        ("# Hello world", 7),
+        ("- [x] paid rent", 10),
+        ("some **bold** text", 9),
+    ])
+    func splittingALineWithReturnRestylesBothHalves(text: String, at location: Int) {
+        let editor = EditorHarness(text)
+        editor.type("\n", at: location)
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test func joiningTwoLinesRestylesTheResult() {
+        let editor = EditorHarness("# Title\nplain")
+        editor.textView.insertText("", replacementRange: NSRange(location: 7, length: 1))
+        #expect(editor.storage.isEqual(to: editor.styledFromScratch))
+    }
+
+    @Test func reloadingTheSameNoteDropsUndoForTheOldText() throws {
+        let sandbox = try NotesSandbox()
+        let session = NotesSession(store: sandbox.store, now: { october8 })
+        _ = try sandbox.store.create("Plan\nv1", at: october8)
+        session.load()
+        let coordinator = NoteEditor.Coordinator(session: session)
+        let editor = EditorHarness("")
+        let note = try #require(session.current)
+        coordinator.load(note, into: editor.textView)
+        editor.type("typed", at: 4)
+        let undo = try #require(editor.textView.undoManager)
+        #expect(undo.canUndo)
+        var reloaded = note
+        reloaded.body = "Short"
+        coordinator.load(reloaded, into: editor.textView)
+        #expect(!undo.canUndo)
+        #expect(editor.storage.string == "Short")
+    }
+
     @Test func clickingACheckboxTicksItAndUndoUnticksIt() throws {
         let editor = EditorHarness("Groceries\n- [ ] milk\n")
         let box = (editor.storage.string as NSString).range(of: "[ ]")

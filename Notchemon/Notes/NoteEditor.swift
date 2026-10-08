@@ -6,7 +6,6 @@ extension NSAttributedString.Key {
     static let notesCheckbox = NSAttributedString.Key("NotchemonNotesCheckbox")
 }
 
-/// Maps `MarkdownSpan`s to text attributes.
 struct MarkdownTheme {
     var monospaced = false
     var size: CGFloat = 14
@@ -21,12 +20,15 @@ struct MarkdownTheme {
         return [.font: baseFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
     }
 
-    /// Restyles the whole lines `range` touches. Only attributes change.
+    /// Restyles the whole lines `range` touches, and the line starting where it
+    /// ends: typing Return mid-line edits only the newline, yet the text after
+    /// it is now a new line. Only attributes change.
     func restyle(_ storage: NSTextStorage, range: NSRange) {
         let text = storage.mutableString
-        let lines = text.lineRange(for: range)
+        let after = NSRange(location: NSMaxRange(range), length: 0)
+        let lines = NSUnionRange(text.lineRange(for: range), text.lineRange(for: after))
         storage.setAttributes(baseAttributes, range: lines)
-        for span in MarkdownStyler.spans(in: text, range: range) {
+        for span in MarkdownStyler.spans(in: text, range: lines) {
             apply(span, to: storage)
         }
     }
@@ -240,8 +242,9 @@ struct NoteEditor: NSViewRepresentable {
             self.session = session
         }
 
-        /// A different note opens with the cursor at its end and a fresh undo
-        /// history; a reload of the same note keeps the cursor where it was.
+        /// A different note opens with the cursor at its end; a reload of the
+        /// same note keeps the cursor where it was. Either way the undo history
+        /// goes with the old text, since its ranges no longer fit the new one.
         func load(_ note: Note?, into textView: NotesTextView) {
             let text = note?.body ?? ""
             let switched = note?.id != noteID
@@ -250,6 +253,7 @@ struct NoteEditor: NSViewRepresentable {
                 let selection = textView.selectedRange()
                 textView.typingAttributes = highlighter.theme.baseAttributes
                 textView.string = text
+                textView.undoManager?.removeAllActions()
                 let length = (text as NSString).length
                 textView.setSelectedRange(NSRange(location: min(selection.location, length), length: 0))
             }

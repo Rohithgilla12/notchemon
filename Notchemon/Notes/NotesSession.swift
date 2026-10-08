@@ -88,10 +88,10 @@ final class NotesSession {
         select(documents[target].note.id)
     }
 
-    /// Moves the open note's file to the Trash and opens its neighbour.
-    func deleteCurrent() {
-        saveTask?.cancel()
-        guard let index = selectedIndex else { return }
+    /// Moves the note's file to the Trash. If it was open, its neighbour opens.
+    func delete(_ id: UUID) {
+        guard let index = index(of: id) else { return }
+        if id == selectedID { saveTask?.cancel() }
         if let url = documents[index].note.url {
             do {
                 try store.trash(url)
@@ -100,13 +100,7 @@ final class NotesSession {
                 return
             }
         }
-        documents.remove(at: index)
-        if documents.isEmpty {
-            insertBlankNote()
-        } else {
-            selectedID = documents[min(index, documents.count - 1)].note.id
-        }
-        editorRevision += 1
+        remove(at: index)
     }
 
     /// Saves every note with unsaved edits now.
@@ -152,20 +146,20 @@ final class NotesSession {
                 markSaved(index, file)
                 return
             }
-            let disk = store.read(url)
-            switch NoteSync.decide(base: document.base, disk: disk?.text, local: document.note.body) {
+            let modified = store.modificationDate(url)
+            switch NoteSync.decide(base: document.base, disk: store.disk(url), local: document.note.body) {
             case .none:
-                documents[index].diskModified = disk?.modified
+                documents[index].diskModified = modified
             case .write, .restore:
                 markSaved(index, try store.write(document.note.body, to: url))
             case .reload(let text):
                 documents[index].note.body = text
-                documents[index].note.modified = disk?.modified ?? now()
+                documents[index].note.modified = modified ?? now()
                 documents[index].base = text
-                documents[index].diskModified = disk?.modified
+                documents[index].diskModified = modified
                 if id == selectedID { editorRevision += 1 }
             case .conflict(let text):
-                try keepBoth(index, disk: text, diskModified: disk?.modified)
+                try keepBoth(index, disk: text, diskModified: modified)
             case .remove:
                 remove(at: index)
             }
@@ -176,12 +170,14 @@ final class NotesSession {
     }
 
     /// The editor's text goes to a new conflict copy, which stays open if the
-    /// original was; the original takes the other editor's text.
-    private func keepBoth(_ index: Int, disk text: String, diskModified: Date?) throws {
+    /// original was. The original takes the other editor's text, or, when the
+    /// file is unreadable, goes back to its last saved text and is left alone.
+    private func keepBoth(_ index: Int, disk text: String?, diskModified: Date?) throws {
         let local = documents[index].note
         let copy = try store.create(local.body, at: now(), suffix: " conflict")
-        documents[index].note.body = text
-        documents[index].base = text
+        let original = text ?? documents[index].base
+        documents[index].note.body = original
+        documents[index].base = original
         documents[index].diskModified = diskModified
         let copied = Self.document(from: copy)
         documents.insert(copied, at: index)

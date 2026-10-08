@@ -2,8 +2,6 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// The floating notes window: shows, hides, remembers where it was, and keeps
-/// the session saved.
 @MainActor
 @Observable
 final class FloatingNotes: NSObject, NSWindowDelegate {
@@ -126,10 +124,12 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
         alert.informativeText = "The note moves to the Trash."
         alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
+        // By id: polling and saves continue under the sheet and can change the selection.
+        let id = note.id
         alert.beginSheetModal(for: panel) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             MainActor.assumeIsolated {
-                self?.session.deleteCurrent()
+                self?.session.delete(id)
                 self?.editor.focusAtEnd()
             }
         }

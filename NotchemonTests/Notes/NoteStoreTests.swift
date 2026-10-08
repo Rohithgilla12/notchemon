@@ -102,28 +102,33 @@ struct NoteTests {
 
 struct NoteSyncTests {
     @Test func cleanNoteWithUnchangedFileDoesNothing() {
-        #expect(NoteSync.decide(base: "a", disk: "a", local: "a") == .none)
+        #expect(NoteSync.decide(base: "a", disk: .text("a"), local: "a") == .none)
     }
 
     @Test func localEditsOverAnUnchangedFileAreWritten() {
-        #expect(NoteSync.decide(base: "a", disk: "a", local: "ab") == .write)
+        #expect(NoteSync.decide(base: "a", disk: .text("a"), local: "ab") == .write)
     }
 
     @Test func anExternalEditToACleanNoteIsReloaded() {
-        #expect(NoteSync.decide(base: "a", disk: "from vim", local: "a") == .reload("from vim"))
+        #expect(NoteSync.decide(base: "a", disk: .text("from vim"), local: "a") == .reload("from vim"))
     }
 
     @Test func bothSidesArrivingAtTheSameTextIsAReload() {
-        #expect(NoteSync.decide(base: "a", disk: "same", local: "same") == .reload("same"))
+        #expect(NoteSync.decide(base: "a", disk: .text("same"), local: "same") == .reload("same"))
     }
 
     @Test func anExternalEditOverUnsavedEditsIsAConflict() {
-        #expect(NoteSync.decide(base: "a", disk: "from vim", local: "mine") == .conflict(disk: "from vim"))
+        #expect(NoteSync.decide(base: "a", disk: .text("from vim"), local: "mine") == .conflict(disk: "from vim"))
     }
 
     @Test func aDeletedFileIsDroppedWhenCleanAndRestoredWhenEdited() {
-        #expect(NoteSync.decide(base: "a", disk: nil, local: "a") == .remove)
-        #expect(NoteSync.decide(base: "a", disk: nil, local: "mine") == .restore)
+        #expect(NoteSync.decide(base: "a", disk: .missing, local: "a") == .remove)
+        #expect(NoteSync.decide(base: "a", disk: .missing, local: "mine") == .restore)
+    }
+
+    @Test func anUnreadableFileIsLeftAloneAndUnsavedTextGoesToACopy() {
+        #expect(NoteSync.decide(base: "a", disk: .unreadable, local: "a") == .none)
+        #expect(NoteSync.decide(base: "a", disk: .unreadable, local: "mine") == .conflict(disk: nil))
     }
 }
 
@@ -158,6 +163,36 @@ struct NoteStoreTests {
         try sandbox.store.trash(file.url)
         #expect(sandbox.noteFiles.isEmpty)
         #expect(FileManager.default.fileExists(atPath: sandbox.trash.appendingPathComponent("20261008-doomed.md").path))
+    }
+
+    @Test func diskTellsAMissingFileFromAnUnreadableOne() throws {
+        let sandbox = try NotesSandbox()
+        let file = try sandbox.store.create("Plan", at: october8)
+        #expect(sandbox.store.disk(file.url) == .text("Plan"))
+        try Data([0xFF, 0xFE, 0x00, 0xD8]).write(to: file.url)
+        #expect(sandbox.store.disk(file.url) == .unreadable)
+        #expect(sandbox.store.disk(sandbox.notes.appendingPathComponent("nope.md")) == .missing)
+    }
+
+    /// `create` relies on this error to step past a name taken since it listed the folder.
+    @Test func anExclusiveWriteOverAnExistingFileThrowsFileExists() throws {
+        let sandbox = try NotesSandbox()
+        let file = try sandbox.store.create("Taken", at: october8)
+        do {
+            try Data().write(to: file.url, options: .withoutOverwriting)
+            Issue.record("an exclusive write replaced an existing file")
+        } catch CocoaError.fileWriteFileExists {}
+        #expect(sandbox.text(file.url.lastPathComponent) == "Taken")
+    }
+
+    @Test func theFolderOverrideCannotPointAtTheQuickNoteLogFolder() throws {
+        let sandbox = try NotesSandbox()
+        let fallback = sandbox.notes
+        let elsewhere = sandbox.trash.path
+        #expect(NoteStore.folder(override: "", fallback: fallback, quickNoteFolder: sandbox.root) == fallback)
+        #expect(NoteStore.folder(override: elsewhere, fallback: fallback, quickNoteFolder: sandbox.root).path == elsewhere)
+        #expect(NoteStore.folder(override: sandbox.root.path, fallback: fallback, quickNoteFolder: sandbox.root) == fallback)
+        #expect(NoteStore.folder(override: sandbox.root.path + "/", fallback: fallback, quickNoteFolder: sandbox.root) == fallback)
     }
 
     @Test func theStandardFolderIsTheNotesSubfolderBesideTheQuickNoteLog() {

@@ -71,7 +71,7 @@ struct NotesSessionTests {
         for title in ["One", "Two"] { _ = try sandbox.store.create(title, at: october8) }
         session.load()
         let doomed = try #require(session.current)
-        session.deleteCurrent()
+        session.delete(session.current!.id)
         #expect(!session.notes.contains { $0.id == doomed.id })
         #expect(session.current != nil)
         #expect(FileManager.default.fileExists(atPath: sandbox.trash.appendingPathComponent(doomed.url!.lastPathComponent).path))
@@ -80,7 +80,7 @@ struct NotesSessionTests {
     @Test func deletingTheLastNoteLeavesABlankOne() throws {
         _ = try sandbox.store.create("Only", at: october8)
         session.load()
-        session.deleteCurrent()
+        session.delete(session.current!.id)
         #expect(session.notes.count == 1)
         #expect(session.current?.body == "")
         #expect(sandbox.noteFiles.isEmpty)
@@ -109,6 +109,30 @@ struct NotesSessionTests {
         #expect(session.notes.contains { $0.body == "Plan\nv2 from vim" })
     }
 
+    @Test func unsavedTextOverAnUnreadableFileGoesToACopyAndTheFileIsUntouched() throws {
+        let file = try sandbox.store.create("Plan\nv1", at: october8)
+        session.load()
+        session.edit("Plan\nmy unsaved line")
+        let foreign = Data([0xFF, 0xFE, 0x50, 0x00])
+        try foreign.write(to: file.url)
+        session.flush()
+        #expect(try Data(contentsOf: file.url) == foreign)
+        #expect(sandbox.text("20261008-plan-conflict.md") == "Plan\nmy unsaved line")
+        #expect(session.current?.url?.lastPathComponent == "20261008-plan-conflict.md")
+        session.flush()
+        #expect(sandbox.noteFiles == ["20261008-plan-conflict.md", "20261008-plan.md"])
+    }
+
+    @Test func deletingByIdLeavesTheOpenNoteOpen() throws {
+        let other = try sandbox.store.create("Other", at: october8)
+        let open = try sandbox.store.create("Open", at: october8)
+        session.load(selecting: open.url.lastPathComponent)
+        let otherID = try #require(session.notes.first { $0.url == other.url }?.id)
+        session.delete(otherID)
+        #expect(session.current?.title == "Open")
+        #expect(session.notes.map(\.title) == ["Open"])
+    }
+
     @Test func rescanPicksUpNewFilesAndDropsDeletedOnes() throws {
         let gone = try sandbox.store.create("Gone", at: october8)
         _ = try sandbox.store.create("Stays", at: october8)
@@ -133,7 +157,7 @@ struct NotesSessionTests {
         session.flush()
         session.newNote(body: "notes")
         session.rescan()
-        session.deleteCurrent()
+        session.delete(session.current!.id)
         #expect(sandbox.quickNoteLogUntouched)
         #expect(!session.notes.contains { $0.url?.standardizedFileURL == sandbox.quickNoteLog.standardizedFileURL })
     }
