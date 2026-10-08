@@ -229,6 +229,7 @@ private struct BannerView: View {
         case .levelUp(let level): "Level up! Now level \(level)"
         case .evolved(let name, _): "Evolved into \(name)!"
         case .stashFull: "Stash is full (\(CompanionState.stashCapacity) items)"
+        case .stashCleared: "Stash cleared · Undo"
         }
     }
 
@@ -237,6 +238,7 @@ private struct BannerView: View {
         case .levelUp: .green
         case .evolved: .purple
         case .stashFull: .orange
+        case .stashCleared: .gray
         }
     }
 }
