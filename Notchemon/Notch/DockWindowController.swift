@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 final class DockWindowController {
     private let panel = DockPanel()
+    private var placement = DockWindowPlacement()
 
     init<Content: View>(content: Content) {
         let hosting = NSHostingView(rootView: content)
@@ -15,13 +16,28 @@ final class DockWindowController {
 
     /// On screen only while the creature is on the Dock or hopping to or from it.
     func show(on shelf: DockShelf?, creatureThere: Bool) {
-        guard let shelf, creatureThere else {
+        guard let frame = placement.frame(for: shelf, creatureThere: creatureThere, current: panel.frame) else {
             panel.orderOut(nil)
             return
         }
-        let frame = shelf.panel(keeping: panel.frame)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
         if !panel.isVisible { panel.orderFrontRegardless() }
+    }
+}
+
+/// Where the Dock window goes. A Dock that goes while the creature is on it
+/// keeps its window until the creature has hopped off, so the hop is seen.
+struct DockWindowPlacement {
+    private var last: DockShelf?
+
+    /// The window's frame, or nil when it should be hidden.
+    mutating func frame(for shelf: DockShelf?, creatureThere: Bool, current: CGRect) -> CGRect? {
+        guard creatureThere else {
+            last = nil
+            return nil
+        }
+        last = shelf ?? last
+        return last?.panel(keeping: current)
     }
 }
 
