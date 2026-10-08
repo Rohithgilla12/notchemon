@@ -71,6 +71,8 @@ The release job needs a Developer ID certificate and an App Store Connect API ke
 
 ### Set the GitHub secrets
 
+`op` treats the dot in a `[file]` label as a section separator. So `certificate.p12[file]` is stored as file `p12` in section `certificate`, and `AuthKey.p8[file]` as file `p8` in section `AuthKey`. The references below use those paths.
+
 The release job reads six repository secrets. Each command pipes the value from 1Password into `gh`, so no secret reaches your shell history or the screen.
 
 | Secret | Value |
@@ -84,9 +86,9 @@ The release job reads six repository secrets. Each command pipes the value from 
 
 ```sh
 repo=Rohithgilla12/notchemon
-op read -n "op://Private/notchemon-developer-id/certificate.p12" | base64 | gh secret set DEVELOPER_ID_P12_BASE64 -R "$repo"
+op read -n "op://Private/notchemon-developer-id/certificate/p12" | base64 | gh secret set DEVELOPER_ID_P12_BASE64 -R "$repo"
 op read -n "op://Private/notchemon-developer-id/password" | gh secret set DEVELOPER_ID_P12_PASSWORD -R "$repo"
-op read -n "op://Private/notchemon-app-store-connect/AuthKey.p8" | base64 | gh secret set APP_STORE_CONNECT_API_KEY_BASE64 -R "$repo"
+op read -n "op://Private/notchemon-app-store-connect/AuthKey/p8" | base64 | gh secret set APP_STORE_CONNECT_API_KEY_BASE64 -R "$repo"
 op read -n "op://Private/notchemon-app-store-connect/key-id" | gh secret set APP_STORE_CONNECT_KEY_ID -R "$repo"
 op read -n "op://Private/notchemon-app-store-connect/issuer-id" | gh secret set APP_STORE_CONNECT_ISSUER_ID -R "$repo"
 op read -n "op://Private/notchemon-sparkle/ed-private-key" | gh secret set SPARKLE_ED_PRIVATE_KEY -R "$repo"
