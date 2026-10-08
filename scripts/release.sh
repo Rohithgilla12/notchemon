@@ -16,21 +16,33 @@ build_dir="$root/.build/release"
 dist_dir="$root/dist"
 profile="${NOTARY_PROFILE:-notchemon}"
 
+archive="$build_dir/Notchemon.xcarchive"
+export_dir="$build_dir/export"
+
+# Archive and export rather than build: only a Developer ID export re-signs
+# Sparkle's nested helpers, which ship with Sparkle's ad hoc signature.
 xcodegen generate -q
-xcodebuild build \
+rm -rf "$archive" "$export_dir"
+xcodebuild archive \
   -project Notchemon.xcodeproj \
   -scheme Notchemon \
   -configuration Release \
   -destination 'generic/platform=macOS' \
   -derivedDataPath "$build_dir" \
+  -archivePath "$archive" \
+  -quiet
+xcodebuild -exportArchive \
+  -archivePath "$archive" \
+  -exportPath "$export_dir" \
+  -exportOptionsPlist "$root/scripts/ExportOptions.plist" \
   -quiet
 
-app="$build_dir/Build/Products/Release/Notchemon.app"
+app="$export_dir/Notchemon.app"
 # Read from the built bundle, which XcodeGen filled from project.yml.
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
 zip="$dist_dir/Notchemon-$version.zip"
 
-codesign --verify --deep --strict --verbose=2 "$app"
+"$root/scripts/verify-signing.sh" "$app"
 if codesign -d --entitlements - "$app" 2>/dev/null | grep -q "get-task-allow"; then
   echo "Release build carries get-task-allow; notarisation would reject it." >&2
   exit 1
