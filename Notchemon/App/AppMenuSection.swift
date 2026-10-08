@@ -5,6 +5,7 @@ struct AppMenuSection: View {
     @Environment(LoginItem.self) private var loginItem
 
     var body: some View {
+        Button("About Notchemon", action: AboutWindow.show)
         Button("Check for Updates…", action: updater.checkForUpdates)
             .disabled(!updater.canCheckForUpdates)
         switch loginItem.state {

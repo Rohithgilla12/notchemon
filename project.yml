@@ -21,7 +21,10 @@ targets:
   Notchemon:
     type: application
     platform: macOS
-    sources: [Notchemon]
+    sources:
+      - Notchemon
+      - path: LICENSE
+        buildPhase: resources
     dependencies:
       - package: Sparkle
     # The single source for the version and entitlements. XcodeGen writes
