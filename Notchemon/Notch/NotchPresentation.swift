@@ -8,11 +8,15 @@ import Observation
 final class NotchPresentation {
     var layout: NotchLayout?
     var mode: PanelMode = .collapsed
+    /// The notch opens on a click instead of on hover.
+    var clickToOpen = false
     var isFullScreen = false
     var isDropTargeted = false
     var shakeToken = 0
     /// Set by the hotkey; the note field takes focus and clears it.
     var noteFocusRequested = false
+    /// A click on the notch or on empty panel space, with `clickToOpen` on.
+    @ObservationIgnored var onClick: (() -> Void)?
 
     var isExpanded: Bool { mode.isExpanded }
 

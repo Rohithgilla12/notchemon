@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
@@ -181,6 +182,23 @@ struct EngineTests {
         await engine.chooseStarter(904)
         #expect(store.load().progress == .starter(904))
         #expect(await engine.currentSnapshot.phase == .active(FakeProvider().roster[904]!, .starter(904)))
+    }
+
+    @Test func onlyACompletedSessionPlaysTheFocusSound() async {
+        let engine = await started(engine())
+        var preferences = Preferences()
+        preferences.focusSound = .chime
+        await engine.setPreferences(preferences)
+        let before = await engine.currentSnapshot
+        await engine.startFocus()
+        clock.advance(24 * 60)
+        await engine.stopFocus()
+        let abandoned = await engine.currentSnapshot
+        #expect(abandoned.focusSound(after: before) == nil)
+        await engine.startFocus()
+        clock.advance(25 * 60)
+        await engine.stopFocus()
+        #expect(await engine.currentSnapshot.focusSound(after: abandoned) == .chime)
     }
 
     @Test func completedSessionAwardsXPAndFocusMinutes() async {
@@ -481,6 +499,43 @@ struct StateStoreTests {
         let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"idleStyle": "dancing", "fidgets": false}"#.utf8))
         #expect(decoded.idleStyle == .calm)
         #expect(!decoded.fidgets)
+    }
+
+    @Test func fileFromBeforeFocusSoundsAndClickToOpenGetsTheirDefaults() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"focusMinutes": 45, "fidgets": false}"#.utf8))
+        #expect(decoded.focusSound == .off)
+        #expect(!decoded.clickToOpen)
+        #expect(decoded.focusMinutes == 45)
+        #expect(!decoded.fidgets)
+    }
+
+    @Test func unknownFocusSoundFallsBackToOffWithoutLosingTheOtherPreferences() throws {
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"focusSound": "trumpet", "clickToOpen": true, "fidgets": false}"#.utf8))
+        #expect(decoded.focusSound == .off)
+        #expect(decoded.clickToOpen)
+        #expect(!decoded.fidgets)
+    }
+
+    @Test func focusSoundsPersistAsStableLowercaseNames() throws {
+        #expect(FocusSound.allCases.map(\.rawValue) == ["off", "chime", "fanfare", "ping"])
+        for sound in FocusSound.allCases {
+            let decoded = try JSONDecoder().decode(Preferences.self, from: Data(#"{"focusSound": "\#(sound.rawValue)"}"#.utf8))
+            #expect(decoded.focusSound == sound)
+        }
+    }
+
+    @Test(arguments: FocusSound.allCases.filter { $0 != .off })
+    func eachFocusSoundIsASystemSound(sound: FocusSound) throws {
+        let name = try #require(sound.systemSoundName)
+        #expect(NSSound(named: name) != nil)
+    }
+
+    @Test func clickToOpenAndFocusSoundRoundTrip() throws {
+        var preferences = Preferences()
+        preferences.clickToOpen = true
+        preferences.focusSound = .fanfare
+        try store.save(CompanionState(progress: .starter(4), totalFocusMinutes: 0, stash: [], preferences: preferences))
+        #expect(store.load().preferences == preferences)
     }
 
     @Test func motionPreferencesRoundTrip() throws {

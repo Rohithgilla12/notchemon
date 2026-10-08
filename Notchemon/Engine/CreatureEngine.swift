@@ -65,6 +65,18 @@ struct CompanionSnapshot: Sendable {
     var stash: [StashItem] = []
     var evolutionCount = 0
     var totalFocusMinutes = 0
+    /// Sessions completed since launch. Each one plays the focus sound.
+    var completedFocusSessions = 0
+}
+
+extension CompanionSnapshot {
+    /// The sound to play on moving from `previous` to this snapshot, if a
+    /// session completed in between. Snapshots coalesce, so this compares
+    /// counts rather than watching for one particular snapshot.
+    func focusSound(after previous: CompanionSnapshot) -> FocusSound? {
+        guard completedFocusSessions > previous.completedFocusSessions, preferences.focusSound != .off else { return nil }
+        return preferences.focusSound
+    }
 }
 
 enum InputIdle {
@@ -240,6 +252,7 @@ actor CreatureEngine {
         if case .completed(let minutes) = outcome {
             state.totalFocusMinutes += minutes
             snapshot.totalFocusMinutes = state.totalFocusMinutes
+            snapshot.completedFocusSessions += 1
             await award(outcome.xp)
         } else {
             publish()

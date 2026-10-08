@@ -16,8 +16,14 @@ struct MenuBarContent: View {
                 Text("\(minutes) minutes").tag(minutes)
             }
         }
+        Picker("Focus Sound", selection: preference(\.focusSound)) {
+            ForEach(FocusSound.allCases, id: \.self) { sound in
+                Text(sound.label).tag(sound)
+            }
+        }
         Toggle("Sleep When Idle", isOn: preference(\.sleepEnabled))
         Toggle("Virtual Notch on Displays Without One", isOn: preference(\.virtualNotchEnabled))
+        Toggle("Click to Open", isOn: preference(\.clickToOpen))
         Menu("Motion") {
             Picker("Idle Style", selection: preference(\.idleStyle)) {
                 ForEach(IdleStyle.allCases, id: \.self) { style in

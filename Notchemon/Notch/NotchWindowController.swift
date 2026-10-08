@@ -22,16 +22,18 @@ final class NotchWindowController {
 
     static let collapseDelay: Duration = .milliseconds(500)
 
-    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, wander: WanderRange, content: Content) {
+    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, wander: WanderRange, clickToOpen: Bool, content: Content) {
         self.presentation = presentation
         self.virtualNotchEnabled = virtualNotchEnabled
         self.wander = wander
+        presentation.clickToOpen = clickToOpen
         panel = NotchPanel(frame: .zero)
         let hosting = NSHostingView(rootView: content)
         hosting.sizingOptions = []
         panel.contentView = hosting
         panel.acceptsMouseMovedEvents = true
         panel.onEscape = { [weak self] in self?.collapse() }
+        presentation.onClick = { [weak self] in self?.handleClick() }
     }
 
     func start() {
@@ -59,6 +61,12 @@ final class NotchWindowController {
         guard wander != self.wander else { return }
         self.wander = wander
         relayout()
+    }
+
+    func setClickToOpen(_ enabled: Bool) {
+        guard enabled != presentation.clickToOpen else { return }
+        presentation.clickToOpen = enabled
+        handleCursor(NSEvent.mouseLocation)
     }
 
     func relayout() {
@@ -116,6 +124,20 @@ final class NotchWindowController {
         setMode(.collapsed)
         panel.ignoresMouseEvents = true
         panel.relinquishKey()
+    }
+
+    private func handleClick() {
+        guard presentation.clickToOpen else { return }
+        let next = HoverPolicy.click(mode: presentation.mode)
+        if next == .collapsed {
+            collapse()
+        } else {
+            collapseTask?.cancel()
+            setMode(next)
+        }
+        // collapse() left the panel click-through; with the cursor still on
+        // the notch, the next click must open it again.
+        handleCursor(NSEvent.mouseLocation)
     }
 
     private func apply(layout: NotchLayout?) {
@@ -187,7 +209,7 @@ final class NotchWindowController {
         onCursorMoved?(point)
         guard let layout = presentation.layout else { return }
         let buttonHeld = pressPoll != nil && !isFileDragInProgress
-        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld)
+        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld, clickToOpen: presentation.clickToOpen)
         // Each assignment is a WindowServer round trip; mouse moves arrive at 120 Hz.
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable

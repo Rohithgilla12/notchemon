@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentation: presentation,
             virtualNotchEnabled: model.snapshot.preferences.virtualNotchEnabled,
             wander: model.snapshot.preferences.wander,
+            clickToOpen: model.snapshot.preferences.clickToOpen,
             content: NotchRootView(presentation: presentation, model: model, roamer: roamer)
         )
         windowController = controller
@@ -91,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onPreferencesChanged = { [weak self, weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
             controller?.setWander(preferences.wander)
+            controller?.setClickToOpen(preferences.clickToOpen)
             self?.dockWatcher.setWanted(preferences.wander.includesDock)
         }
         model.onChoosingStarter = { [weak controller] in
