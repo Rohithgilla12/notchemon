@@ -56,6 +56,12 @@ struct MenuBarContent: View {
             .keyboardShortcut("n", modifiers: [.control, .option, .command])
         Button("Choose Creature…", action: app.confirmNewStarter)
         Button("Open Notes Folder", action: app.openNotesFolder)
+        if case .stashCleared = model.snapshot.banner {
+            Button("Undo Clear Stash") { model.undoClearStash(animated: false) }
+        } else {
+            Button("Clear Stash") { model.clearStash(animated: false) }
+                .disabled(model.snapshot.stash.isEmpty)
+        }
         Divider()
         AppMenuSection()
         Divider()
