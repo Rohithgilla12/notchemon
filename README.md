@@ -46,6 +46,33 @@ The app notices the change when macOS announces it or the next time the app beco
 - **Launch at Login.** Off by default. Turn it on from the menu. If you turn it off in System Settings › General › Login Items, the menu offers to open that pane, because only System Settings can turn it back on.
 - **About Notchemon.** Shows the version, the licence, the disclaimer, and the credits.
 
+## Floating notes
+
+Press ⌃⌥⌘N anywhere, or choose **Floating Notes** in the menu, to open a small translucent notes window. It floats above other windows on every Space and beside full-screen apps, and the cursor lands at the end of the note you last had open. Press ⌃⌥⌘N again or Escape to hide it. Like ⌃⌥N, the hotkey uses Carbon and needs no permission.
+
+- **Notes are Markdown files.** Each note is one file in `~/Documents/Notchemon/Notes/`, and its first line is the title. The file gets its name, `YYYYMMDD-title.md`, at the first save. A new note saves once you end its title line, or after 3 seconds without typing. Renaming the title later keeps the file name, so the note stays easy to find in Finder and other editors. The quick-note log, `~/Documents/Notchemon/notes.md`, is separate and the window never opens it.
+- **Saving.** Notes save 0.5 seconds after you stop typing, and when the window hides, loses focus, or the app quits. Every write is atomic.
+- **Edits in other editors.** While the window is open, it checks the folder every 2 seconds. A note without unsaved edits reloads. If the file changed while you had unsaved edits, your text is saved as a new `…-conflict.md` note and stays open, and the original file keeps the other editor's text. A file deleted elsewhere leaves the list, unless you were editing it; then your text is written back.
+- **Live Markdown.** Headings, bold, italic, inline code, links, bullets, numbered lists, and `- [ ]` and `- [x]` tasks are styled as you type. Click a task's box to tick it. Pasted text arrives as plain text. **Monospaced Font** is in the ⋯ menu.
+- **Window.** Drag the window to move it and drag an edge to resize it. It opens on the display under the pointer and remembers its frame on each display. **Keep on Top**, the pin, is on by default. The window dims slightly when it loses focus.
+
+| Shortcut | Action |
+| --- | --- |
+| ⌘N | New note. |
+| ⌘P or ⌘K | Quick switcher. Titles match fuzzily, and note text matches when it holds every word you type. Arrow keys move, Return opens, and Escape closes. |
+| ⌘[ and ⌘] | Previous and next note. |
+| ⌘⌫ | Move the note to the Trash, after a confirmation. |
+| Escape | Hide the window. |
+
+The quick-note field in the notch panel has a small window button. It opens floating notes and turns any text you typed into a new note.
+
+To try floating notes against a scratch folder, set `NotchemonNotesFolder`:
+
+```sh
+defaults write com.rohithgilla.Notchemon NotchemonNotesFolder /tmp/notchemon-notes
+defaults delete com.rohithgilla.Notchemon NotchemonNotesFolder
+```
+
 ## Build
 
 Requirements: macOS 14 or later, Xcode 16 or later, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). The Xcode project is generated and is not committed.
