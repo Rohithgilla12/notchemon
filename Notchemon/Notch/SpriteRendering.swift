@@ -220,12 +220,14 @@ enum SpriteRendering {
     /// the box with room for its lift above and the renderer's sway either
     /// side. Pixel art rounds down to whole screen pixels, never below one.
     static func pointsPerPixel(containing anims: [AnimBounds], above lowest: Int, in box: CGSize, backingScale: CGFloat, pixelated: Bool) -> CGFloat {
-        let fit = anims.map { anim in
-            min(
-                (box.height - anim.lift) / CGFloat(max(1, lowest - anim.footprint.top)),
-                (box.width / 2 - maxSway) / CGFloat(max(1, anim.footprint.halfWidth))
-            )
-        }.min() ?? 1
+        let fits: [CGFloat] = anims.map { (anim: AnimBounds) -> CGFloat in
+            let rise = CGFloat(max(1, lowest - anim.footprint.top))
+            let reach = CGFloat(max(1, anim.footprint.halfWidth))
+            let tall: CGFloat = (box.height - anim.lift) / rise
+            let wide: CGFloat = (box.width / 2 - maxSway) / reach
+            return min(tall, wide)
+        }
+        let fit: CGFloat = fits.min() ?? 1
         guard pixelated else { return fit }
         return max(1, (fit * backingScale).rounded(.down)) / backingScale
     }

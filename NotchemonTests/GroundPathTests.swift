@@ -10,7 +10,8 @@ struct GroundPathTests {
     let climb = GroundPath.climb
 
     func heights(_ path: GroundPath) -> [Double] { path.keys.map(\.height) }
-    func times(_ path: GroundPath) -> [Double] { path.keys.map { ($0.at.timeIntervalSince(t0) * 1000).rounded() / 1000 } }
+    func milliRounded(_ seconds: Double) -> Double { (seconds * 1000).rounded() / 1000 }
+    func times(_ path: GroundPath) -> [Double] { path.keys.map { milliRounded($0.at.timeIntervalSince(t0)) } }
 
     @Test func underAHiddenDockTheGroundIsTheFloor() {
         let path = GroundPath.plan(.still(300), on: nil, from: 0, at: t0)
@@ -50,7 +51,8 @@ struct GroundPathTests {
         let path = GroundPath.plan(.walk(walk), on: shown, from: 0, at: now)
         let leaves = (744.0 + 800) / 35
         #expect(heights(path) == [0, 100, 100, 0])
-        #expect(times(path) == [10, 10 + climb, leaves - climb / 2, leaves + climb / 2].map { ($0 * 1000).rounded() / 1000 })
+        let expected: [Double] = [10, 10 + climb, leaves - climb / 2, leaves + climb / 2]
+        #expect(times(path) == expected.map(milliRounded))
         #expect(path.height(at: t0 + leaves) == 50)
         #expect(path.final == 0)
     }
@@ -62,7 +64,8 @@ struct GroundPathTests {
         let enters = 56.0 / 35
         let leaves = (800.0 + 744) / 35
         #expect(heights(path) == [0, 0, 100, 100, 0])
-        #expect(times(path) == [0, enters - climb / 2, enters + climb / 2, leaves - climb / 2, leaves + climb / 2].map { ($0 * 1000).rounded() / 1000 })
+        let expected: [Double] = [0, enters - climb / 2, enters + climb / 2, leaves - climb / 2, leaves + climb / 2]
+        #expect(times(path) == expected.map(milliRounded))
     }
 
     @Test func aWalkThatStaysOnTheFloorOrOnTheDockNeverClimbs() {

@@ -55,11 +55,12 @@ struct RoamWalk: Sendable, Equatable {
         let span = radius * radius - cursor.dy * cursor.dy
         guard span > 0, duration > 0 else { return [] }
         let halfChord = span.squareRoot()
-        return [cursor.dx - halfChord, cursor.dx + halfChord]
-            .map { ($0 - from) / (to - from) * duration }
-            .filter { $0 > 0 && $0 < duration }
-            .sorted()
-            .map { start + $0 }
+        let edges: [Double] = [cursor.dx - halfChord, cursor.dx + halfChord]
+        let offsets: [TimeInterval] = edges.map { (edge: Double) -> TimeInterval in
+            (edge - from) / (to - from) * duration
+        }
+        let during: [TimeInterval] = offsets.filter { $0 > 0 && $0 < duration }.sorted()
+        return during.map { (offset: TimeInterval) -> Date in start + offset }
     }
 }
 
