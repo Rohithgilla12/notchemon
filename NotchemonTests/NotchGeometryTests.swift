@@ -57,6 +57,8 @@ struct NotchGeometryTests {
         (.nearNotch, 400, 140),
         (.topEdge, 400, 140),
         (.topEdge, 100, 0),
+        (.dock, 1728, 0),
+        (.topEdgeAndDock, 1728, 804),
     ])
     func reachIsClampedSoTheCreatureStaysOnItsScreen(wander: WanderRange, screenWidth: CGFloat, reach: CGFloat) {
         #expect(NotchGeometry.roamReach(wander, screenWidth: screenWidth) == reach)
