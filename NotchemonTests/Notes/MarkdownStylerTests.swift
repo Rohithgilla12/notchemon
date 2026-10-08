@@ -60,7 +60,8 @@ struct MarkdownStylerTests {
 
     @Test func rulesAndQuotes() {
         #expect(styled("---") == ["rule:---"])
-        #expect(styled("*****") == ["rule:*****"])
+        #expect(styled("___") == ["rule:___"])
+        #expect(styled("****").isEmpty)
         #expect(styled("--").isEmpty)
         #expect(styled("-- -").isEmpty)
         #expect(styled("> said **so**") == ["quote:> ", "quoted:said **so**", "syntax:**", "bold:so", "syntax:**"])

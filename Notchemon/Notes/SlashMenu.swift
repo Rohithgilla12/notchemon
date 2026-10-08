@@ -27,7 +27,7 @@ final class SlashMenu {
     }
 
     var isOpen: Bool { model.state != nil }
-    /// The menu's window, for offscreen renders.
+    /// The menu's panel, once it has opened.
     var window: NSWindow? { panel }
 
     func open(at slash: Int) {
@@ -47,15 +47,13 @@ final class SlashMenu {
         update(nil)
     }
 
-    /// Handles the keys the menu takes over while open.
     func handle(_ selector: Selector) -> Bool {
         guard let state = model.state else { return false }
         switch selector {
+        case _ where state.results.isEmpty: return false
         case #selector(NSResponder.moveUp(_:)): update(state.moving(by: -1))
         case #selector(NSResponder.moveDown(_:)): update(state.moving(by: 1))
-        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)):
-            guard state.selectedCommand != nil else { return false }
-            choose(state.selected)
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)): choose(state.selected)
         case #selector(NSResponder.cancelOperation(_:)): close()
         default: return false
         }

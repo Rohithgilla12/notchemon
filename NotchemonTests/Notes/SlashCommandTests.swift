@@ -62,7 +62,7 @@ struct SlashCommandTests {
 
     @Test func theDividerTakesItsOwnLine() throws {
         #expect(try applying("divider", to: "a\n/div") == ("a\n---\n", 6))
-        #expect(try applying("divider", to: "text /div") == ("text \n---\n", 10))
+        #expect(try applying("divider", to: "text /div") == ("text\n\n---\n", 10))
     }
 
     @Test func theMenuFollowsTheQueryAndClosesWhenItNoLongerApplies() throws {
@@ -82,6 +82,9 @@ struct SlashCommandTests {
         #expect(SlashMenuState.after(typed, slash: 0, text: "/h\nx", caret: 4) == nil)
         #expect(SlashMenuState.after(typed, slash: 0, text: "/hea", caret: 0) == nil)
         #expect(SlashMenuState.after(typed, slash: 0, text: "hea", caret: 2) == nil)
+        #expect(SlashMenuState.after(nil, slash: 2, text: "a / b", caret: 5) == nil)
+        #expect(SlashMenuState.after(typed, slash: 0, text: "/hea", caret: 2) == nil)
+        #expect(SlashMenuState.after(nil, slash: 0, text: "/hea more", caret: 4) != nil)
     }
 }
 

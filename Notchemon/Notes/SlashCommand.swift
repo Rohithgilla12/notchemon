@@ -83,10 +83,13 @@ struct SlashCommand: Identifiable, Equatable, Sendable {
             let caret = trigger.location + (marker as NSString).length
             return TextEdit(range: trigger, replacement: marker + marker, selection: NSRange(location: caret, length: 0))
         case .divider:
-            let alone = head.allSatisfy(\.isWhitespace) && NSMaxRange(trigger) == contentsEnd
-            let replacement = alone ? "---\n" : "\n---\n"
-            let caret = trigger.location + (replacement as NSString).length
-            return TextEdit(range: trigger, replacement: replacement, selection: NSRange(location: caret, length: 0))
+            if head.allSatisfy(\.isWhitespace), NSMaxRange(trigger) == contentsEnd {
+                return TextEdit(range: trigger, replacement: "---\n", selection: NSRange(location: trigger.location + 4, length: 0))
+            }
+            // A blank line keeps `---` from turning the text above into a heading.
+            let text = (head as NSString).length - (head.reversed().prefix { $0 == " " || $0 == "\t" }.count)
+            let range = NSRange(location: lineStart + text, length: NSMaxRange(trigger) - lineStart - text)
+            return TextEdit(range: range, replacement: "\n\n---\n", selection: NSRange(location: range.location + 6, length: 0))
         }
     }
 
@@ -114,12 +117,13 @@ struct SlashMenuState: Equatable, Sendable {
     var selectedCommand: SlashCommand? { results.indices.contains(selected) ? results[selected] : nil }
 
     /// The menu after the text or caret changed, or nil when it should close:
-    /// the `/` is gone, the caret left the query, the query spans a line, or
-    /// a space ended a query that matches nothing.
+    /// the `/` is gone, the caret left the end of the query, the query spans a
+    /// line or starts with a space, or a space ended a query that matches nothing.
     static func after(_ previous: SlashMenuState?, slash: Int, text: NSString, caret: Int) -> SlashMenuState? {
         guard slash < text.length, text.character(at: slash) == 0x2F, caret > slash, caret <= text.length else { return nil }
+        if caret < text.length, !isSpace(text.character(at: caret)) { return nil }
         let query = text.substring(with: NSRange(location: slash + 1, length: caret - slash - 1))
-        guard !query.contains(where: \.isNewline) else { return nil }
+        guard !query.contains(where: \.isNewline), query.first?.isWhitespace != true else { return nil }
         let results = SlashCommand.matching(query)
         if results.isEmpty, query.last == " " { return nil }
         let kept = previous?.selectedCommand.flatMap { command in results.firstIndex(of: command) }
@@ -132,6 +136,10 @@ struct SlashMenuState: Equatable, Sendable {
         guard !results.isEmpty else { return self }
         let count = results.count
         return SlashMenuState(slash: slash, query: query, results: results, selected: ((selected + offset) % count + count) % count)
+    }
+
+    private static func isSpace(_ character: unichar) -> Bool {
+        character == 0x20 || character == 0x09 || character == 0x0A || character == 0x0D
     }
 
     private static func bestIndex(_ query: String, in results: [SlashCommand]) -> Int {

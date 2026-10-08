@@ -176,9 +176,10 @@ private struct Line {
         return end
     }
 
-    /// Three or more `-`, `*`, or `_` alone on a line.
+    /// Three or more `-` or `_` alone on a line. Not `*`: an empty `****`
+    /// from the Bold command must not turn into a rule.
     mutating func rule(from start: Int) -> Bool {
-        guard start <= 3, let mark = at(start), mark == Char.minus || mark == Char.star || mark == Char.underscore,
+        guard start <= 3, let mark = at(start), mark == Char.minus || mark == Char.underscore,
               count - start >= 3, characters[start...].allSatisfy({ $0 == mark }) else { return false }
         add(.block(.rule), start, count)
         return true
