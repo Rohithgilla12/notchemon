@@ -41,6 +41,23 @@ struct NoteFile: Equatable, Sendable {
     let modified: Date
 }
 
+enum NoteSaveResult: Sendable {
+    case unchanged(modified: Date?)
+    case saved(NoteFile)
+    case reloaded(String, modified: Date?)
+    /// The editor's text went to `copy`; the original holds `disk`, or its
+    /// last saved text when `disk` is nil because the file is unreadable.
+    case keptBoth(copy: NoteFile, disk: String?, modified: Date?)
+    case removed
+}
+
+/// A note whose edits could not be written, with the text that would be lost.
+struct NoteSaveFailure: Equatable, Sendable {
+    let title: String
+    let text: String
+    let reason: String
+}
+
 /// The file layer for floating notes: one Markdown file per note, directly in
 /// `folder`. It lists and writes only `*.md` files inside that folder, so the
 /// quick-note log one level up is out of its reach.
@@ -51,6 +68,9 @@ struct NoteStore: Sendable {
     var timeZone: TimeZone = .current
     var trashItem: @Sendable (URL) throws -> Void = { url in
         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
+    var writeFile: @Sendable (Data, URL) throws -> Void = { data, url in
+        try data.write(to: url, options: .atomic)
     }
 
     /// `~/Documents/Notchemon/Notes`, or the `NotchemonNotesFolder` default
@@ -118,8 +138,30 @@ struct NoteStore: Sendable {
 
     func write(_ text: String, to url: URL) throws -> NoteFile {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try Data(text.utf8).write(to: url, options: .atomic)
+        try writeFile(Data(text.utf8), url)
         return NoteFile(url: url, text: text, modified: modificationDate(url) ?? Date())
+    }
+
+    /// Brings the note's file in line with the editor as `NoteSync` decides.
+    /// It touches only the disk, so it can run off the main thread.
+    func save(_ note: Note, base: String, at date: Date) throws -> NoteSaveResult {
+        guard let url = note.url else {
+            guard !note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .unchanged(modified: nil) }
+            return .saved(try create(note.body, at: date))
+        }
+        let modified = modificationDate(url)
+        switch NoteSync.decide(base: base, disk: disk(url), local: note.body) {
+        case .none:
+            return .unchanged(modified: modified)
+        case .write, .restore:
+            return .saved(try write(note.body, to: url))
+        case .reload(let text):
+            return .reloaded(text, modified: modified)
+        case .conflict(let text):
+            return .keptBoth(copy: try create(note.body, at: date, suffix: " conflict"), disk: text, modified: modified)
+        case .remove:
+            return .removed
+        }
     }
 
     /// Moves the file to the Trash; never deletes it outright.

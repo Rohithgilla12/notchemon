@@ -1,11 +1,15 @@
 import Foundation
 import Observation
+import os
 
 enum NoteSavePolicy {
     static let debounce: Duration = .milliseconds(500)
     /// A new note gets its file name from its title at the first save, so its
     /// first save waits until the title line ends or the typing pauses.
     static let untitledDebounce: Duration = .seconds(3)
+
+    /// The longest a flush waits on the disk, so a hung volume cannot hold quitting.
+    static let flushLimit: TimeInterval = 5
 
     static func delay(hasFile: Bool, text: String) -> Duration {
         hasFile || text.contains(where: \.isNewline) ? debounce : untitledDebounce
@@ -17,7 +21,7 @@ enum NoteSavePolicy {
 @MainActor
 @Observable
 final class NotesSession {
-    struct Document {
+    struct Document: Sendable {
         var note: Note
         /// The text last read from or written to the file; "" before the first save.
         var base: String
@@ -33,6 +37,16 @@ final class NotesSession {
     @ObservationIgnored let store: NoteStore
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private let job = OSAllocatedUnfairLock(initialState: SaveJob())
+
+    /// Saves run one job at a time. A job that outlives its wait keeps
+    /// `running` until its late results are applied, so no later save can
+    /// overtake it on disk or start from a base it is about to change.
+    private struct SaveJob: Sendable {
+        var running = false
+        var abandoned = false
+        var results: [UUID: Result<NoteSaveResult, any Error>] = [:]
+    }
 
     init(store: NoteStore, now: @escaping () -> Date = Date.init) {
         self.store = store
@@ -103,14 +117,14 @@ final class NotesSession {
         remove(at: index)
     }
 
-    /// Saves every note with unsaved edits now.
-    func flush() {
+    /// Saves every note with unsaved edits now and returns the ones that failed.
+    @discardableResult
+    func flush(within limit: TimeInterval = NoteSavePolicy.flushLimit) -> [NoteSaveFailure] {
         saveTask?.cancel()
         saveTask = nil
-        for id in documents.map(\.note.id) {
-            guard let index = index(of: id), documents[index].note.body != documents[index].base else { continue }
-            sync(id)
-        }
+        let pending = documents.filter { $0.note.body != $0.base }
+        guard !pending.isEmpty else { return [] }
+        return save(pending, within: limit)
     }
 
     /// Picks up edits from other editors: changed, removed, and new files.
@@ -137,49 +151,109 @@ final class NotesSession {
 
     private func sync(_ id: UUID) {
         guard let index = index(of: id) else { return }
-        let document = documents[index]
-        do {
-            guard let url = document.note.url else {
-                guard !document.note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                let file = try store.create(document.note.body, at: now())
-                documents[index].note.url = file.url
-                markSaved(index, file)
-                return
-            }
-            let modified = store.modificationDate(url)
-            switch NoteSync.decide(base: document.base, disk: store.disk(url), local: document.note.body) {
-            case .none:
-                documents[index].diskModified = modified
-            case .write, .restore:
-                markSaved(index, try store.write(document.note.body, to: url))
-            case .reload(let text):
-                documents[index].note.body = text
-                documents[index].note.modified = modified ?? now()
-                documents[index].base = text
-                documents[index].diskModified = modified
-                if id == selectedID { editorRevision += 1 }
-            case .conflict(let text):
-                try keepBoth(index, disk: text, diskModified: modified)
-            case .remove:
-                remove(at: index)
-            }
-            lastError = nil
-        } catch {
-            lastError = "Couldn't save “\(document.note.title)”: \(error.localizedDescription)"
-        }
+        save([documents[index]], within: NoteSavePolicy.flushLimit)
     }
 
-    /// The editor's text goes to a new conflict copy, which stays open if the
-    /// original was. The original takes the other editor's text, or, when the
-    /// file is unreadable, goes back to its last saved text and is left alone.
-    private func keepBoth(_ index: Int, disk text: String?, diskModified: Date?) throws {
+    /// The writes run off the main thread and get `limit` seconds, so a hung
+    /// disk cannot freeze the window or hold quitting. A save still running
+    /// then counts as failed, and so does any save asked for before it ends.
+    @discardableResult
+    private func save(_ documents: [Document], within limit: TimeInterval) -> [NoteSaveFailure] {
+        let sent = documents.map(\.note)
+        let started = job.withLock { state in
+            guard !state.running else { return false }
+            state = SaveJob(running: true)
+            return true
+        }
+        guard started else {
+            let failures = sent.map { NoteSaveFailure($0, reason: NoteSaveTimeout.stillRunning) }
+            lastError = failures.first?.message
+            return failures
+        }
+        let store = store
+        let date = now()
+        let job = job
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInteractive).async { [self] in
+            for document in documents {
+                let result = Result { try store.save(document.note, base: document.base, at: date) }
+                job.withLock { $0.results[document.note.id] = result }
+            }
+            let late = job.withLock { state in
+                if !state.abandoned { state.running = false }
+                return state.abandoned
+            }
+            done.signal()
+            if late { Task { @MainActor in applyLate(sent) } }
+        }
+        let timedOut = done.wait(timeout: .now() + limit) == .timedOut
+        let results = job.withLock { state in
+            if timedOut { state.abandoned = true }
+            defer { state.results = [:] }
+            return state.results
+        }
+        let timeout = NoteSaveTimeout(seconds: limit).localizedDescription
+        let failures = sent.compactMap { note in
+            results[note.id].map { apply($0, to: note) } ?? NoteSaveFailure(note, reason: timeout)
+        }
+        lastError = failures.first?.message
+        return failures
+    }
+
+    /// Results of a job that outlived its wait. They were reported as failed;
+    /// what did reach the disk is taken in now so the next save builds on it.
+    private func applyLate(_ sent: [Note]) {
+        let results = job.withLock { state in
+            state.running = false
+            defer { state.results = [:] }
+            return state.results
+        }
+        let failures = sent.compactMap { note in results[note.id].flatMap { apply($0, to: note) } }
+        lastError = failures.first?.message
+    }
+
+    private func apply(_ result: Result<NoteSaveResult, any Error>, to sent: Note) -> NoteSaveFailure? {
+        guard let index = index(of: sent.id) else { return nil }
+        let saved: NoteSaveResult
+        do {
+            saved = try result.get()
+        } catch {
+            return NoteSaveFailure(sent, reason: error.localizedDescription)
+        }
+        // A late result can land after the user typed more; that newer text stays.
+        let newer = documents[index].note.body == sent.body ? nil : documents[index].note.body
+        switch saved {
+        case .unchanged(let modified):
+            documents[index].diskModified = modified
+        case .saved(let file):
+            documents[index].note.url = file.url
+            markSaved(index, file)
+        case .reloaded(let text, let modified):
+            documents[index].base = text
+            documents[index].diskModified = modified
+            guard newer == nil else { break }
+            documents[index].note.body = text
+            documents[index].note.modified = modified ?? now()
+            if sent.id == selectedID { editorRevision += 1 }
+        case .keptBoth(let copy, let disk, let modified):
+            keepBoth(index, copy: copy, newer: newer, disk: disk, diskModified: modified)
+        case .removed:
+            if newer == nil { remove(at: index) }
+        }
+        return nil
+    }
+
+    /// The conflict copy holding the editor's text stays open if the original
+    /// was. The original takes the other editor's text, or, when the file is
+    /// unreadable, goes back to its last saved text and is left alone.
+    private func keepBoth(_ index: Int, copy: NoteFile, newer: String?, disk text: String?, diskModified: Date?) {
         let local = documents[index].note
-        let copy = try store.create(local.body, at: now(), suffix: " conflict")
         let original = text ?? documents[index].base
         documents[index].note.body = original
         documents[index].base = original
         documents[index].diskModified = diskModified
-        let copied = Self.document(from: copy)
+        var copied = Self.document(from: copy)
+        if let newer { copied.note.body = newer }
         documents.insert(copied, at: index)
         if local.id == selectedID {
             selectedID = copied.note.id
@@ -223,4 +297,20 @@ final class NotesSession {
     private static func document(from file: NoteFile) -> Document {
         Document(note: Note(url: file.url, body: file.text, modified: file.modified), base: file.text, diskModified: file.modified)
     }
+}
+
+extension NoteSaveFailure {
+    init(_ note: Note, reason: String) {
+        self.init(title: note.title, text: note.body, reason: reason)
+    }
+
+    var message: String { "Couldn't save “\(title)”: \(reason)" }
+}
+
+struct NoteSaveTimeout: LocalizedError {
+    static let stillRunning = "An earlier save is still waiting for the disk."
+
+    let seconds: TimeInterval
+
+    var errorDescription: String? { "The disk did not answer within \(Int(seconds)) seconds." }
 }

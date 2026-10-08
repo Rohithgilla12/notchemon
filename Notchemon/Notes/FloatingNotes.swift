@@ -25,6 +25,9 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
     @ObservationIgnored private var pollTimer: Timer?
     @ObservationIgnored private var previousApp: NSRunningApplication?
     @ObservationIgnored private var loaded = false
+    /// Set once quitting is waiting on a failed save. From then on the window
+    /// neither reads nor saves on its own, since the disk may be what failed.
+    @ObservationIgnored private var quitting = false
 
     init(store: NoteStore, defaults: UserDefaults = .standard) {
         session = NotesSession(store: store)
@@ -69,6 +72,18 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
             guard let self, !switcherOpen else { return }
             editor.focusAtEnd()
         }
+    }
+
+    /// Brings the window forward under the quit alert, so the user sees the
+    /// notes at stake.
+    func revealForQuit() {
+        quitting = true
+        stopPolling()
+        let panel = preparePanel()
+        if !panel.isVisible {
+            panel.setFrame(openingFrame(), display: false)
+        }
+        panel.orderFrontRegardless()
     }
 
     func hide() {
@@ -205,6 +220,10 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
 
     private func saveState() {
         session.flush()
+        rememberPlace()
+    }
+
+    private func rememberPlace() {
         if let name = session.currentFileName { defaults.set(name, forKey: Self.selectedKey) }
         saveFrame()
     }
@@ -240,17 +259,21 @@ final class FloatingNotes: NSObject, NSWindowDelegate {
         pollTimer = nil
     }
 
-    @objc private func applicationWillTerminate() {
-        saveState()
+    /// The app delegate flushes before it lets the app quit; flushing again
+    /// here would write the edits the user chose Quit Anyway to discard.
+    @objc func applicationWillTerminate() {
+        rememberPlace()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         panel?.alphaValue = 1
+        guard !quitting else { return }
         session.rescan()
     }
 
     func windowDidResignKey(_ notification: Notification) {
         panel?.alphaValue = Self.unfocusedAlpha
+        guard !quitting else { return }
         session.flush()
     }
 
