@@ -10,7 +10,6 @@ final class CompanionModel {
     private(set) var snapshot = CompanionSnapshot()
     private(set) var starterOptions: [StarterOption] = []
     private(set) var isLoadingStarters = false
-    var rotomDex = RotomDex()
     var noteDraft = ""
     @ObservationIgnored var onPreferencesChanged: ((Preferences) -> Void)?
     @ObservationIgnored var onSnapshot: (() -> Void)?

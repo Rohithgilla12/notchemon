@@ -99,7 +99,7 @@ private struct ToolsColumn: View {
                     .help("Open in Floating Notes")
                 }
             StashRow(model: model)
-            RotomDexView(rotomDex: model.rotomDex)
+            SystemStatsView()
             if let attribution = model.snapshot.sprite?.loop.attribution {
                 SpriteCreditLine(attribution: attribution)
             }
