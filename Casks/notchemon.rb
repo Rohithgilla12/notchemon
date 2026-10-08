@@ -1,5 +1,6 @@
-# Template for a Homebrew tap (for example Rohithgilla12/homebrew-tap).
-# After each release, set version and sha256 from the output of scripts/release.sh.
+# The release workflow sets version and sha256 on main after each release
+# (scripts/update-cask.sh), so this repository works as a tap:
+#   brew tap Rohithgilla12/notchemon https://github.com/Rohithgilla12/notchemon
 # The app is signed with "Developer ID Application: Rohith Gilla (7D2V3RM56T)"
 # and notarised, so Gatekeeper opens it without a quarantine prompt.
 cask "notchemon" do
@@ -16,6 +17,7 @@ cask "notchemon" do
     strategy :github_latest
   end
 
+  auto_updates true
   depends_on macos: ">= :sonoma"
 
   app "Notchemon.app"

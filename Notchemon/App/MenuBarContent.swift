@@ -42,6 +42,8 @@ struct MenuBarContent: View {
         Button("Choose Creature…", action: app.confirmNewStarter)
         Button("Open Notes Folder", action: app.openNotesFolder)
         Divider()
+        AppMenuSection()
+        Divider()
         Button("Quit Notchemon") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
     }

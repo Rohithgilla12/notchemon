@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Large portraits in the starter picker and an evolution reveal.
 - Sprite artist credit line in the expanded notch, and a Credits section in the README.
 - `NotchemonDebugSleepSeconds` debug default for a short sleep threshold.
+- Automatic updates with Sparkle 2, signed with EdDSA, and a **Check for Updates…** menu item.
+- **Launch at Login** menu toggle, off by default.
+- About window with the version, licence, disclaimer, and credits.
+- Signed and notarised DMG beside the zip, a release job that publishes both with a Sparkle appcast on `v*` tags, `scripts/bump-version.sh`, and [docs/releasing.md](docs/releasing.md).
 
 ### Changed
 

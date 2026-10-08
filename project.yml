@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -17,7 +21,12 @@ targets:
   Notchemon:
     type: application
     platform: macOS
-    sources: [Notchemon]
+    sources:
+      - Notchemon
+      - path: LICENSE
+        buildPhase: resources
+    dependencies:
+      - package: Sparkle
     # The single source for the version and entitlements. XcodeGen writes
     # both files on generate, so neither is tracked.
     info:
@@ -29,6 +38,12 @@ targets:
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: "MIT licensed. Unaffiliated fan work."
+        SUFeedURL: https://github.com/Rohithgilla12/notchemon/releases/latest/download/appcast.xml
+        # Written by scripts/setup-sparkle-keys.sh. While empty, the app never starts the updater.
+        SUPublicEDKey: ""
+        # Checks the EdDSA signature before unpacking an update. Sparkle 2 otherwise
+        # accepts Apple code signing alone when no EdDSA key is set.
+        SUVerifyUpdateBeforeExtraction: true
     entitlements:
       path: Notchemon/Notchemon.entitlements
       properties:
@@ -52,6 +67,8 @@ targets:
     sources: [NotchemonTests]
     dependencies:
       - target: Notchemon
+      - package: Sparkle
+        embed: false
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
