@@ -136,6 +136,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.resetForNewStarter()
     }
 
+    /// The only place the app asks for Accessibility, and only when the user
+    /// chooses to. Without it the Dock is simply not a perch.
+    func requestDockAccess() {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Allow Dock walking?"
+        alert.informativeText = "To walk along the Dock, Notchemon needs Accessibility permission to read the Dock's size and position. It reads nothing else and never controls your Mac. macOS will ask you to turn Notchemon on in Privacy & Security."
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // Swift 6 rejects reading the kAXTrustedCheckOptionPrompt global as
+        // shared mutable state, so its value is spelled out.
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        dockWatcher.recheckTrust()
+    }
+
     func openNotesFolder() {
         try? FileManager.default.createDirectory(at: AppPaths.notesFolder, withIntermediateDirectories: true)
         NSWorkspace.shared.open(AppPaths.notesFolder)
