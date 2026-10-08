@@ -28,6 +28,12 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 
 Notchemon asks for no permissions. It reads idle time with `CGEventSource.secondsSinceLastEventType` and watches the cursor with a global `mouseMoved` monitor. Neither needs Accessibility; only keyboard monitors would. The ⌃⌥N hotkey uses Carbon `RegisterEventHotKey`, which also needs no permission.
 
+## Updates, login, and About
+
+- **Updates.** Notchemon updates itself with [Sparkle](https://sparkle-project.org). On the second launch, Sparkle asks whether to check for updates automatically. **Check for Updates…** in the menu checks at any time. Each update is signed with an EdDSA key, and the app refuses an update without a valid signature.
+- **Launch at Login.** Off by default. Turn it on from the menu. If you turn it off in System Settings › General › Login Items, the menu offers to open that pane, because only System Settings can turn it back on.
+- **About Notchemon.** Shows the version, the licence, the disclaimer, and the credits.
+
 ## Build
 
 Requirements: macOS 14 or later, Xcode 16 or later, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`). The Xcode project is generated and is not committed.
@@ -70,7 +76,9 @@ CI runs this check on every push. All app code talks to the `CreatureProvider` p
 
 ## Release
 
-Releases are Developer ID signed, notarised, and published on GitHub Releases only. To bump the version, edit `CFBundleShortVersionString` and `CFBundleVersion` in `project.yml`. XcodeGen generates `Notchemon/Info.plist` and the entitlements file from it, so neither is tracked. `scripts/release.sh` builds the Release configuration, verifies the signature, zips the app, and notarises and staples it when credentials exist. It then prints the SHA-256 for `Casks/notchemon.rb`. Pushing a `v*` tag runs the same script in CI when the signing and App Store Connect secrets are set.
+Releases are Developer ID signed, notarised, and published on GitHub Releases only, as a DMG, a zip, and a Sparkle appcast. `scripts/bump-version.sh <x.y.z>` sets the version in `project.yml` and dates the CHANGELOG section. Pushing a `v*` tag builds, notarises, and publishes the release in CI, and updates `Casks/notchemon.rb`. XcodeGen generates `Notchemon/Info.plist` and the entitlements file from `project.yml`, so neither is tracked.
+
+[docs/releasing.md](docs/releasing.md) covers the one-time setup (the Sparkle key, the GitHub secrets, and making the repository public) and each release step.
 
 ## Credits
 
