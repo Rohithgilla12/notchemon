@@ -17,7 +17,7 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
   - **Calm** (the default): the creature stands still on its idle pose. Each fidget plays its idle animation once.
   - **Lively**: the creature loops its idle animation. For some species, that animation is a hop about once a second.
   - **Sitting**: the creature lies down where its sprite set has a lying pose. Otherwise it stands calm.
-  - **Wander** sets where the creature walks. **Top Edge and Dock** (the default) uses the whole width of the screen and the Dock. **Across the Top Edge** uses the whole width of the screen, **Near the Notch** keeps it within 200 pt of the notch, **On the Dock** keeps it on the Dock with visits back to the notch, and **Off** keeps it under the notch.
+  - **Wander** sets where the creature walks. **Top Edge and Dock** (the default) uses the whole width of the screen and the Dock. If an earlier build saved a Wander choice, that choice stays; the default applies only where none is saved, as on a new install. **Across the Top Edge** uses the whole width of the screen, **Near the Notch** keeps it within 200 pt of the notch, **On the Dock** keeps it on the Dock with visits back to the notch, and **Off** keeps it under the notch.
   - **Allow Dock Walking…** appears when Wander includes the Dock and the app does not have Accessibility permission. See [Permissions](#permissions).
   - **Hop When Cursor Comes Near** and **Fidgets** turn those motions off.
 - **Expanding notch.** Hover the notch, or press ⌃⌥N anywhere, and the notch springs open. It closes 0.5 seconds after the cursor leaves. ⌃⌥N toggles it, and Escape closes it while the note field has focus. While the notch is closed, menu-bar icons beside it stay clickable.
