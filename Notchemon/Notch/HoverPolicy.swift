@@ -33,7 +33,7 @@ enum HoverPolicy {
     /// `buttonHeld` is a press in another app that is not dragging files: the
     /// panel neither opens nor closes under it, but takes clicks only while
     /// it is open under the cursor.
-    static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false) -> HoverDecision {
+    static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false, pokeballModeEnabled: Bool = false) -> HoverDecision {
         if buttonHeld {
             let hitTestable = mode.isExpanded && layout.expanded.contains(cursor)
             return HoverDecision(mode: mode, hitTestable: hitTestable, collapse: .unchanged)
@@ -41,7 +41,8 @@ enum HoverPolicy {
         switch mode {
         case .collapsed:
             let inside = layout.collapsed.contains(cursor)
-            return HoverDecision(mode: inside ? .expanded(.hover) : .collapsed, hitTestable: inside, collapse: .cancel)
+            let expand = inside && !pokeballModeEnabled
+            return HoverDecision(mode: expand ? .expanded(.hover) : .collapsed, hitTestable: inside, collapse: .cancel)
         case .expanded(.hover):
             let inside = layout.expanded.contains(cursor)
             return HoverDecision(mode: mode, hitTestable: inside, collapse: inside ? .cancel : .schedule)

@@ -23,6 +23,15 @@ struct NotchRootView: View {
                     }
                     .frame(width: shapeSize.width, height: shapeSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                            if !presentation.isExpanded {
+                                presentation.mode = .expanded(.pinned)
+                            } else {
+                                presentation.mode = .collapsed
+                            }
+                        }
+                    }
 
                 if expanded {
                     ExpandedView(model: model, presentation: presentation, metrics: metrics)

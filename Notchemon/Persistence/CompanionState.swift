@@ -29,12 +29,21 @@ struct Preferences: Codable, Sendable, Equatable {
     static let focusLengths = [15, 25, 45, 60]
 
     var focusMinutes = 25
+    var focusSound = FocusSound.off
     var sleepEnabled = true
     var virtualNotchEnabled = true
+    var pokeballMode = false
     var idleStyle = IdleStyle.calm
     var hopsOnApproach = true
     var fidgets = true
     var wander = WanderRange.topEdgeAndDock
+}
+
+enum FocusSound: String, Codable, Sendable, CaseIterable {
+    case off = "Off"
+    case pokeFlute = "Poké Flute"
+    case pokemonCenter = "Pokémon Center"
+    case levelUp = "Level Up"
 }
 
 /// Where the creature may walk: along the strip below the menu bar, along
@@ -72,8 +81,10 @@ extension Preferences {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = Preferences()
         focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes) ?? defaults.focusMinutes
+        focusSound = (try? container.decodeIfPresent(FocusSound.self, forKey: .focusSound)) ?? defaults.focusSound
         sleepEnabled = try container.decodeIfPresent(Bool.self, forKey: .sleepEnabled) ?? defaults.sleepEnabled
         virtualNotchEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualNotchEnabled) ?? defaults.virtualNotchEnabled
+        pokeballMode = try container.decodeIfPresent(Bool.self, forKey: .pokeballMode) ?? defaults.pokeballMode
         // A style from a newer version reads as the default, not as a broken file.
         idleStyle = (try? container.decodeIfPresent(IdleStyle.self, forKey: .idleStyle)) ?? defaults.idleStyle
         hopsOnApproach = try container.decodeIfPresent(Bool.self, forKey: .hopsOnApproach) ?? defaults.hopsOnApproach

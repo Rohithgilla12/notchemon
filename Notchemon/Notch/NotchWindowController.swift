@@ -12,6 +12,7 @@ final class NotchWindowController {
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
     private var wander: WanderRange
+    private var pokeballMode: Bool
     private var screen: ScreenMetrics?
     private var creatureExtent: CGFloat = 0
     private var observers: [NSObjectProtocol] = []
@@ -22,10 +23,11 @@ final class NotchWindowController {
 
     static let collapseDelay: Duration = .milliseconds(500)
 
-    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, wander: WanderRange, content: Content) {
+    init<Content: View>(presentation: NotchPresentation, virtualNotchEnabled: Bool, wander: WanderRange, pokeballMode: Bool, content: Content) {
         self.presentation = presentation
         self.virtualNotchEnabled = virtualNotchEnabled
         self.wander = wander
+        self.pokeballMode = pokeballMode
         panel = NotchPanel(frame: .zero)
         let hosting = NSHostingView(rootView: content)
         hosting.sizingOptions = []
@@ -59,6 +61,12 @@ final class NotchWindowController {
         guard wander != self.wander else { return }
         self.wander = wander
         relayout()
+    }
+
+    func setPokeballMode(_ mode: Bool) {
+        guard mode != pokeballMode else { return }
+        pokeballMode = mode
+        handleCursor(NSEvent.mouseLocation)
     }
 
     func relayout() {
@@ -187,7 +195,7 @@ final class NotchWindowController {
         onCursorMoved?(point)
         guard let layout = presentation.layout else { return }
         let buttonHeld = pressPoll != nil && !isFileDragInProgress
-        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld)
+        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld, pokeballModeEnabled: pokeballMode)
         // Each assignment is a WindowServer round trip; mouse moves arrive at 120 Hz.
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable
