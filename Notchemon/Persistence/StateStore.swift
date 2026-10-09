@@ -18,6 +18,12 @@ struct StateStore: Sendable {
         }
     }
 
+    /// About when the first state was saved: when its folder was made. An
+    /// atomic save replaces the file, so the file's own date is the last save.
+    var firstSaved: Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.deletingLastPathComponent().path))?[.creationDate] as? Date
+    }
+
     func save(_ state: CompanionState) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Self.encoder.encode(state).write(to: url, options: .atomic)

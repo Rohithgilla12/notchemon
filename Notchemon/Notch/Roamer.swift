@@ -13,6 +13,8 @@ final class Roamer {
     /// radius, so the creature can look at the cursor again from where it
     /// now is.
     @ObservationIgnored var onLookAgain: (() -> Void)?
+    /// Called once for each walk that ends and each hop between perches.
+    @ObservationIgnored var onEvent: ((CompanionEvent) -> Void)?
 
     @ObservationIgnored private var range: ClosedRange<Double> = 0...0
     @ObservationIgnored private var dock: ClosedRange<Double>?
@@ -40,9 +42,12 @@ final class Roamer {
     }
 
     private func advance(lookAgain: Bool = false) {
-        let next = RoamRules.next(phase, RoamInputs(now: Date(), range: range, dock: dock, homing: homing), using: &rng)
+        let now = Date()
+        let next = RoamRules.next(phase, RoamInputs(now: now, range: range, dock: dock, homing: homing), using: &rng)
         let moved = next != phase
+        let events = moved ? RoamRules.events(from: phase, to: next, at: now) : []
         if moved { phase = next }
+        for event in events { onEvent?(event) }
         schedule()
         if moved || lookAgain { onLookAgain?() }
     }

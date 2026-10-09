@@ -4,12 +4,12 @@ import Foundation
 /// `progress` is nil until the user picks a starter.
 struct CompanionState: Codable, Sendable, Equatable {
     var progress: Progress?
-    var totalFocusMinutes: Int
+    var stats = Stats()
     /// File bookmark data, oldest first.
-    var stash: [Data]
+    var stash: [Data] = []
     var preferences = Preferences()
 
-    static let empty = CompanionState(progress: nil, totalFocusMinutes: 0, stash: [])
+    static let empty = CompanionState(progress: nil)
     static let stashCapacity = 5
 }
 
@@ -19,9 +19,18 @@ extension CompanionState {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         progress = try container.decodeIfPresent(Progress.self, forKey: .progress)
-        totalFocusMinutes = try container.decodeIfPresent(Int.self, forKey: .totalFocusMinutes) ?? 0
+        stats = try container.decodeIfPresent(Stats.self, forKey: .stats) ?? Stats()
+        // Before stats, focus minutes were the one tally kept.
+        if !container.contains(.stats) {
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            stats.focusMinutes = try legacy.decodeIfPresent(Int.self, forKey: .totalFocusMinutes) ?? 0
+        }
         stash = try container.decodeIfPresent([Data].self, forKey: .stash) ?? []
         preferences = try container.decodeIfPresent(Preferences.self, forKey: .preferences) ?? Preferences()
+    }
+
+    private enum LegacyKeys: String, CodingKey {
+        case totalFocusMinutes
     }
 }
 

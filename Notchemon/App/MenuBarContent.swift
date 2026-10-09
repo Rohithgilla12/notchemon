@@ -7,7 +7,11 @@ struct MenuBarContent: View {
     var body: some View {
         if let species = model.activeSpecies, let progress = model.progress {
             Text("\(species.name) · Level \(progress.level)")
-            Text("\(model.snapshot.totalFocusMinutes) focus minutes so far")
+            Menu("Stats") {
+                ForEach(StatsSummary.lines(model.snapshot.stats, now: Date()), id: \.self) { line in
+                    Text(line)
+                }
+            }
         }
         Button(model.snapshot.focus == nil ? "Start Focus" : "Stop Focus", action: model.toggleFocus)
             .disabled(model.activeSpecies == nil)

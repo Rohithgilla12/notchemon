@@ -64,8 +64,9 @@ struct CompanionSnapshot: Sendable {
     var focus: FocusSession?
     var banner: Banner?
     var stash: [StashItem] = []
+    /// Evolutions since launch, which flash the sprite.
     var evolutionCount = 0
-    var totalFocusMinutes = 0
+    var stats = Stats()
     /// Sessions completed since launch. Each one plays the focus sound.
     var completedFocusSessions = 0
 }
@@ -149,8 +150,13 @@ actor CreatureEngine {
 
     func start() async {
         state = store.load()
+        if state.progress != nil, state.stats.firstMet == nil {
+            // Stats arrived after the companion did, which is about as old as its saved state.
+            state.stats.firstMet = store.firstSaved ?? now()
+            persist()
+        }
         snapshot.preferences = state.preferences
-        snapshot.totalFocusMinutes = state.totalFocusMinutes
+        snapshot.stats = state.stats
         refreshStash()
         await loadCompanion()
         startSampling()
@@ -181,6 +187,8 @@ actor CreatureEngine {
             progress.xp = carryOver.xp
         }
         state.progress = progress
+        state.stats.firstMet = state.stats.firstMet ?? now()
+        snapshot.stats = state.stats
         persist()
         await activate(chosen)
         await resolvePendingEvolutions()
@@ -205,7 +213,23 @@ actor CreatureEngine {
     }
 
     func cursorNoticed() async {
+        record(.hopped)
         await play(.cursorNoticed)
+    }
+
+    /// Folds one event into the stats. A walk is measured in the current
+    /// species' body heights and in millimetres of the display it crossed.
+    func record(_ event: CompanionEvent, screenMillimetresPerPoint: Double = 0) {
+        guard let species else { return }
+        let scale = WalkScale(
+            creatureMetresPerPoint: Distance.creatureMetresPerPoint(heightMetres: species.heightMetres),
+            screenMillimetresPerPoint: screenMillimetresPerPoint
+        )
+        state.stats = StatsReducer.apply(event, to: state.stats, scale: scale)
+        snapshot.stats = state.stats
+        statsLog.debug("folded \(String(describing: event), privacy: .public)")
+        persist()
+        publish()
     }
 
     func setPreferences(_ preferences: Preferences) async {
@@ -252,8 +276,7 @@ actor CreatureEngine {
     private func settle(_ outcome: FocusOutcome) async {
         snapshot.focus = nil
         if case .completed(let minutes) = outcome {
-            state.totalFocusMinutes += minutes
-            snapshot.totalFocusMinutes = state.totalFocusMinutes
+            record(.focusCompleted(minutes: minutes))
             snapshot.completedFocusSessions += 1
             await award(outcome.xp)
         } else {
@@ -287,6 +310,7 @@ actor CreatureEngine {
             forgetSprites()
             await activate(target)
             snapshot.evolutionCount += 1
+            record(.evolved)
             let portrait = try? await provider.portrait(for: target)
             await celebrate(.evolution(from: species.id, to: targetID), banner: .evolved(into: target.name, portrait: portrait))
             publish()
@@ -426,6 +450,7 @@ actor CreatureEngine {
         let behaviour = BehaviourRules.resolve(inputs)
         let previous = snapshot.behaviour
         if behaviour != previous {
+            if behaviour == .sleeping { record(.napped) }
             snapshot.behaviour = behaviour
             await refreshLoop()
             publish()
