@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Shows the creature on the Dock. Unlike the notch panel it never takes
-/// the mouse, so the Dock under it stays fully usable.
+/// Shows the creature on the Dock. It takes the mouse only over a visiting
+/// wild creature, so the Dock under it stays usable.
 @MainActor
 final class DockWindowController {
     private let panel = DockPanel()
@@ -22,6 +22,11 @@ final class DockWindowController {
         }
         if panel.frame != frame { panel.setFrame(frame, display: true) }
         if !panel.isVisible { panel.orderFrontRegardless() }
+    }
+
+    /// Only over a visiting creature, which a click catches.
+    func setTakesClicks(_ takes: Bool) {
+        if panel.ignoresMouseEvents == takes { panel.ignoresMouseEvents = !takes }
     }
 }
 
@@ -70,14 +75,22 @@ final class DockPanel: NSPanel {
 struct DockRootView: View {
     let model: CompanionModel
     let roamer: Roamer
+    let wild: WildWalker
     let dock: DockWatcher
 
     var body: some View {
-        if model.activeSpecies != nil,
-           let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .dock, expanded: false, ground: dock.shelf?.step) {
-            SpriteView(pose: pose)
-                .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        ZStack {
+            if model.activeSpecies != nil,
+               let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .dock, expanded: false, ground: dock.shelf?.step) {
+                SpriteView(pose: pose)
+                    .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
+            }
+            if let encounter = model.snapshot.encounter, wild.visit?.perch == .dock, let track = wild.track {
+                SpriteView(pose: .wild(encounter.show, track: track, idleStyle: .lively, ground: dock.shelf?.step))
+                    .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
+                    .id(encounter.serial)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 }

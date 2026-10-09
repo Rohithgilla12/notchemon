@@ -90,6 +90,13 @@ enum RoamPhase: Sendable, Equatable {
         }
     }
 
+    /// Where `Homing.stay` leaves the creature: the landing spot of a hop
+    /// under way, which cannot be taken back, else where it is now.
+    func heldSpot(at now: Date) -> RoamSpot {
+        if case .transferring(_, let to, _) = self { return to }
+        return spot(at: now)
+    }
+
     /// The perch the creature is on, or is hopping to.
     var perch: Perch {
         switch self {
@@ -139,7 +146,7 @@ enum RoamPhase: Sendable, Equatable {
 /// stays put.
 enum Homing: Sendable, Equatable {
     case free
-    /// Stops where it is, because it fell asleep.
+    /// Stops where it is, because it fell asleep or a wild creature is visiting.
     case stay
     case walk
     /// Hurries home to greet the cursor.
@@ -162,6 +169,8 @@ struct HomingConditions: Sendable, Equatable {
     var hasCreature: Bool
     /// Where the creature is, or is hopping to.
     var perch: Perch
+    /// A wild creature is visiting, which the partner stops to watch.
+    var visitor = false
 }
 
 struct RoamInputs: Sendable, Equatable {
@@ -201,6 +210,8 @@ enum RoamRules {
         // Asleep it stays put even for a cursor at home: moving the mouse
         // wakes it within a second, and then it runs to greet it.
         if conditions.sleeping { return .stay }
+        // Held, it can never walk into the visitor's path.
+        if conditions.visitor { return .stay }
         // From the Dock a cursor at the notch is far from the creature, not a greeting.
         if conditions.cursorNearHome, conditions.perch == .topEdge { return .run }
         if conditions.wander == .off || conditions.focusing { return .walk }

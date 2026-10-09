@@ -4,6 +4,7 @@ struct NotchRootView: View {
     let presentation: NotchPresentation
     let model: CompanionModel
     let roamer: Roamer
+    let wild: WildWalker
 
     var body: some View {
         if let metrics = presentation.metrics {
@@ -24,6 +25,15 @@ struct NotchRootView: View {
                     .frame(width: shapeSize.width, height: shapeSize.height)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .gesture(panelClick, including: presentation.clickToOpen ? .all : .none)
+
+                // Under the open panel, which covers the strip it walks.
+                if let encounter = model.snapshot.encounter, wild.visit?.perch == .topEdge, let track = wild.track {
+                    let strip = metrics.collapsedSpriteFrame
+                    SpriteView(pose: .wild(encounter.show, track: track, idleStyle: .lively))
+                        .frame(width: strip.width, height: strip.height)
+                        .offset(x: strip.minX, y: strip.minY)
+                        .id(encounter.serial)
+                }
 
                 if expanded {
                     ExpandedView(model: model, presentation: presentation, metrics: metrics)

@@ -16,6 +16,18 @@ enum Banner: Sendable, Equatable {
     case evolved(into: String, portrait: CGImage?)
     case stashFull
     case stashCleared(undo: [Data])
+    case caught(String)
+    /// A wild creature whose family is already a partner.
+    case seenAgain(String)
+}
+
+/// A wild creature on its visit.
+struct Encounter: Sendable {
+    /// Counts visits since launch, so each visitor differs from the last.
+    let serial: Int
+    let species: Species
+    let show: SpriteShow
+    var caught = false
 }
 
 /// A species the user can send out: a partner they have, or one they could add.
@@ -71,6 +83,7 @@ struct CompanionSnapshot: Sendable {
     var evolutionCount = 0
     var stats = Stats()
     var unlocks = UnlockStatus()
+    var encounter: Encounter?
     /// Sessions completed since launch. Each one plays the focus sound.
     var completedFocusSessions = 0
 }
@@ -134,11 +147,25 @@ actor CreatureEngine {
     private var focusTask: Task<Void, Never>?
     private var samplingTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private var rng = SystemRandomNumberGenerator()
+    private let calendar = Calendar.current
+    private var schedule: EncounterSchedule?
+    private var encounterDeadline: Date?
+    private var encounterTask: Task<Void, Never>?
+    private var visitTask: Task<Void, Never>?
+    private var spawning = false
+    private var encounterSerial = 0
+    private var fullScreen = false
 
     static let celebrationLength: Duration = .seconds(2)
     static let bannerLength: Duration = .seconds(4)
     static let undoLength: Duration = .seconds(5)
     static let retryInterval: Duration = .seconds(30)
+    /// How soon to look again when no wild creature could be found.
+    static let encounterRetry: TimeInterval = 5 * 60
+    /// The visit ends by itself even if the view never reports it gone,
+    /// well after the longest walk off a screen could take.
+    static let visitLimit: Duration = .seconds(3 * EncounterRules.visitLength)
 
     init(
         provider: any CreatureProvider,
@@ -175,9 +202,157 @@ actor CreatureEngine {
         snapshot.preferences = state.preferences
         snapshot.stats = state.stats
         refreshUnlockStatus()
+        let clock = state.encounterClock ?? EncounterRules.fresh(at: now(), calendar: calendar, using: &rng)
+        schedule = EncounterSchedule(clock: clock, activeSince: nil)
         refreshStash()
         await loadCompanion()
         startSampling()
+    }
+
+    /// Full screen sends a visitor away and holds the next one off.
+    func setFullScreen(_ on: Bool) {
+        guard on != fullScreen else { return }
+        fullScreen = on
+        if on, let encounter = snapshot.encounter {
+            encounterLog.info("wild creature \(encounter.species.id, privacy: .public) left for full screen")
+            endEncounter(encounter.serial)
+        }
+        refreshEncounters(secondsSinceInput: idleSeconds())
+    }
+
+    /// For developers: a visit now, whatever the schedule says. It does
+    /// not count toward the day's visits.
+    func spawnEncounterNow() async {
+        await spawnEncounter(scheduled: false)
+    }
+
+    /// A click on the visitor. A family not yet in the collection joins at
+    /// its first stage and the starting level; one already there was only
+    /// seen again.
+    func catchEncounter() {
+        guard var encounter = snapshot.encounter, !encounter.caught else { return }
+        encounter.caught = true
+        snapshot.encounter = encounter
+        let wild = encounter.species
+        let root = wild.familyRoot ?? wild.id
+        if state.collection.add(Partner(root: root, progress: .starter(root))) {
+            encounterLog.info("caught wild creature \(wild.id, privacy: .public)")
+            showBanner(.caught(wild.name))
+            record(.encounterCaught)
+        } else {
+            encounterLog.info("wild creature \(wild.id, privacy: .public) seen again; its family is already a partner")
+            showBanner(.seenAgain(wild.name))
+            publish()
+        }
+    }
+
+    /// The visitor left, or its catch finished playing.
+    func endEncounter(_ serial: Int) {
+        guard let encounter = snapshot.encounter, encounter.serial == serial else { return }
+        visitTask?.cancel()
+        snapshot.encounter = nil
+        if !encounter.caught {
+            encounterLog.info("wild creature \(encounter.species.id, privacy: .public) wandered off")
+        }
+        publish()
+        refreshEncounters(secondsSinceInput: idleSeconds())
+    }
+
+    /// Starts or ends the active stretch when the conditions change, and
+    /// with it the deadline the next visit waits for.
+    private func refreshEncounters(secondsSinceInput: TimeInterval) {
+        guard let current = schedule else { return }
+        let conditions = EncounterConditions(
+            secondsSinceInput: secondsSinceInput,
+            sleeping: snapshot.behaviour == .sleeping,
+            fullScreen: fullScreen,
+            focusing: timer.session != nil,
+            hasPartner: species != nil,
+            visiting: snapshot.encounter != nil
+        )
+        let active = EncounterRules.isActive(conditions)
+        guard active != (current.activeSince != nil) else { return }
+        schedule = EncounterRules.update(current, active: active, now: now(), calendar: calendar)
+        saveEncounterClock()
+        scheduleEncounter()
+    }
+
+    private func scheduleEncounter() {
+        let deadline = schedule.flatMap(EncounterRules.deadline)
+        guard deadline != encounterDeadline else { return }
+        encounterTask?.cancel()
+        encounterDeadline = deadline
+        guard let deadline else { return }
+        let wait = max(0, deadline.timeIntervalSince(now()))
+        encounterLog.info("next wild creature in \(Int(wait), privacy: .public) s of active use")
+        encounterTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled else { return }
+            await self?.encounterDue()
+        }
+    }
+
+    private func encounterDue() async {
+        encounterDeadline = nil
+        guard let current = schedule, let deadline = EncounterRules.deadline(current), now() >= deadline - 1 else {
+            scheduleEncounter()
+            return
+        }
+        await spawnEncounter(scheduled: true)
+    }
+
+    private func spawnEncounter(scheduled: Bool) async {
+        guard species != nil, snapshot.encounter == nil, !spawning else { return }
+        spawning = true
+        defer { spawning = false }
+        var draw = rng
+        let candidate = try? await provider.encounterCandidate(using: &draw)
+        guard let candidate, let show = await wildShow(of: candidate), species != nil, snapshot.encounter == nil else {
+            encounterLog.info("no wild creature could be found; looking again later")
+            if scheduled, var current = schedule {
+                current = EncounterRules.update(current, active: current.activeSince != nil, now: now(), calendar: calendar)
+                current.clock.cooldownLeft = Self.encounterRetry
+                schedule = current
+                saveEncounterClock()
+                scheduleEncounter()
+            }
+            return
+        }
+        encounterSerial += 1
+        let serial = encounterSerial
+        snapshot.encounter = Encounter(serial: serial, species: candidate, show: show)
+        if scheduled, let current = schedule {
+            schedule = EncounterRules.visited(EncounterRules.update(current, active: false, now: now(), calendar: calendar), using: &rng)
+        } else if let current = schedule {
+            schedule = EncounterRules.update(current, active: false, now: now(), calendar: calendar)
+        }
+        saveEncounterClock()
+        scheduleEncounter()
+        encounterLog.info("wild creature \(candidate.id, privacy: .public) arrived")
+        record(.encounterSeen)
+        visitTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.visitLimit)
+            guard !Task.isCancelled else { return }
+            await self?.endEncounter(serial)
+        }
+    }
+
+    /// Idle facing the viewer and a walk each way, measured on their own.
+    private func wildShow(of wild: Species) async -> SpriteShow? {
+        guard let idle = try? await provider.sprite(for: wild, state: .idle, facing: .down),
+              let left = try? await provider.sprite(for: wild, state: .walking, facing: .left),
+              let right = try? await provider.sprite(for: wild, state: .walking, facing: .right)
+        else { return nil }
+        let anims: [SpriteState: [Facing: SpriteFrames]] = [.idle: [.down: idle], .walking: [.left: left, .right: right]]
+        return SpriteShow(
+            loop: idle, loopState: .idle, playback: .cycle, facing: .down,
+            bounds: SpriteRendering.bounds(rest: idle, anims: anims), oneShot: nil, walk: WalkCycle(left: left, right: right)
+        )
+    }
+
+    private func saveEncounterClock() {
+        state.encounterClock = schedule?.clock
+        persist()
     }
 
     func starterOptions() async -> [PartnerOption] {
@@ -293,6 +468,7 @@ actor CreatureEngine {
         cancelFocus()
         state.collection = PartnerCollection()
         species = nil
+        snapshot.encounter = nil
         forgetSprites()
         persist()
         snapshot.sprite = nil
@@ -554,8 +730,9 @@ actor CreatureEngine {
     func sample() async -> Duration {
         await finishFocusIfDue()
         let instant = now()
+        let idle = idleSeconds()
         let inputs = BehaviourInputs(
-            secondsSinceInput: idleSeconds(),
+            secondsSinceInput: idle,
             cursorOffset: cursorOffset,
             secondsSinceCursorNear: instant.timeIntervalSince(lastCursorNear),
             stashCount: snapshot.stash.count,
@@ -572,6 +749,7 @@ actor CreatureEngine {
             publish()
             await play(.behaviourChanged(from: previous, to: behaviour))
         }
+        refreshEncounters(secondsSinceInput: idle)
         switch behaviour {
         case .sleeping: return .seconds(1)
         case .watching: return .milliseconds(500)

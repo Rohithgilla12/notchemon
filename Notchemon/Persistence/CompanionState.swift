@@ -5,6 +5,8 @@ import Foundation
 struct CompanionState: Codable, Sendable, Equatable {
     var collection = PartnerCollection()
     var stats = Stats()
+    /// Nil until the first launch that schedules wild creatures.
+    var encounterClock: EncounterClock?
     /// File bookmark data, oldest first.
     var stash: [Data] = []
     var preferences = Preferences()
@@ -33,6 +35,8 @@ extension CompanionState {
         if !container.contains(.stats) {
             stats.focusMinutes = try legacy.decodeIfPresent(Int.self, forKey: .totalFocusMinutes) ?? 0
         }
+        // A clock that cannot be read only restarts the cooldown.
+        encounterClock = try? container.decodeIfPresent(EncounterClock.self, forKey: .encounterClock)
         stash = try container.decodeIfPresent([Data].self, forKey: .stash) ?? []
         preferences = try container.decodeIfPresent(Preferences.self, forKey: .preferences) ?? Preferences()
     }

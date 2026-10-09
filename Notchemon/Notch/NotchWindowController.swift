@@ -8,6 +8,8 @@ final class NotchWindowController {
     let presentation: NotchPresentation
     /// Every cursor position seen, in global screen coordinates.
     var onCursorMoved: ((CGPoint) -> Void)?
+    /// A visiting creature's box on the top edge right now, if one is there.
+    var wildBox: (() -> CGRect?)?
 
     private let panel: NotchPanel
     private var virtualNotchEnabled: Bool
@@ -209,7 +211,9 @@ final class NotchWindowController {
         onCursorMoved?(point)
         guard let layout = presentation.layout else { return }
         let buttonHeld = pressPoll != nil && !isFileDragInProgress
-        let decision = HoverPolicy.react(to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld, clickToOpen: presentation.clickToOpen)
+        let decision = HoverPolicy.react(
+            to: point, mode: presentation.mode, layout: layout, buttonHeld: buttonHeld, clickToOpen: presentation.clickToOpen, wild: wildBox?()
+        )
         // Each assignment is a WindowServer round trip; mouse moves arrive at 120 Hz.
         if panel.ignoresMouseEvents == decision.hitTestable {
             panel.ignoresMouseEvents = !decision.hitTestable

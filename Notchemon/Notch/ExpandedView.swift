@@ -278,6 +278,8 @@ private struct BannerView: View {
         case .evolved(let name, _): "Evolved into \(name)!"
         case .stashFull: "Stash is full (\(CompanionState.stashCapacity) items)"
         case .stashCleared: "Stash cleared · Undo"
+        case .caught(let name): "Caught! \(name) joined your collection"
+        case .seenAgain(let name): "\(name) is already a partner"
         }
     }
 
@@ -287,6 +289,8 @@ private struct BannerView: View {
         case .evolved: .purple
         case .stashFull: .orange
         case .stashCleared: .gray
+        case .caught: .teal
+        case .seenAgain: .gray
         }
     }
 }

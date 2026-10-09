@@ -70,6 +70,8 @@ struct MenuBarContent: View {
         if UnlockOverride.isDeveloperBuild(bundleIdentifier: Bundle.main.bundleIdentifier) {
             Menu("Developer") {
                 Toggle("Unlock All", isOn: Binding(get: { model.snapshot.unlocks.override }, set: app.setUnlockAll))
+                Button("Spawn Encounter Now", action: model.spawnEncounterNow)
+                    .disabled(model.activeSpecies == nil || model.snapshot.encounter != nil)
                 Button("Add 1 km", action: model.addCreatureKilometre)
                     .disabled(model.activeSpecies == nil)
                 Button("Add 1 Focus Hour", action: model.addFocusHour)

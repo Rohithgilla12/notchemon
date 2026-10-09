@@ -36,8 +36,22 @@ enum HoverPolicy {
     /// `buttonHeld` is a press in another app that is not dragging files: the
     /// panel neither opens nor closes under it, but takes clicks only while
     /// it is open under the cursor. With `clickToOpen`, the cursor never opens
-    /// the panel; it only makes the notch clickable.
-    static func react(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false, clickToOpen: Bool = false) -> HoverDecision {
+    /// the panel; it only makes the notch clickable. `wild` is a visiting
+    /// creature's box, which takes a click to catch it and opens nothing.
+    static func react(
+        to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool = false, clickToOpen: Bool = false, wild: CGRect? = nil
+    ) -> HoverDecision {
+        var decision = panel(to: cursor, mode: mode, layout: layout, buttonHeld: buttonHeld, clickToOpen: clickToOpen)
+        if !buttonHeld, let wild, wild.contains(cursor) { decision.hitTestable = true }
+        return decision
+    }
+
+    /// A visiting creature's box around its centre: the box the sprite is drawn in.
+    static func wildBox(centre: CGPoint, side: CGFloat = NotchGeometry.peekHeight) -> CGRect {
+        CGRect(x: centre.x - side / 2, y: centre.y - side / 2, width: side, height: side)
+    }
+
+    private static func panel(to cursor: CGPoint, mode: PanelMode, layout: NotchLayout, buttonHeld: Bool, clickToOpen: Bool) -> HoverDecision {
         if buttonHeld {
             let hitTestable = mode.isExpanded && layout.expanded.contains(cursor)
             return HoverDecision(mode: mode, hitTestable: hitTestable, collapse: .unchanged)
