@@ -111,7 +111,7 @@ struct PerchRulesTests {
         let gone = inputs(at: 2, dock: .some(nil))
         let phases: [(RoamPhase, RoamSpot)] = [
             (.resting(at: .dock(100), until: t0 + 5), .dock(100)),
-            (.asleep(at: .dock(100)), .dock(100)),
+            (.stopped(at: .dock(100)), .dock(100)),
             (.walking(RoamWalk(on: .dock, from: 0, to: 140, start: t0, speed: 35)), .dock(70)),
         ]
         for (phase, spot) in phases {
@@ -134,7 +134,7 @@ struct PerchRulesTests {
 
     @Test(arguments: [
         RoamPhase.resting(at: .dock(100), until: .distantFuture),
-        .asleep(at: .dock(-100)),
+        .stopped(at: .dock(-100)),
         .walking(RoamWalk(on: .dock, from: 0, to: 300, start: Date(timeIntervalSince1970: 1_800_000_000), speed: 35)),
         .transferring(from: .topEdge(100), to: .dock(-40), start: Date(timeIntervalSince1970: 1_800_000_000)),
         .transferring(from: .dock(-40), to: .topEdge(100), start: Date(timeIntervalSince1970: 1_800_000_000)),
@@ -145,12 +145,12 @@ struct PerchRulesTests {
 
     @Test func fallingAsleepOnTheDockSleepsThereAndAHopLandsFirst() {
         let walking = RoamPhase.walking(RoamWalk(on: .dock, from: 0, to: 140, start: t0, speed: 35))
-        #expect(next(walking, inputs(at: 2, homing: .stay)) == .asleep(at: .dock(70)))
-        #expect(next(.asleep(at: .dock(70)), inputs(at: 600, homing: .stay)) == .asleep(at: .dock(70)))
+        #expect(next(walking, inputs(at: 2, homing: .stay)) == .stopped(at: .dock(70)))
+        #expect(next(.stopped(at: .dock(70)), inputs(at: 600, homing: .stay)) == .stopped(at: .dock(70)))
         let hop = RoamPhase.transferring(from: .topEdge(100), to: .dock(-40), start: t0)
         #expect(next(hop, inputs(at: 0.2, homing: .stay)) == hop)
-        #expect(next(hop, inputs(at: 0.7, homing: .stay)) == .asleep(at: .dock(-40)))
-        #expect(next(.asleep(at: .dock(70)), inputs(homing: .stay, dock: .some(nil))) == .home)
+        #expect(next(hop, inputs(at: 0.7, homing: .stay)) == .stopped(at: .dock(-40)))
+        #expect(next(.stopped(at: .dock(70)), inputs(homing: .stay, dock: .some(nil))) == .home)
     }
 
     @Test(arguments: [Homing.walk, .run])

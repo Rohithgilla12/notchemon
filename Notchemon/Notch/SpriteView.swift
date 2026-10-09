@@ -75,7 +75,7 @@ extension SpritePose {
         switch roam {
         case .home:
             perch == .topEdge ? .still(0) : nil
-        case .resting(let spot, _), .asleep(let spot):
+        case .resting(let spot, _), .stopped(let spot):
             spot.perch == perch ? .still(spot.x) : nil
         case .walking(let walk), .returning(let walk):
             walk.perch == perch ? .walk(walk) : nil
