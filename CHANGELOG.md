@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-09
+
 ### Fixed
 
 - The running app now notices an Accessibility grant. Each trust check also tries a real read of the Dock, and a read that succeeds counts as granted even while `AXIsProcessTrusted` still says no, which it can do inside a process that was running when the grant was made. The 0.2.2 checks asked only `AXIsProcessTrusted`, so the grant went unnoticed until a relaunch.
