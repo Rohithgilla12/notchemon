@@ -34,7 +34,7 @@ targets:
     info:
       path: Notchemon/Info.plist
       properties:
-        CFBundleDisplayName: Notchemon
+        CFBundleDisplayName: $(NOTCHEMON_DISPLAY_NAME)
         CFBundleShortVersionString: "0.2.2"
         CFBundleVersion: "4"
         LSUIElement: true
@@ -54,9 +54,15 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rohithgilla.Notchemon
+        NOTCHEMON_DISPLAY_NAME: Notchemon
       configs:
+        # A separate bundle ID keeps a Debug build's Accessibility grant,
+        # defaults domain, and Application Support folder apart from the
+        # installed app's. macOS keys all three on the bundle ID.
         Debug:
           CODE_SIGN_IDENTITY: "-"
+          PRODUCT_BUNDLE_IDENTIFIER: com.rohithgilla.Notchemon.debug
+          NOTCHEMON_DISPLAY_NAME: Notchemon Debug
         Release:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Developer ID Application"

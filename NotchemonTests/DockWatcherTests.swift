@@ -221,6 +221,26 @@ struct DockWatcherTests {
         #expect(trust.checks == after)
     }
 
+    /// The app enters through `start(wanted:)`, not `setWanted`, so the checks
+    /// must begin from there too.
+    @Test func startingUntrustedAndWantedSchedulesTheChecks() {
+        let trust = Trust(false)
+        let watcher = DockWatcher(read: Dock(Self.hidden).read, trusted: trust.check, after: timers.after)
+        watcher.start(wanted: true)
+        let before = trust.checks
+        timers.advance(by: DockWatcher.trustCheck)
+        #expect(trust.checks == before + 1)
+        timers.advance(by: DockWatcher.trustCheck)
+        #expect(trust.checks == before + 2)
+    }
+
+    @Test func theRealSchedulerRunsTheWorkAfterTheDelay() async {
+        await confirmation { fired in
+            DockWatcher.afterSleeping(.milliseconds(20)) { fired() }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
     @Test func noLongerWantingTheDockStopsTheChecks() {
         let trust = Trust(false)
         let watcher = watcher(Dock(Self.hidden), trust: trust)

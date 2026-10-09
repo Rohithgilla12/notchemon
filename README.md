@@ -41,7 +41,7 @@ Dock walking is the one feature that needs Accessibility permission, because onl
 3. Read the explanation and choose **Continue**. macOS shows its own Accessibility prompt.
 4. In **System Settings > Privacy & Security > Accessibility**, turn on Notchemon.
 
-The app checks for the grant every 2 seconds for the next two minutes, then every 30 seconds while Dock walking is wanted and the permission is missing, so you do not need to relaunch it. The **Motion** submenu shows a **Dock walking** status line that says whether it is on, needs Accessibility, or is off because the Dock is on the side or a full-screen app is in front. With permission, the app reads only the Dock's frame, and only when an app launches or quits, the displays change, the creature steps onto or walks along the Dock, or, for an auto-hiding Dock, the cursor reaches the bottom of the screen or leaves the shown Dock. It reads the Dock's position and auto-hide settings from the `com.apple.dock` preferences. It never sends input to other apps. To revoke the permission, turn Notchemon off in the same settings pane; the creature then hops back up to the top edge.
+The app checks for the grant every 2 seconds for the next two minutes, then every 30 seconds while Dock walking is wanted and the permission is missing, so you do not need to relaunch it. Each check also tries a real read of the Dock, because `AXIsProcessTrusted` can keep saying no inside a running process after the grant; a read that succeeds counts as granted. The checks and their results are logged, so `log show --info --last 5m --predicate 'subsystem == "com.rohithgilla.Notchemon"'` shows what the app saw. The **Motion** submenu shows a **Dock walking** status line that says whether it is on, needs Accessibility, or is off because the Dock is on the side or a full-screen app is in front. With permission, the app reads only the Dock's frame, and only when an app launches or quits, the displays change, the creature steps onto or walks along the Dock, or, for an auto-hiding Dock, the cursor reaches the bottom of the screen or leaves the shown Dock. It reads the Dock's position and auto-hide settings from the `com.apple.dock` preferences. It never sends input to other apps. To revoke the permission, turn Notchemon off in the same settings pane; the creature then hops back up to the top edge.
 
 ### Dock walking doesn't start
 
@@ -103,7 +103,7 @@ xcodebuild test -project Notchemon.xcodeproj -scheme Notchemon -destination 'pla
 open .build/dd/Build/Products/Debug/Notchemon.app
 ```
 
-Debug builds are signed ad hoc, so they need no certificate.
+Debug builds are signed ad hoc, so they need no certificate. They are a separate app to macOS: bundle ID `com.rohithgilla.Notchemon.debug`, display name "Notchemon Debug", defaults domain `com.rohithgilla.Notchemon.debug`, and state under `~/Library/Application Support/Notchemon Debug/`. An Accessibility grant to a Debug build never attaches to the installed app, and the two never share `state.json`. Floating notes still use `~/Documents/Notchemon/`, so set `NotchemonNotesFolder` in the Debug domain before trying notes against a Debug build. Release builds keep `com.rohithgilla.Notchemon`.
 
 ### Debug defaults
 
@@ -113,15 +113,17 @@ Debug builds are signed ad hoc, so they need no certificate.
 | `NotchemonDebugSleepSeconds` | Puts the creature to sleep after this many seconds without input, instead of 10 minutes. |
 | `NotchemonCreatureProvider` | Set to `original` to use the built-in procedural creatures instead of PokéAPI. See [docs/takedown.md](docs/takedown.md). |
 
+A Debug build reads the `com.rohithgilla.Notchemon.debug` domain. Use `com.rohithgilla.Notchemon` for the installed release build.
+
 ```sh
-defaults write com.rohithgilla.Notchemon NotchemonDebugSessionSeconds -float 5
-defaults write com.rohithgilla.Notchemon NotchemonDebugSleepSeconds -float 20
-defaults write com.rohithgilla.Notchemon NotchemonCreatureProvider original
-defaults delete com.rohithgilla.Notchemon NotchemonDebugSessionSeconds
-defaults delete com.rohithgilla.Notchemon NotchemonDebugSleepSeconds
+defaults write com.rohithgilla.Notchemon.debug NotchemonDebugSessionSeconds -float 5
+defaults write com.rohithgilla.Notchemon.debug NotchemonDebugSleepSeconds -float 20
+defaults write com.rohithgilla.Notchemon.debug NotchemonCreatureProvider original
+defaults delete com.rohithgilla.Notchemon.debug NotchemonDebugSessionSeconds
+defaults delete com.rohithgilla.Notchemon.debug NotchemonDebugSleepSeconds
 ```
 
-To start fresh, quit the app and delete `~/Library/Application Support/Notchemon/`.
+To start fresh, quit the app and delete `~/Library/Application Support/Notchemon Debug/` for a Debug build, or `~/Library/Application Support/Notchemon/` for the installed one.
 
 ## Asset guardrail
 

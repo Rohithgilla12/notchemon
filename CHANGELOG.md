@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- The running app now notices an Accessibility grant. Each trust check also tries a real read of the Dock, and a read that succeeds counts as granted even while `AXIsProcessTrusted` still says no, which it can do inside a process that was running when the grant was made. The 0.2.2 checks asked only `AXIsProcessTrusted`, so the grant went unnoticed until a relaunch.
+- The app logs trust checks, trust changes, and Dock reads under the `com.rohithgilla.Notchemon` subsystem, category `dock`, so `log show` answers what it saw.
+- Debug builds use the bundle ID `com.rohithgilla.Notchemon.debug`, the display name "Notchemon Debug", their own defaults domain, and `~/Library/Application Support/Notchemon Debug/`. A grant or a saved state from a development build no longer attaches to the installed app.
+
 ## [0.2.2] - 2026-10-08
 
 ### Added

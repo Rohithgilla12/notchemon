@@ -1,11 +1,52 @@
 import AppKit
 import ApplicationServices
 import Observation
+import os
+
+/// Trust transitions, each trust check, and shelf changes. Nothing per cursor move.
+/// Read with `log show --info --predicate 'subsystem == "com.rohithgilla.Notchemon"'`.
+let dockLog = Logger(subsystem: "com.rohithgilla.Notchemon", category: "dock")
+
+/// Which call answered whether this process may read the Dock.
+enum TrustSource: String {
+    case axIsProcessTrusted
+    case probeRead
+}
+
+struct TrustCheck: Equatable {
+    let trusted: Bool
+    let source: TrustSource
+}
 
 /// Reads where the Dock is. Its frame needs Accessibility permission;
 /// without it the Dock is unreadable and nothing prompts.
 enum DockReader {
     static let bundleIdentifier = "com.apple.dock"
+
+    /// Whether this process may read the Dock right now. `AXIsProcessTrusted`
+    /// is asked first, but a no from it is not final: 0.2.2 asked only it and
+    /// a running copy never saw a grant that worked at once after a relaunch,
+    /// so a real Accessibility read of the Dock decides.
+    static func checkTrust(axTrusted: () -> Bool = AXIsProcessTrusted, probe: () -> AXError = probeDock) -> TrustCheck {
+        if axTrusted() { return TrustCheck(trusted: true, source: .axIsProcessTrusted) }
+        return TrustCheck(trusted: probe() == .success, source: .probeRead)
+    }
+
+    static func isTrusted() -> Bool {
+        let check = checkTrust()
+        dockLog.info("trust check: \(check.trusted) via \(check.source.rawValue, privacy: .public)")
+        return check.trusted
+    }
+
+    /// One read of the Dock's children. `.apiDisabled` means untrusted;
+    /// `.success` means trusted whatever `AXIsProcessTrusted` says.
+    static func probeDock() -> AXError {
+        guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first else { return .cannotComplete }
+        let app = AXUIElementCreateApplication(dock.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, Float(DockReadBudget.total))
+        var value: CFTypeRef?
+        return AXUIElementCopyAttributeValue(app, kAXChildrenAttribute as CFString, &value)
+    }
 
     static func read() -> DockRead {
         DockGeometry.read(reading(), screens: NSScreen.screens.map(\.frame), isFullScreen: FullScreenDetector.isFullScreen(screenFrame:))
@@ -23,10 +64,11 @@ enum DockReader {
     /// At most this many of the Dock's top-level elements are checked for its icon list.
     static let childrenChecked = 4
 
-    /// The Dock's icon list, which spans its whole visible shelf.
+    /// The Dock's icon list, which spans its whole visible shelf. `checkTrust`
+    /// decides trust, so no `AXIsProcessTrusted` guard here; an untrusted
+    /// read fails on its own.
     private static func listFrame() -> CGRect? {
-        guard AXIsProcessTrusted(),
-              let dock = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first,
+        guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first,
               let primary = NSScreen.screens.first
         else { return nil }
         let budget = DockReadBudget(startingAt: ProcessInfo.processInfo.systemUptime)
@@ -134,7 +176,7 @@ final class DockWatcher {
 
     init(
         read: @escaping @MainActor () -> DockRead = DockReader.read,
-        trusted: @escaping () -> Bool = AXIsProcessTrusted,
+        trusted: @escaping () -> Bool = DockReader.isTrusted,
         after: @escaping After = DockWatcher.afterSleeping
     ) {
         self.read = read
@@ -199,6 +241,7 @@ final class DockWatcher {
         checkTrustLater()
         guard next != lastRead else { return }
         lastRead = next
+        dockLog.info("dock read: \(String(describing: next), privacy: .public)")
         onChange?()
     }
 
@@ -300,6 +343,7 @@ final class DockWatcher {
         let granted = trusted()
         guard granted != isTrusted else { return }
         isTrusted = granted
+        dockLog.info("trust changed: \(granted)")
         refresh()
     }
 

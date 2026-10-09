@@ -1,9 +1,15 @@
 import Foundation
 
 enum AppPaths {
+    /// Debug builds carry the `.debug` bundle ID suffix and keep their state
+    /// apart from the installed app's.
+    static func supportFolderName(bundleIdentifier: String?) -> String {
+        bundleIdentifier?.hasSuffix(".debug") == true ? "Notchemon Debug" : "Notchemon"
+    }
+
     static var support: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Notchemon", isDirectory: true)
+            .appendingPathComponent(supportFolderName(bundleIdentifier: Bundle.main.bundleIdentifier), isDirectory: true)
     }
 
     static var state: URL { support.appendingPathComponent("state.json") }
