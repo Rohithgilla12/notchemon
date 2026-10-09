@@ -38,6 +38,11 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
   | 8 | 7,200 | 440 |
 
   Unlocks are worked out from the stats each time and never stored, so nothing can fall out of step with them.
+- **Wild creatures.** Now and then a wild creature drops in. It walks the Dock when Dock walking is on and your partner is not there, and otherwise the top edge, clear of your partner and of the notch. Your partner stops where it is to watch. Click the wild creature to catch it. It sparkles, shrinks away, and joins your collection in its first stage at level 5, without replacing the partner that is out. If its family is already in your collection, it counts as seen again. Leave it alone and after about a minute it wanders to the end of its walk and hops away. Visits come only while you are using the Mac: input in the last two minutes, not asleep, not in full screen, and not in a focus session. They come about every 45 to 90 minutes of that use, and at most four times a day. Clicks reach the menu bar and the Dock as usual everywhere except on the wild creature itself. The Stats submenu does not show encounters yet; `state.json` counts them under `stats`. Visits, catches, and departures are logged under category `encounter`:
+
+  ```sh
+  log show --info --last 1d --predicate 'subsystem == "com.rohithgilla.Notchemon" && category == "encounter"'
+  ```
 - **Stats.** The menu bar's Stats submenu keeps a tally of your time together: how far the creature has walked, its hops and naps, its trips to the Dock, your focus sessions and minutes, its evolutions, and how many days you have been together. Distance reads two ways. **Creature-scale** treats one body height on screen as the species' real height, so a 0.4 m creature drawn 40 pt tall covers 1 cm per point. **On screen** is how far the sprite really moved across the glass, from the display's physical size. Stats count only when something ends, such as a walk, a hop to the Dock, or a nap, so they cost nothing between. Each counted event is logged at debug level under category `stats`:
 
   ```sh
@@ -152,6 +157,7 @@ The first time a version with the collection loads a state saved before it, it c
 Debug builds start with every species available and add a **Developer** submenu to the menu-bar menu:
 
 - **Unlock All** turns the override on or off. It writes `NotchemonUnlockAll` in the Debug domain.
+- **Spawn Encounter Now** brings a wild creature at once. It does not count toward the day's four.
 - **Add 1 km** folds a walk of one kilometre at the current partner's scale into the stats.
 - **Add 1 Focus Hour** folds a 60-minute focus session into the stats. It gives no XP.
 - **Reset Collection…** removes every partner after a confirmation and keeps the stats.
