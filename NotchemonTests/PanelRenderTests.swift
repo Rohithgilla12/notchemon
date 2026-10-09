@@ -49,6 +49,33 @@ struct PanelRenderTests {
         try render(PartnersView(model: model), to: folder.appendingPathComponent("partners-unlocked.png"))
     }
 
+    @Test func rendersAVisitorOnTheStripAndTheCatchBanner() async throws {
+        let folder = try #require(panelRenderFolder)
+        let model = try await model(evolve: false)
+        model.spawnEncounterNow()
+        for _ in 0..<200 where model.snapshot.encounter == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let encounter = try #require(model.snapshot.encounter)
+        let screen = ScreenMetrics(frame: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 32, auxiliaryTopLeftWidth: 656, auxiliaryTopRightWidth: 656)
+        let presentation = NotchPresentation()
+        let layout = try #require(NotchGeometry.layout(for: screen, virtualNotchEnabled: true, wander: .topEdge))
+        presentation.layout = layout
+        let metrics = try #require(presentation.metrics)
+        let wild = WildWalker()
+        var rng = SplitMix64(seed: 2)
+        wild.begin(WildVisit.plan(on: .topEdge, in: 120...400, start: Date() - 1, using: &rng), serial: encounter.serial)
+        let strip = NotchRootView(presentation: presentation, model: model, roamer: Roamer(), wild: wild)
+        try render(strip, size: metrics.windowSize, padding: 0, to: folder.appendingPathComponent("visitor-strip.png"))
+        model.catchEncounter()
+        for _ in 0..<200 where model.snapshot.banner == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let panel = ExpandedView(model: model, presentation: NotchPresentation(), metrics: metrics)
+            .frame(width: metrics.panelSize.width, height: metrics.panelSize.height)
+        try render(panel, size: metrics.panelSize, padding: 0, to: folder.appendingPathComponent("caught-banner.png"))
+    }
+
     @Test func rendersTheNewPartnersBanner() async throws {
         let folder = try #require(panelRenderFolder)
         let model = try await model(evolve: false)

@@ -60,7 +60,7 @@ struct SpritePoseTests {
     @Test func asleepItTucksUpOnlyOnceItIsHome() throws {
         let returning = RoamPhase.returning(RoamWalk(on: .topEdge, from: 200, to: 0, start: t0, speed: RoamRules.walkSpeed))
         #expect(try !topEdgePose(snapshot(behaviour: .sleeping), returning, expanded: false).tucked)
-        #expect(try !topEdgePose(snapshot(behaviour: .sleeping), .asleep(at: .topEdge(200)), expanded: false).tucked)
+        #expect(try !topEdgePose(snapshot(behaviour: .sleeping), .stopped(at: .topEdge(200)), expanded: false).tucked)
         #expect(try topEdgePose(snapshot(behaviour: .sleeping), .home, expanded: false).tucked)
         #expect(try !topEdgePose(snapshot(behaviour: .sleeping), .home, expanded: true).tucked)
         #expect(try !topEdgePose(snapshot(), .home, expanded: false).tucked)
@@ -71,7 +71,7 @@ struct SpritePoseTests {
         sleeping.sprite?.loop = sleep
         sleeping.sprite?.loopState = .sleeping
         sleeping.sprite?.playback = .cycle
-        let asleep = try topEdgePose(sleeping, .asleep(at: .topEdge(-150)), expanded: false)
+        let asleep = try topEdgePose(sleeping, .stopped(at: .topEdge(-150)), expanded: false)
         #expect(asleep.show?.loopState == .sleeping)
         #expect(asleep.show?.loop.frames.first === sleep.frames.first)
         #expect(asleep.track == .still(-150))
@@ -108,7 +108,7 @@ struct SpritePoseTests {
         #expect(SpritePose(snapshot(), roam: .walking(walk), on: .topEdge, expanded: false) == nil)
         #expect(SpritePose(snapshot(), roam: .home, on: .dock, expanded: false) == nil)
         #expect(SpritePose(snapshot(), roam: .resting(at: .topEdge(40), until: t0), on: .dock, expanded: false) == nil)
-        #expect(try #require(SpritePose(snapshot(), roam: .asleep(at: .dock(40)), on: .dock, expanded: false)).track == .still(40))
+        #expect(try #require(SpritePose(snapshot(), roam: .stopped(at: .dock(40)), on: .dock, expanded: false)).track == .still(40))
     }
 
     @Test func theOpenPanelShowsTheCreatureInTheNotchEvenFromTheDock() throws {

@@ -71,6 +71,8 @@ struct MenuBarContent: View {
             Menu("Developer") {
                 // A closure, not the method itself: CI's Swift 6.2 crashes emitting the thunk for a main-actor method reference here.
                 Toggle("Unlock All", isOn: Binding(get: { model.snapshot.unlocks.override }, set: { app.setUnlockAll($0) }))
+                Button("Spawn Encounter Now", action: model.spawnEncounterNow)
+                    .disabled(model.activeSpecies == nil || model.snapshot.encounter != nil)
                 Button("Add 1 km", action: model.addCreatureKilometre)
                     .disabled(model.activeSpecies == nil)
                 Button("Add 1 Focus Hour", action: model.addFocusHour)

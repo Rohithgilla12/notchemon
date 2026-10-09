@@ -70,8 +70,9 @@ enum RoamPhase: Sendable, Equatable {
     /// Under the notch, kept there by `Homing`.
     case home
     case resting(at: RoamSpot, until: Date)
-    /// Asleep where it stopped, away from home. It rests there on waking.
-    case asleep(at: RoamSpot)
+    /// Held where it stopped, away from home, while `Homing.stay` lasts.
+    /// It rests there afterwards.
+    case stopped(at: RoamSpot)
     /// On the way to a spot to rest at.
     case walking(RoamWalk)
     /// On the way home along the top edge, to stay there.
@@ -83,17 +84,24 @@ enum RoamPhase: Sendable, Equatable {
     func spot(at now: Date) -> RoamSpot {
         switch self {
         case .home: .home
-        case .resting(let spot, _), .asleep(let spot): spot
+        case .resting(let spot, _), .stopped(let spot): spot
         case .walking(let walk), .returning(let walk): RoamSpot(perch: walk.perch, x: walk.x(at: now))
         case .transferring(let from, let to, let start): now < start + RoamRules.transferHalf ? from : to
         }
+    }
+
+    /// Where `Homing.stay` leaves the creature: the landing spot of a hop
+    /// under way, which cannot be taken back, else where it is now.
+    func heldSpot(at now: Date) -> RoamSpot {
+        if case .transferring(_, let to, _) = self { return to }
+        return spot(at: now)
     }
 
     /// The perch the creature is on, or is hopping to.
     var perch: Perch {
         switch self {
         case .home: .topEdge
-        case .resting(let spot, _), .asleep(let spot), .transferring(_, let spot, _): spot.perch
+        case .resting(let spot, _), .stopped(let spot), .transferring(_, let spot, _): spot.perch
         case .walking(let walk), .returning(let walk): walk.perch
         }
     }
@@ -107,7 +115,7 @@ enum RoamPhase: Sendable, Equatable {
     var walk: RoamWalk? {
         switch self {
         case .walking(let walk), .returning(let walk): walk
-        case .home, .resting, .asleep, .transferring: nil
+        case .home, .resting, .stopped, .transferring: nil
         }
     }
 
@@ -116,17 +124,17 @@ enum RoamPhase: Sendable, Equatable {
     var farthestAlongTopEdge: Double {
         switch self {
         case .home: 0
-        case .resting(let spot, _), .asleep(let spot): spot.perch == .topEdge ? abs(spot.x) : 0
+        case .resting(let spot, _), .stopped(let spot): spot.perch == .topEdge ? abs(spot.x) : 0
         case .walking(let walk), .returning(let walk): walk.perch == .topEdge ? max(abs(walk.from), abs(walk.to)) : 0
         case .transferring(let from, let to, _): [from, to].filter { $0.perch == .topEdge }.map { abs($0.x) }.max() ?? 0
         }
     }
 
-    /// When the phase ends by itself. Home and sleep end only when the
+    /// When the phase ends by itself. Home and a stop end only when the
     /// inputs change.
     var deadline: Date? {
         switch self {
-        case .home, .asleep: nil
+        case .home, .stopped: nil
         case .resting(_, let until): until
         case .walking(let walk), .returning(let walk): walk.end
         case .transferring(_, _, let start): start + 2 * RoamRules.transferHalf
@@ -138,7 +146,7 @@ enum RoamPhase: Sendable, Equatable {
 /// stays put.
 enum Homing: Sendable, Equatable {
     case free
-    /// Stops where it is, because it fell asleep.
+    /// Stops where it is, because it fell asleep or a wild creature is visiting.
     case stay
     case walk
     /// Hurries home to greet the cursor.
@@ -161,6 +169,8 @@ struct HomingConditions: Sendable, Equatable {
     var hasCreature: Bool
     /// Where the creature is, or is hopping to.
     var perch: Perch
+    /// A wild creature is visiting, which the partner stops to watch.
+    var visitor = false
 }
 
 struct RoamInputs: Sendable, Equatable {
@@ -200,6 +210,8 @@ enum RoamRules {
         // Asleep it stays put even for a cursor at home: moving the mouse
         // wakes it within a second, and then it runs to greet it.
         if conditions.sleeping { return .stay }
+        // Held, it can never walk into the visitor's path.
+        if conditions.visitor { return .stay }
         // From the Dock a cursor at the notch is far from the creature, not a greeting.
         if conditions.cursorNearHome, conditions.perch == .topEdge { return .run }
         if conditions.wander == .off || conditions.focusing { return .walk }
@@ -223,7 +235,7 @@ enum RoamRules {
             guard spot != .home, let range = inputs.range(of: spot.perch) else { return .home }
             // A range that narrows past a sleeper moves it to the new end
             // rather than waking it to walk there.
-            return .asleep(at: RoamSpot(perch: spot.perch, x: spot.x.clamped(to: range)))
+            return .stopped(at: RoamSpot(perch: spot.perch, x: spot.x.clamped(to: range)))
         case .walk, .run:
             return goHome(phase, inputs, speed: inputs.homing == .run ? runSpeed : walkSpeed, using: &rng)
         case .free:
@@ -241,7 +253,7 @@ enum RoamRules {
             return .home
         case .returning(let walk) where walk.speed == speed:
             return now >= walk.end ? .home : phase
-        case .resting, .asleep, .walking, .returning, .transferring:
+        case .resting, .stopped, .walking, .returning, .transferring:
             return spot.x == 0 ? .home : .returning(RoamWalk(on: .topEdge, from: spot.x, to: 0, start: now, speed: speed))
         }
     }
@@ -254,7 +266,7 @@ enum RoamRules {
         switch phase {
         case .home:
             return .resting(at: .home, until: now + .random(in: rest, using: &rng))
-        case .asleep:
+        case .stopped:
             guard range.contains(spot.x) else { return walkBack(from: spot, to: range, at: now) }
             return .resting(at: spot, until: now + .random(in: rest, using: &rng))
         case .resting(_, let until):

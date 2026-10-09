@@ -65,6 +65,12 @@ actor SpriteCollabClient {
         )
     }
 
+    /// Whether the species has every anim in `names`, by their PMD names.
+    func hasAnims(_ names: [String], dex: Int) async -> Bool {
+        guard let data = try? await animData(dex: dex) else { return false }
+        return names.allSatisfy { data.anims[$0] != nil }
+    }
+
     private func animData(dex: Int) async throws -> PMDAnimData {
         let task = animData[dex] ?? Task { [fetch] in
             try PMDAnimData(xml: try await fetch(SpriteCollabEndpoint.animData(dex: dex)))

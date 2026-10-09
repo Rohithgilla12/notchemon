@@ -28,6 +28,7 @@ final class CompanionModel {
     @ObservationIgnored private var proximity: CursorProximity?
     @ObservationIgnored private var lastHop = Date.distantPast
     @ObservationIgnored private var animatesNextStashChange = false
+    @ObservationIgnored private var sentFullScreen = false
 
     init(engine: CreatureEngine) {
         self.engine = engine
@@ -99,6 +100,28 @@ final class CompanionModel {
             await engine.refreshUnlocks()
             await loadPartners()
         }
+    }
+
+    func spawnEncounterNow() {
+        Task { await engine.spawnEncounterNow() }
+    }
+
+    func catchEncounter() {
+        Task { await engine.catchEncounter() }
+    }
+
+    func encounterGone(_ serial: Int) {
+        Task { await engine.endEncounter(serial) }
+    }
+
+    func setSystemAsleep(_ asleep: Bool) {
+        Task { await engine.setSystemAsleep(asleep) }
+    }
+
+    func setFullScreen(_ on: Bool) {
+        guard on != sentFullScreen else { return }
+        sentFullScreen = on
+        Task { await engine.setFullScreen(on) }
     }
 
     func addCreatureKilometre() {

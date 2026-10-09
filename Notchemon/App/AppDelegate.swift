@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let presentation = NotchPresentation()
     let roamer = Roamer()
+    let wild = WildWalker()
     let dockWatcher = DockWatcher()
     let model: CompanionModel
     let notes: FloatingNotes
@@ -15,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
     private var notesHotKey: HotKey?
     private var cursorNearHome = false
+    private var clickMonitor: Any?
+    private var sleepObservers: [NSObjectProtocol] = []
+    private var hitRefresh: Task<Void, Never>?
+    private var hitRefreshAt: Date?
     private let quitPrompt: any QuitPrompt
     private let endsSession: @MainActor () -> Bool
     private let terminate: @MainActor () -> Void
@@ -68,19 +73,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             virtualNotchEnabled: model.snapshot.preferences.virtualNotchEnabled,
             wander: model.snapshot.preferences.wander,
             clickToOpen: model.snapshot.preferences.clickToOpen,
-            content: NotchRootView(presentation: presentation, model: model, roamer: roamer)
+            content: NotchRootView(presentation: presentation, model: model, roamer: roamer, wild: wild)
         )
         windowController = controller
-        dockController = DockWindowController(content: DockRootView(model: model, roamer: roamer, dock: dockWatcher))
+        dockController = DockWindowController(content: DockRootView(model: model, roamer: roamer, wild: wild, dock: dockWatcher))
         controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
+        controller.wildBox = { [weak self] in self?.wildBox(on: .topEdge) }
+        wild.onChange = { [weak self] in
+            guard let self else { return }
+            refreshExtent()
+            showDock()
+            windowController?.refreshHitTesting()
+        }
+        let workspace = NSWorkspace.shared.notificationCenter
+        for (name, asleep) in [(NSWorkspace.willSleepNotification, true), (NSWorkspace.didWakeNotification, false)] {
+            sleepObservers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.model.setSystemAsleep(asleep) }
+            })
+        }
+        wild.onGone = { [weak self] serial in self?.model.encounterGone(serial) }
+        // A click on a visitor catches it and goes no further.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            let caught = MainActor.assumeIsolated { self?.catchWild(at: NSEvent.mouseLocation) ?? false }
+            return caught ? nil : event
+        }
         // Arriving, setting off, or walking up to or past a still cursor moves
         // the creature, not the cursor, so it looks again from where it is.
         // On or bound for the Dock, the Dock may have changed size since the
         // last read, so it is read again here rather than polled.
-        roamer.onLookAgain = { [weak self, weak controller] in
+        roamer.onLookAgain = { [weak self] in
             guard let self else { return }
             if roamer.phase.touches(.dock) { dockWatcher.refresh() }
-            controller?.setCreatureExtent(roamer.phase.farthestAlongTopEdge)
+            refreshExtent()
             showDock()
             cursorMoved(to: NSEvent.mouseLocation)
         }
@@ -90,7 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showDock()
             cursorMoved(to: NSEvent.mouseLocation)
         }
-        model.onSnapshot = { [weak self] in self?.refreshRoam() }
+        model.onSnapshot = { [weak self] in
+            self?.refreshRoam()
+            self?.syncWild()
+        }
         model.onPreferencesChanged = { [weak self, weak controller] preferences in
             controller?.setVirtualNotchEnabled(preferences.virtualNotchEnabled)
             controller?.setWander(preferences.wander)
@@ -145,7 +172,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showDock() {
-        dockController?.show(on: dockWatcher.shelf, creatureThere: roamer.phase.touches(.dock))
+        let there = roamer.phase.touches(.dock) || wild.visit?.perch == .dock
+        dockController?.show(on: dockWatcher.shelf, creatureThere: there)
+    }
+
+    /// The notch window stays wide enough for the partner and any visitor on the top edge.
+    private func refreshExtent() {
+        let visitor = wild.visit.map { $0.perch == .topEdge ? $0.farthest : 0 } ?? 0
+        windowController?.setCreatureExtent(max(roamer.phase.farthestAlongTopEdge, visitor))
+    }
+
+    /// Follows the engine: a new visitor gets a path, a caught one its
+    /// catch, and one the engine sent away leaves at once.
+    private func syncWild() {
+        guard let encounter = model.snapshot.encounter else {
+            if wild.serial != nil { wild.end() }
+            return
+        }
+        if wild.serial != encounter.serial, wild.finished != encounter.serial {
+            beginWild(encounter)
+        } else if encounter.caught {
+            wild.catchNow()
+        }
+    }
+
+    /// The Dock when the creature may walk it and the partner is not on
+    /// it, else the top edge, in the widest stretch clear of the partner
+    /// and of home.
+    private func beginWild(_ encounter: Encounter) {
+        let now = Date()
+        let partner = roamer.phase.heldSpot(at: now)
+        let dock = model.snapshot.preferences.wander.includesDock ? dockWatcher.shelf?.range : nil
+        let perch: Perch = dock != nil && partner.perch != .dock ? .dock : .topEdge
+        var range: ClosedRange<Double>?
+        var avoiding: [Double] = partner.perch == perch ? [partner.x] : []
+        if perch == .dock {
+            range = dock
+        } else if let screen = NSScreen.notchHost {
+            let reach = Double(NotchGeometry.roamReach(.topEdge, screenWidth: screen.frame.width))
+            range = -reach...reach
+            avoiding.append(0)
+        }
+        var rng = SystemRandomNumberGenerator()
+        guard let range, let span = WildVisit.span(in: range, avoiding: avoiding) else {
+            model.encounterGone(encounter.serial)
+            return
+        }
+        wild.begin(WildVisit.plan(on: perch, in: span, start: now, using: &rng), serial: encounter.serial)
+    }
+
+    /// The visitor's box on `perch` right now, from its visit's path.
+    private func wildBox(on perch: Perch) -> CGRect? {
+        guard let visit = wild.visit, visit.perch == perch, !wild.isCaught, let x = visit.x(at: Date()),
+              let centre = closedCentre(on: perch, at: x)
+        else { return nil }
+        return HoverPolicy.wildBox(centre: centre)
+    }
+
+    /// A walking visitor can reach or leave a cursor that is not moving, so
+    /// the hover rules are asked again when its box's edge passes it.
+    private func scheduleHitRefresh(for point: CGPoint) {
+        let now = Date()
+        var next: Date?
+        if let visit = wild.visit, !wild.isCaught, let leg = visit.leg(at: now), case .walk(let walk) = leg.track,
+           let origin = closedCentre(on: visit.perch, at: 0) {
+            let half = Double(NotchGeometry.peekHeight) / 2
+            if abs(point.y - origin.y) <= half {
+                let across = CursorOffset(dx: point.x - origin.x, dy: 0)
+                next = walk.crossings(of: across, radius: half).first { $0 > now }
+            }
+        }
+        guard next != hitRefreshAt else { return }
+        hitRefresh?.cancel()
+        hitRefreshAt = next
+        guard let next else { return }
+        hitRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow)), tolerance: .milliseconds(20))
+            guard !Task.isCancelled, let self else { return }
+            hitRefreshAt = nil
+            windowController?.refreshHitTesting()
+        }
+    }
+
+    /// Clicks inside the open panel stay the panel's.
+    private func catchWild(at point: CGPoint) -> Bool {
+        if presentation.isExpanded, presentation.layout?.expanded.contains(point) == true { return false }
+        let hit = [Perch.topEdge, .dock].contains { wildBox(on: $0)?.contains(point) == true }
+        guard hit, wild.catchNow() else { return false }
+        model.catchEncounter()
+        return true
     }
 
     /// Offsets are measured from where the creature is now, mid-walk and on
@@ -153,6 +268,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// cursor near home calls it running back to greet it.
     private func cursorMoved(to point: CGPoint) {
         dockWatcher.cursorMoved(to: point)
+        dockController?.setTakesClicks(wildBox(on: .dock)?.contains(point) == true)
+        scheduleHitRefresh(for: point)
         guard let layout = presentation.layout, let metrics = presentation.metrics else {
             roamer.watch(nil)
             refreshRoam()
@@ -210,8 +327,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fullScreen: presentation.isFullScreen,
             cursorNearHome: cursorNearHome,
             hasCreature: model.activeSpecies != nil,
-            perch: roamer.phase.perch
+            perch: roamer.phase.perch,
+            visitor: snapshot.encounter != nil
         )
+        model.setFullScreen(presentation.isFullScreen)
         let reach = Double(presentation.layout?.roamReach ?? 0)
         roamer.update(range: -reach...reach, dock: dockWatcher.shelf?.range, homing: RoamRules.homing(conditions))
     }

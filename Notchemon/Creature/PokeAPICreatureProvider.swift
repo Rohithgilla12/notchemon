@@ -20,6 +20,8 @@ struct PokeAPICreatureProvider: CreatureProvider {
     ]
     /// More than PokeAPI lists, so one page holds them all.
     static let indexLimit = 2_000
+    /// How many random species to look at before giving up on one visit.
+    static let encounterAttempts = 12
     let cache: DiskCache
     let fetcher: any DataFetcher
     let spriteCollab: SpriteCollabClient
@@ -45,6 +47,22 @@ struct PokeAPICreatureProvider: CreatureProvider {
         components?.queryItems = [URLQueryItem(name: "limit", value: String(Self.indexLimit))]
         guard let url = components?.url else { return [] }
         return try PokeAPIParser.speciesIndex(try await cache.data(for: url, using: fetcher))
+    }
+
+    /// A random first-stage species that is neither legendary nor mythical
+    /// and that SpriteCollab draws idling and walking. Most species pass,
+    /// so a few draws find one; every fetch lands in the disk cache.
+    func encounterCandidate(using rng: inout some RandomNumberGenerator) async throws -> Species? {
+        let index = try await speciesIndex()
+        for _ in 0..<Self.encounterAttempts {
+            guard let entry = index.randomElement(using: &rng) else { return nil }
+            guard let dto = try? PokeAPIParser.species(try await load(baseURL.appendingPathComponent("pokemon-species/\(entry.id)/"))),
+                  dto.isWildCandidate,
+                  await spriteCollab.hasAnims(["Idle", "Walk"], dex: entry.id)
+            else { continue }
+            return try await species(id: entry.id)
+        }
+        return nil
     }
 
     /// SpriteCollab has a sheet per anim and facing. Species or anims it lacks

@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 /// Where the sprite stands along its perch, in points from its box's centre.
-enum SpriteTrack: Equatable {
+enum SpriteTrack: Sendable, Equatable {
     case still(Double)
     case walk(RoamWalk)
     /// Hops up and fades out at x, from `start`.
     case leave(Double, start: Date)
     /// Drops in and fades in at x, from `start`.
     case arrive(Double, start: Date)
+    /// Caught at x: sparkles, shrinks, and is gone, from `start`.
+    case caught(Double, start: Date)
 }
 
 /// What the sprite should show. One-shot effects are counters: the view
@@ -71,11 +73,23 @@ extension SpritePose {
         )
     }
 
+    /// A wild creature's pose: it walks with its own walk cycle and never fidgets.
+    static func wild(_ show: SpriteShow, track: SpriteTrack, idleStyle: IdleStyle, ground: GroundStep? = nil) -> SpritePose {
+        var show = show
+        if case .walk(let walk) = track, let cycle = show.walk {
+            show.loop = cycle.frames(toward: walk.direction)
+            show.loopState = .walking
+            show.playback = .cycle
+            show.facing = walk.direction
+        }
+        return SpritePose(show: show, fidgets: false, fit: .peek, idleStyle: idleStyle, track: track, ground: ground)
+    }
+
     private static func track(of roam: RoamPhase, on perch: Perch) -> SpriteTrack? {
         switch roam {
         case .home:
             perch == .topEdge ? .still(0) : nil
-        case .resting(let spot, _), .asleep(let spot):
+        case .resting(let spot, _), .stopped(let spot):
             spot.perch == perch ? .still(spot.x) : nil
         case .walking(let walk), .returning(let walk):
             walk.perch == perch ? .walk(walk) : nil
@@ -202,6 +216,11 @@ final class SpriteHostView: NSView {
         case .arrive(let x, let start):
             offset = x
             sprite.add(Self.hop(arriving: true, at: start), forKey: "transfer")
+        case .caught(let x, let start):
+            offset = x
+            sprite.opacity = 0
+            sprite.add(Self.vanish(at: start), forKey: "transfer")
+            sprite.flash()
         }
         sprite.position = restingPosition
         CATransaction.commit()
@@ -252,6 +271,24 @@ final class SpriteHostView: NSView {
         hop.timingFunction = CAMediaTimingFunction(name: arriving ? .easeOut : .easeIn)
         hop.fillMode = .backwards
         return hop
+    }
+
+    /// Shrinks to a point and fades under the evolution bloom, which reads
+    /// as a sparkle. Filled backwards, so it stays in view until it begins.
+    private static func vanish(at start: Date) -> CAAnimationGroup {
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0
+        let shrink = CABasicAnimation(keyPath: "transform.scale")
+        shrink.fromValue = 1
+        shrink.toValue = 0.1
+        let group = CAAnimationGroup()
+        group.animations = [fade, shrink]
+        group.duration = WildVisit.catchLength
+        group.beginTime = CACurrentMediaTime() + start.timeIntervalSinceNow
+        group.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        group.fillMode = .backwards
+        return group
     }
 
     /// One wake-up every 5 to 15 s; nothing runs in between.

@@ -110,7 +110,7 @@ struct RoamRulesTests {
         .resting(at: .topEdge(300), until: .distantFuture),
         .walking(RoamWalk(on: .topEdge, from: 0, to: 300, start: Date(timeIntervalSince1970: 1_800_000_000), speed: 35)),
         .returning(RoamWalk(on: .topEdge, from: 300, to: 0, start: Date(timeIntervalSince1970: 1_800_000_000), speed: 70)),
-        .asleep(at: .topEdge(-300)),
+        .stopped(at: .topEdge(-300)),
     ])
     func snappingHomeIsImmediate(phase: RoamPhase) {
         var rng = SeededRandom(state: 7)
@@ -190,27 +190,27 @@ struct RoamRulesTests {
         #expect(RoamPhase.walking(RoamWalk(on: .topEdge, from: 600, to: 200, start: t0, speed: 35)).farthestAlongTopEdge == 600)
         #expect(RoamPhase.walking(RoamWalk(on: .topEdge, from: -100, to: -500, start: t0, speed: 35)).farthestAlongTopEdge == 500)
         #expect(RoamPhase.returning(RoamWalk(on: .topEdge, from: 300, to: 0, start: t0, speed: 70)).farthestAlongTopEdge == 300)
-        #expect(RoamPhase.asleep(at: .topEdge(-250)).farthestAlongTopEdge == 250)
+        #expect(RoamPhase.stopped(at: .topEdge(-250)).farthestAlongTopEdge == 250)
     }
 
     @Test func fallingAsleepStopsTheCreatureWhereItStands() {
         var rng = SeededRandom(state: 21)
         let walking = RoamPhase.walking(RoamWalk(on: .topEdge, from: 0, to: 140, start: t0, speed: 35))
-        #expect(RoamRules.next(walking, inputs(at: 2, homing: .stay), using: &rng) == .asleep(at: .topEdge(70)))
-        #expect(RoamRules.next(.resting(at: .topEdge(-300), until: t0 + 5), inputs(homing: .stay), using: &rng) == .asleep(at: .topEdge(-300)))
-        #expect(RoamRules.next(.asleep(at: .topEdge(-300)), inputs(at: 600, homing: .stay), using: &rng) == .asleep(at: .topEdge(-300)))
-        #expect(RoamPhase.asleep(at: .topEdge(-300)).spot(at: t0) == .topEdge(-300))
-        #expect(RoamPhase.asleep(at: .topEdge(-300)).deadline == nil)
+        #expect(RoamRules.next(walking, inputs(at: 2, homing: .stay), using: &rng) == .stopped(at: .topEdge(70)))
+        #expect(RoamRules.next(.resting(at: .topEdge(-300), until: t0 + 5), inputs(homing: .stay), using: &rng) == .stopped(at: .topEdge(-300)))
+        #expect(RoamRules.next(.stopped(at: .topEdge(-300)), inputs(at: 600, homing: .stay), using: &rng) == .stopped(at: .topEdge(-300)))
+        #expect(RoamPhase.stopped(at: .topEdge(-300)).spot(at: t0) == .topEdge(-300))
+        #expect(RoamPhase.stopped(at: .topEdge(-300)).deadline == nil)
     }
 
     @Test func aSleeperPastTheEndOfANarrowedRangeIsMovedToItsEnd() {
         var rng = SeededRandom(state: 25)
         let narrowDock = RoamInputs(now: t0 + 10, range: range, dock: -300...300, homing: .stay)
-        #expect(RoamRules.next(.asleep(at: .dock(500)), narrowDock, using: &rng) == .asleep(at: .dock(300)))
-        #expect(RoamRules.next(.asleep(at: .dock(-420)), narrowDock, using: &rng) == .asleep(at: .dock(-300)))
-        #expect(RoamRules.next(.asleep(at: .topEdge(-900)), inputs(homing: .stay), using: &rng) == .asleep(at: .topEdge(-800)))
+        #expect(RoamRules.next(.stopped(at: .dock(500)), narrowDock, using: &rng) == .stopped(at: .dock(300)))
+        #expect(RoamRules.next(.stopped(at: .dock(-420)), narrowDock, using: &rng) == .stopped(at: .dock(-300)))
+        #expect(RoamRules.next(.stopped(at: .topEdge(-900)), inputs(homing: .stay), using: &rng) == .stopped(at: .topEdge(-800)))
         let pastTheEnd = RoamPhase.walking(RoamWalk(on: .dock, from: 0, to: 400, start: t0, speed: 35))
-        #expect(RoamRules.next(pastTheEnd, narrowDock, using: &rng) == .asleep(at: .dock(300)))
+        #expect(RoamRules.next(pastTheEnd, narrowDock, using: &rng) == .stopped(at: .dock(300)))
     }
 
     @Test func fallingAsleepAtHomeStaysHome() {
@@ -222,7 +222,7 @@ struct RoamRulesTests {
     @Test(arguments: 0..<20)
     func wakingRestsWhereItSleptThenRoams(seed: UInt64) {
         var rng = SeededRandom(state: seed)
-        guard case .resting(let spot, let until) = RoamRules.next(.asleep(at: .topEdge(300)), inputs(at: 60), using: &rng) else {
+        guard case .resting(let spot, let until) = RoamRules.next(.stopped(at: .topEdge(300)), inputs(at: 60), using: &rng) else {
             Issue.record("waking rests where it slept")
             return
         }
@@ -232,7 +232,7 @@ struct RoamRulesTests {
 
     @Test func wakingOutsideARangeThatNarrowedWhileItSleptWalksBackIn() {
         var rng = SeededRandom(state: 25)
-        #expect(RoamRules.next(.asleep(at: .topEdge(600)), inputs(range: -200...200), using: &rng)
+        #expect(RoamRules.next(.stopped(at: .topEdge(600)), inputs(range: -200...200), using: &rng)
             == .walking(RoamWalk(on: .topEdge, from: 600, to: 200, start: t0, speed: RoamRules.walkSpeed)))
     }
 

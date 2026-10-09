@@ -34,7 +34,7 @@ struct GroundPath: Equatable {
         let ground = { (x: Double) in step?.height(at: x) ?? 0 }
         let x: Double
         switch track {
-        case .still(let at), .leave(let at, _), .arrive(let at, _): x = at
+        case .still(let at), .leave(let at, _), .arrive(let at, _), .caught(let at, _): x = at
         case .walk(let walk): x = walk.x(at: now)
         }
         var keys = [Key(at: now, height: height ?? ground(x))]
