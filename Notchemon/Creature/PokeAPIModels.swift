@@ -100,7 +100,8 @@ enum PokeAPIParser {
         let chain = try decoder.decode(EvolutionChainDTO.self, from: chainJSON)
         let evolution = levelUpEvolution(of: dto.id, in: chain.chain)
         return Species(
-            id: dto.id, name: displayName(dto), evolvesTo: evolution?.to, evolvesAtLevel: evolution?.level, heightMetres: heightMetres
+            id: dto.id, name: displayName(dto), evolvesTo: evolution?.to, evolvesAtLevel: evolution?.level, heightMetres: heightMetres,
+            familyRoot: chain.chain.species.id
         )
     }
 

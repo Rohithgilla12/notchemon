@@ -41,7 +41,7 @@ struct PokeAPIParsingTests {
     @Test func levelUpTriggerGivesTargetAndLowestMinLevel() throws {
         let dto = try PokeAPIParser.species(Fixtures.speciesJSON(id: 901, name: "testmon", chain: 90))
         let species = try PokeAPIParser.species(dto, chainJSON: Fixtures.chainJSON)
-        #expect(species == Species(id: 901, name: "Testmon", evolvesTo: 902, evolvesAtLevel: 18))
+        #expect(species == Species(id: 901, name: "Testmon", evolvesTo: 902, evolvesAtLevel: 18, familyRoot: 901))
     }
 
     @Test func nonLevelUpTriggerNeverEvolves() throws {
@@ -49,6 +49,11 @@ struct PokeAPIParsingTests {
         let species = try PokeAPIParser.species(dto, chainJSON: Fixtures.chainJSON)
         #expect(species.evolvesTo == nil)
         #expect(species.evolvesAtLevel == nil)
+    }
+
+    @Test func everyStageNamesItsFamilysFirstStage() throws {
+        let dto = try PokeAPIParser.species(Fixtures.speciesJSON(id: 903, name: "testmax", chain: 90))
+        #expect(try PokeAPIParser.species(dto, chainJSON: Fixtures.chainJSON).familyRoot == 901)
     }
 
     @Test func finalStageHasNoEvolution() throws {
@@ -77,7 +82,7 @@ struct PokeAPICreatureProviderTests {
     let home = URL(string: "https://sprites.test/h/901.png")!
     let artwork = URL(string: "https://sprites.test/o/901.png")!
     let spritesURL = Fixtures.api.appendingPathComponent("pokemon/901/")
-    let testmon = Species(id: 901, name: "Testmon", evolvesTo: 902, evolvesAtLevel: 18)
+    let testmon = Species(id: 901, name: "Testmon", evolvesTo: 902, evolvesAtLevel: 18, familyRoot: 901)
 
     func provider(_ fetcher: StubFetcher, root: URL = Fixtures.temporaryDirectory()) -> PokeAPICreatureProvider {
         PokeAPICreatureProvider(cache: DiskCache(root: root), fetcher: fetcher)
@@ -257,6 +262,17 @@ struct OriginalCreatureProviderTests {
     @Test func portraitIsLargeAndSmooth() async throws {
         let portrait = try await provider.portrait(for: try await provider.species(id: provider.starterIDs[1]))
         #expect(portrait.width >= 256)
+    }
+
+    @Test func everyStageNamesItsFamilysFirstDesign() async throws {
+        for id in provider.starterIDs {
+            var species = try await provider.species(id: id)
+            #expect(species.familyRoot == id)
+            while let next = species.evolvesTo {
+                species = try await provider.species(id: next)
+                #expect(species.familyRoot == id)
+            }
+        }
     }
 
     @Test func laterStagesStandTaller() async throws {
