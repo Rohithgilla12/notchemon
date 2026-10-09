@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Sprite frames are cached per species, so the leader and its followers load each species' frames once, and a second request for frames already on the way waits for that fetch.
 
+### Fixed
+
+- The open panel's sprite credit names the authors of every creature drawn: the leader, its walking followers, and a wild visitor while it visits. Authors from one source are merged and named once, and a line too long for the panel ends in "…" with the full list, creature by creature, in its tooltip.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added
