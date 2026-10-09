@@ -62,17 +62,8 @@ struct WildVisit: Sendable, Equatable {
     /// The widest stretch of `range` at least `clearance` from every point
     /// in `avoiding`, or nil when none leaves room for a stride.
     static func span(in range: ClosedRange<Double>, avoiding points: [Double], clearance: Double = clearance) -> ClosedRange<Double>? {
-        var pieces: [ClosedRange<Double>] = [range]
-        for point in points {
-            let hole = (point - clearance)...(point + clearance)
-            pieces = pieces.flatMap { (piece: ClosedRange<Double>) -> [ClosedRange<Double>] in
-                guard piece.overlaps(hole) else { return [piece] }
-                var left: [ClosedRange<Double>] = []
-                if piece.lowerBound < hole.lowerBound { left.append(piece.lowerBound...hole.lowerBound) }
-                if hole.upperBound < piece.upperBound { left.append(hole.upperBound...piece.upperBound) }
-                return left
-            }
-        }
+        let holes: [ClosedRange<Double>] = points.map { (point: Double) -> ClosedRange<Double> in (point - clearance)...(point + clearance) }
+        let pieces: [ClosedRange<Double>] = range.subtracting(holes)
         let widest = pieces.max { ($0.upperBound - $0.lowerBound) < ($1.upperBound - $1.lowerBound) }
         guard let widest, widest.upperBound - widest.lowerBound >= RoamRules.minimumStride else { return nil }
         return widest
