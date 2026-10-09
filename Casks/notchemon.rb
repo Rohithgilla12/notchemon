@@ -4,8 +4,8 @@
 # The app is signed with "Developer ID Application: Rohith Gilla (7D2V3RM56T)"
 # and notarised, so Gatekeeper opens it without a quarantine prompt.
 cask "notchemon" do
-  version "0.2.2"
-  sha256 "b6106ed167f900024e2f4df54b7f506b00beda0bcbcc55111479325c8ac44416"
+  version "0.2.3"
+  sha256 "a453e65b0aaf69cb5698c2e029c9d12f9feeab12ae00164ced14a0dde82252b2"
 
   url "https://github.com/Rohithgilla12/notchemon/releases/download/v#{version}/Notchemon-#{version}.zip"
   name "Notchemon"
