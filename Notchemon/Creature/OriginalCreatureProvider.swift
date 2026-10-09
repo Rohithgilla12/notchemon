@@ -37,8 +37,18 @@ struct OriginalCreatureProvider: CreatureProvider {
     func species(id: Int) async throws -> Species {
         guard let design = Self.roster[id] else { throw CreatureError.unknownSpecies }
         return Species(
-            id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel, heightMetres: design.heightMetres
+            id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel, heightMetres: design.heightMetres,
+            familyRoot: Self.root(of: id)
         )
+    }
+
+    /// Follows the roster back to the design nothing evolves into.
+    static func root(of id: Int) -> Int {
+        var current = id
+        while let earlier = roster.first(where: { $0.value.evolvesTo == current })?.key {
+            current = earlier
+        }
+        return current
     }
 
     /// The eyes follow the facing; the body is symmetric, so nothing else

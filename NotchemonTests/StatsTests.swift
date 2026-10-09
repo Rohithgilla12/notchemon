@@ -152,15 +152,15 @@ struct EngineStatsTests {
     @Test func choosingAStarterIsWhenTheyFirstMet() async {
         let engine = engine()
         await engine.start()
-        await engine.chooseStarter(901)
+        await engine.adopt(901)
         #expect(store.load().stats.firstMet == clock.now)
     }
 
     @Test func aCompanionFromBeforeStatsMetWhenItsStateWasFirstSaved() async throws {
-        try store.save(CompanionState(progress: .starter(901)))
+        try store.save(CompanionState(collection: PartnerCollection(only: .starter(901))))
         let made = Date(timeIntervalSince1970: 1_700_000_000)
         try FileManager.default.setAttributes([.creationDate: made], ofItemAtPath: directory.path)
-        try store.save(CompanionState(progress: .starter(901)))
+        try store.save(CompanionState(collection: PartnerCollection(only: .starter(901))))
         await engine().start()
         #expect(store.load().stats.firstMet == made)
     }
@@ -175,7 +175,7 @@ struct EngineStatsTests {
     @Test func aWalkIsMeasuredInTheCreaturesHeightAndTheScreensMillimetres() async {
         let engine = engine()
         await engine.start()
-        await engine.chooseStarter(901)
+        await engine.adopt(901)
         await engine.record(.walked(points: 80, perch: .topEdge), screenMillimetresPerPoint: 0.2)
         let stats = store.load().stats
         #expect(stats.topEdgePoints == 80)
@@ -188,7 +188,7 @@ struct EngineStatsTests {
         let idle = IdleClock()
         let engine = engine(idle: idle)
         await engine.start()
-        await engine.chooseStarter(901)
+        await engine.adopt(901)
         await engine.startFocus()
         clock.advance(25 * 60)
         await engine.stopFocus()
@@ -210,7 +210,7 @@ struct EngineStatsTests {
     @Test func statsSurviveARelaunch() async {
         let first = engine()
         await first.start()
-        await first.chooseStarter(901)
+        await first.adopt(901)
         await first.record(.transferred(to: .dock))
         let second = engine()
         await second.start()
@@ -226,7 +226,7 @@ struct CompanionStateMigrationTests {
     }
 
     @Test func savedStatesNoLongerWriteTheOldTally() throws {
-        var state = CompanionState(progress: .starter(25))
+        var state = CompanionState(collection: PartnerCollection(only: .starter(25)))
         state.stats.focusMinutes = 75
         let json = try #require(String(data: try JSONEncoder().encode(state), encoding: .utf8))
         #expect(!json.contains("totalFocusMinutes"))

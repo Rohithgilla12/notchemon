@@ -31,7 +31,9 @@ struct NotchRootView: View {
                         .transition(.opacity.animation(.easeOut(duration: 0.15)))
                 }
 
-                if model.activeSpecies != nil, let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .topEdge, expanded: expanded) {
+                // The partner picker fills the panel, the sprite's slot included.
+                if model.activeSpecies != nil, !(expanded && model.showsPartners),
+                   let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .topEdge, expanded: expanded) {
                     SpriteView(pose: pose)
                         .frame(width: sprite.width, height: sprite.height)
                         .offset(x: sprite.minX, y: sprite.minY)

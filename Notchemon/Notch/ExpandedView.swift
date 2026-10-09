@@ -27,6 +27,7 @@ struct ExpandedView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.snapshot.banner)
+        .onDisappear { model.showsPartners = false }
         .foregroundStyle(.white)
         .environment(\.colorScheme, .dark)
     }
@@ -44,10 +45,14 @@ struct ExpandedView: View {
         case .choosingStarter(let carryOver):
             StarterPickerView(model: model, carryOver: carryOver)
         case .active(let species, let progress):
-            HStack(alignment: .top, spacing: 14) {
-                CompanionColumn(species: species, progress: progress)
-                    .frame(width: PanelMetrics.expandedSpriteSize.width)
-                ToolsColumn(model: model, presentation: presentation)
+            if model.showsPartners {
+                PartnersView(model: model)
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    CompanionColumn(species: species, progress: progress)
+                        .frame(width: PanelMetrics.expandedSpriteSize.width)
+                    ToolsColumn(model: model, presentation: presentation)
+                }
             }
         }
     }

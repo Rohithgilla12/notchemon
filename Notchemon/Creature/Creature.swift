@@ -8,6 +8,9 @@ struct Species: Codable, Sendable, Equatable, Identifiable {
     let evolvesAtLevel: Int?
     /// How tall the species really is, which sets its creature-scale stride.
     var heightMetres: Double? = nil
+    /// The first stage of its evolution family, or nil when the provider
+    /// cannot say. A collection keeps one partner per family.
+    var familyRoot: Int? = nil
 }
 
 /// What the creature is doing, as far as its sprite is concerned. `idle`,
