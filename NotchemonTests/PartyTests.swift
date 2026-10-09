@@ -101,8 +101,8 @@ struct FollowerPoseTests {
     }
 
     @Test func theLeadersCelebrationIsNotAFollowersOwn() throws {
-        let pose = try #require(pose(.resting(at: .topEdge(200), until: t0 + 5), behaviour: .celebrating(.levelUp(9))))
-        #expect(shown(pose) == "idle/down")
+        let celebrating = try #require(pose(.resting(at: .topEdge(200), until: t0 + 5), behaviour: .celebrating(.levelUp(9))))
+        #expect(shown(celebrating) == "idle/down")
     }
 }
 
