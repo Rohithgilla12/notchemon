@@ -70,6 +70,36 @@ struct WalkCycle: Sendable {
     }
 }
 
+/// Every anim one species has in every front facing, measured together.
+struct SpriteSet: Sendable {
+    let bounds: SpriteBounds
+    let anims: [SpriteState: [Facing: SpriteFrames]]
+
+    var walk: WalkCycle? {
+        guard let left = anims[.walking]?[.left], let right = anims[.walking]?[.right] else { return nil }
+        return WalkCycle(left: left, right: right)
+    }
+
+    /// The first loop the art has for `behaviour` in `style`, as `SpriteChoreography` ranks them.
+    func show(for behaviour: Behaviour, style: IdleStyle) -> SpriteShow? {
+        let facing = behaviour.facing
+        for choice in SpriteChoreography.loops(for: behaviour, style: style) {
+            guard let loop = anims[choice.state]?[facing] else { continue }
+            return SpriteShow(
+                loop: loop, loopState: choice.state, playback: choice.playback, facing: facing, bounds: bounds, oneShot: nil, walk: walk
+            )
+        }
+        return nil
+    }
+}
+
+/// A partner walking with the leader, with the frames it is drawn in.
+struct Follower: Sendable {
+    let root: Int
+    let species: Species
+    let sprites: SpriteSet
+}
+
 /// Everything the views render, published by the engine as one value.
 struct CompanionSnapshot: Sendable {
     var phase: CompanionPhase = .loading
@@ -86,6 +116,12 @@ struct CompanionSnapshot: Sendable {
     var encounter: Encounter?
     /// Sessions completed since launch. Each one plays the focus sound.
     var completedFocusSessions = 0
+    /// The root of the partner that is out, which leads the party.
+    var leader: Int?
+    /// The roots of the partners walking with it, as soon as they are chosen.
+    var followerRoots: [Int] = []
+    /// Those followers whose frames have loaded, in party order.
+    var followers: [Follower] = []
 }
 
 /// Where the user stands on unlocks, derived from the stats.
@@ -135,8 +171,13 @@ actor CreatureEngine {
     private var state = CompanionState.empty
     private var snapshot = CompanionSnapshot()
     private var species: Species?
+    /// Each follower's current species, by root.
+    private var followerSpecies: [Int: Species] = [:]
     private var spriteCache: [SpriteKey: SpriteFrames] = [:]
-    private var spriteBounds: SpriteBounds?
+    /// Fetches under way, which a second request for the same frames joins.
+    private var spriteFetches: [SpriteKey: Task<SpriteFrames?, Never>] = [:]
+    /// By species id.
+    private var spriteSets: [Int: SpriteSet] = [:]
     private var oneShotSerial = 0
     private var timer = FocusTimer()
     private var cursorOffset: CursorOffset?
@@ -477,6 +518,9 @@ actor CreatureEngine {
     func switchPartner(to root: Int) async {
         guard let partner = state.collection.partner(root), root != state.collection.active || species == nil else { return }
         guard let target = try? await provider.species(id: partner.progress.speciesId) else { return }
+        // A follower sent out swaps with the leader, which then follows in
+        // frames already loaded, so it never drops out of the party between.
+        if let leader = state.collection.active, let species { followerSpecies[leader] = species }
         state.collection.activate(root)
         persist()
         await sendOut(target)
@@ -487,8 +531,9 @@ actor CreatureEngine {
         cancelFocus()
         state.collection = PartnerCollection()
         species = nil
+        followerSpecies = [:]
         snapshot.encounter = nil
-        forgetSprites()
+        forgetUnshownSprites()
         persist()
         snapshot.sprite = nil
         snapshot.phase = .choosingStarter(carryOver: nil)
@@ -497,9 +542,9 @@ actor CreatureEngine {
 
     /// For developers: a walk of one kilometre at the current partner's scale.
     func addCreatureKilometre() {
-        guard let species else { return }
+        guard let species, let leader = state.collection.active else { return }
         let perPoint = Distance.creatureMetresPerPoint(heightMetres: species.heightMetres)
-        record(.walked(points: 1_000 / perPoint, perch: .topEdge))
+        record(.walked(points: 1_000 / perPoint, perch: .topEdge, partner: leader))
     }
 
     /// For developers: an hour of focus, counted without XP.
@@ -507,10 +552,12 @@ actor CreatureEngine {
         record(.focusCompleted(minutes: 60))
     }
 
+    /// A follower sent out swaps places with the leader, so the followers
+    /// are loaded again after the new leader is.
     private func sendOut(_ next: Species) async {
-        forgetSprites()
         await activate(next)
         await resolvePendingEvolutions()
+        await refreshFollowers()
     }
 
     func cursorMoved(offset: CursorOffset?) async {
@@ -520,21 +567,24 @@ actor CreatureEngine {
     }
 
     func cursorNoticed() async {
-        record(.hopped)
+        guard let leader = state.collection.active else { return }
+        record(.hopped(partner: leader))
         await play(.cursorNoticed)
     }
 
-    /// Folds one event into the stats. A walk is measured in the current
-    /// species' body heights and in millimetres of the display it crossed.
+    /// Folds one event into the stats. A walk is measured in the walker's
+    /// own body heights, and in millimetres of the display it crossed, and
+    /// is added to that partner's own distance too.
     func record(_ event: CompanionEvent, screenMillimetresPerPoint: Double = 0) {
-        guard let species else { return }
+        guard species != nil else { return }
+        let walker: Species? = event.partner.flatMap { member($0) }
         let scale = WalkScale(
-            creatureMetresPerPoint: Distance.creatureMetresPerPoint(heightMetres: species.heightMetres),
+            creatureMetresPerPoint: Distance.creatureMetresPerPoint(heightMetres: walker?.heightMetres),
             screenMillimetresPerPoint: screenMillimetresPerPoint
         )
         let next = StatsReducer.apply(event, to: state.stats, scale: scale)
         let walked = next.creatureMetres - state.stats.creatureMetres
-        if walked > 0 { state.collection.updateActive { $0.creatureMetres += walked } }
+        if walked > 0, let partner = event.partner { state.collection.update(partner) { $0.creatureMetres += walked } }
         state.stats = next
         snapshot.stats = next
         refreshUnlockStatus()
@@ -618,8 +668,8 @@ actor CreatureEngine {
             guard state.progress?.speciesId == species.id else { continue }
             state.collection.updateActive { $0.progress.speciesId = targetID }
             persist()
-            forgetSprites()
             await activate(target)
+            forgetUnshownSprites()
             snapshot.evolutionCount += 1
             record(.evolved)
             let portrait = try? await provider.portrait(for: target)
@@ -790,6 +840,7 @@ actor CreatureEngine {
             }
             await activate(loaded)
             await resolvePendingEvolutions()
+            await refreshFollowers()
         } catch CreatureError.unknownSpecies {
             snapshot.phase = .choosingStarter(carryOver: progress)
             publish()
@@ -830,25 +881,12 @@ actor CreatureEngine {
         guard let species else { return }
         let behaviour = snapshot.behaviour
         let style = state.preferences.idleStyle
-        guard let bounds = await bounds(of: species) else { return }
-        var walk: WalkCycle?
-        if let left = await frames(.walking, facing: .left, of: species), let right = await frames(.walking, facing: .right, of: species) {
-            walk = WalkCycle(left: left, right: right)
-        }
-        for choice in SpriteChoreography.loops(for: behaviour, style: style) {
-            guard let loop = await frames(choice.state, facing: behaviour.facing, of: species) else { continue }
-            guard snapshot.behaviour == behaviour, state.preferences.idleStyle == style else { return }
-            snapshot.sprite = SpriteShow(
-                loop: loop,
-                loopState: choice.state,
-                playback: choice.playback,
-                facing: behaviour.facing,
-                bounds: bounds,
-                oneShot: snapshot.sprite?.oneShot,
-                walk: walk
-            )
-            return
-        }
+        guard let set = await spriteSet(of: species), self.species?.id == species.id,
+              snapshot.behaviour == behaviour, state.preferences.idleStyle == style,
+              var show = set.show(for: behaviour, style: style)
+        else { return }
+        show.oneShot = snapshot.sprite?.oneShot
+        snapshot.sprite = show
     }
 
     /// Without the cue's own frames, the loop stands in and the renderer
@@ -862,22 +900,32 @@ actor CreatureEngine {
         publish()
     }
 
+    /// Frames are cached per species, for every party member at once, and
+    /// a request for frames already being fetched waits for that fetch.
     private func frames(_ state: SpriteState, facing: Facing, of species: Species) async -> SpriteFrames? {
-        if let hit = spriteCache[SpriteKey(state: state, facing: facing)] { return hit }
-        guard let frames = try? await provider.sprite(for: species, state: state, facing: facing),
-              self.species?.id == species.id
-        else { return nil }
-        // Undirected frames are the same from every side, so one fetch serves all eight.
-        for cached in frames.directional ? [facing] : Facing.allCases {
-            spriteCache[SpriteKey(state: state, facing: cached)] = frames
+        let key = SpriteKey(species: species.id, state: state, facing: facing)
+        if let hit = spriteCache[key] { return hit }
+        if let fetch = spriteFetches[key] { return await fetch.value }
+        // The task caches what it fetched on this actor before anyone waiting
+        // on it resumes, so none of them asks again for a facing it covers.
+        let fetch = Task { [self, provider] () -> SpriteFrames? in
+            let fetched = try? await provider.sprite(for: species, state: state, facing: facing)
+            spriteFetches[key] = nil
+            guard let fetched, isShown(species.id) else { return nil }
+            // Undirected frames are the same from every side, so one fetch serves all eight.
+            for cached in fetched.directional ? [facing] : Facing.allCases {
+                spriteCache[SpriteKey(species: species.id, state: state, facing: cached)] = fetched
+            }
+            return fetched
         }
-        return frames
+        spriteFetches[key] = fetch
+        return await fetch.value
     }
 
     /// Fetches every anim in every facing the creature shows, so the bounds
     /// cover a hop before it first plays and its one-shots are cached ahead.
-    private func bounds(of species: Species) async -> SpriteBounds? {
-        if let spriteBounds { return spriteBounds }
+    private func spriteSet(of species: Species) async -> SpriteSet? {
+        if let set = spriteSets[species.id] { return set }
         guard let rest = await frames(.idle, facing: .down, of: species) else { return nil }
         var anims: [SpriteState: [Facing: SpriteFrames]] = [:]
         for state in SpriteState.allCases {
@@ -885,18 +933,75 @@ actor CreatureEngine {
                 anims[state, default: [:]][facing] = await frames(state, facing: facing, of: species)
             }
         }
-        guard self.species?.id == species.id else { return nil }
-        let measured = SpriteRendering.bounds(rest: rest, anims: anims)
-        spriteBounds = measured
-        return measured
+        guard isShown(species.id) else { return nil }
+        let set = SpriteSet(bounds: SpriteRendering.bounds(rest: rest, anims: anims), anims: anims)
+        spriteSets[species.id] = set
+        return set
     }
 
-    private func forgetSprites() {
-        spriteCache = [:]
-        spriteBounds = nil
+    /// Whether the leader or a follower is of species `id`, so its frames are worth keeping.
+    private func isShown(_ id: Int) -> Bool {
+        species?.id == id || followerSpecies.values.contains { $0.id == id }
+    }
+
+    /// Drops the frames of every species no party member is.
+    private func forgetUnshownSprites() {
+        spriteCache = spriteCache.filter { isShown($0.key.species) }
+        spriteSets = spriteSets.filter { isShown($0.key) }
+    }
+
+    /// Starts or stops partner `root` walking with the leader, then loads
+    /// what it is drawn in. Refused when the party is full.
+    func setWalking(_ root: Int, _ walking: Bool) async -> WalkingChange {
+        let change = state.collection.setWalking(root, walking)
+        guard change == .changed else { return change }
+        persist()
+        publish()
+        await refreshFollowers()
+        return change
+    }
+
+    /// Loads each follower's species and frames, forgets those of partners
+    /// that stopped walking, and publishes the followers that can be drawn.
+    /// It repeats until the party holds still across its fetches, so calls
+    /// that overlap all end on the same followers.
+    private func refreshFollowers() async {
+        while true {
+            let roots = state.collection.followers
+            followerSpecies = followerSpecies.filter { roots.contains($0.key) }
+            for root in roots {
+                guard let partner = state.collection.partner(root) else { continue }
+                let wanted = partner.progress.speciesId
+                if followerSpecies[root]?.id != wanted {
+                    guard let found = try? await provider.species(id: wanted) else { continue }
+                    followerSpecies[root] = found
+                }
+                if let species = followerSpecies[root] { _ = await spriteSet(of: species) }
+            }
+            guard state.collection.followers == roots else { continue }
+            forgetUnshownSprites()
+            publish()
+            return
+        }
+    }
+
+    /// The followers whose current species and frames are loaded, in party order.
+    private func loadedFollowers() -> [Follower] {
+        state.collection.followers.compactMap { (root: Int) -> Follower? in
+            guard let species = followerSpecies[root], species.id == state.collection.partner(root)?.progress.speciesId,
+                  let sprites = spriteSets[species.id]
+            else { return nil }
+            return Follower(root: root, species: species, sprites: sprites)
+        }
+    }
+
+    /// The species of party member `root`, while it walks.
+    private func member(_ root: Int) -> Species? {
+        root == state.collection.active ? species : followerSpecies[root]
     }
 
     private struct SpriteKey: Hashable {
+        let species: Int
         let state: SpriteState
         let facing: Facing
     }
@@ -906,6 +1011,9 @@ actor CreatureEngine {
     }
 
     private func publish() {
+        snapshot.leader = species == nil ? nil : state.collection.active
+        snapshot.followerRoots = state.collection.followers
+        snapshot.followers = loadedFollowers()
         continuation.yield(snapshot)
     }
 }

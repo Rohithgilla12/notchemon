@@ -8,9 +8,9 @@ struct PartyRoamTests {
 
     func inputs(
         at seconds: TimeInterval = 0, range: ClosedRange<Double>? = nil, dock: ClosedRange<Double>? = nil,
-        homing: Homing = .free, occupied: [Perch: [ClosedRange<Double>]]
+        homing: Homing = .free, occupied: [Perch: [ClosedRange<Double>]], follower: Bool = false
     ) -> RoamInputs {
-        RoamInputs(now: t0 + seconds, range: range ?? self.range, dock: dock, homing: homing, occupied: occupied)
+        RoamInputs(now: t0 + seconds, range: range ?? self.range, dock: dock, homing: homing, occupied: occupied, follower: follower)
     }
 
     static func around(_ points: Double...) -> [ClosedRange<Double>] {
@@ -79,7 +79,8 @@ struct PartyRoamTests {
     func aFollowerAtHomeHopsOutToAClearSpot(seed: UInt64) {
         var rng = SeededRandom(state: seed)
         let spans = Self.around(0, 300)
-        guard case .transferring(let from, let to, let start) = RoamRules.next(.home, inputs(occupied: [.topEdge: spans]), using: &rng) else {
+        let next = RoamRules.next(.home, inputs(occupied: [.topEdge: spans], follower: true), using: &rng)
+        guard case .transferring(let from, let to, let start) = next else {
             Issue.record("a follower leaves home at once")
             return
         }
@@ -89,24 +90,51 @@ struct PartyRoamTests {
         #expect(start == t0)
     }
 
-    @Test func aFollowerWithNowhereToGoWaitsAtHome() {
+    @Test func theLeaderRestsAtHomeWhileAFollowerWalksPastIt() {
         var rng = SeededRandom(state: 8)
-        let next = RoamRules.next(.home, inputs(range: 0...0, occupied: [.topEdge: Self.around(0)]), using: &rng)
+        let next = RoamRules.next(.home, inputs(occupied: [.topEdge: Self.around(20)]), using: &rng)
         guard case .resting(let spot, _) = next else {
-            Issue.record("expected a wait at home, got \(next)")
+            Issue.record("the leader stays home, got \(next)")
             return
         }
         #expect(spot == .home)
     }
 
+    @Test func aFollowerWithNowhereToGoWaitsAtHomeThenHopsOutWhenThereIsRoom() {
+        var rng = SeededRandom(state: 8)
+        let homeSpan: [Perch: [ClosedRange<Double>]] = [.topEdge: Self.around(0)]
+        let waiting = RoamRules.next(.home, inputs(range: 0...0, occupied: homeSpan, follower: true), using: &rng)
+        guard case .resting(let spot, let until) = waiting else {
+            Issue.record("expected a wait at home, got \(waiting)")
+            return
+        }
+        #expect(spot == .home)
+        let later = until.timeIntervalSince(t0)
+        let next = RoamRules.next(waiting, inputs(at: later, occupied: homeSpan, follower: true), using: &rng)
+        guard case .transferring(let from, let to, _) = next else {
+            Issue.record("expected a hop out of home, got \(next)")
+            return
+        }
+        #expect(from == .home)
+        #expect(abs(to.x) >= RoamRules.gap)
+    }
+
     @Test func aFollowerWithOnlyTheDockOpenHopsOntoIt() {
         var rng = SeededRandom(state: 8)
-        let next = RoamRules.next(.home, inputs(range: 0...0, dock: -300...300, occupied: [.topEdge: Self.around(0)]), using: &rng)
+        let next = RoamRules.next(.home, inputs(range: 0...0, dock: -300...300, occupied: [.topEdge: Self.around(0)], follower: true), using: &rng)
         guard case .transferring(_, let to, _) = next else {
             Issue.record("expected a hop to the Dock, got \(next)")
             return
         }
         #expect(to.perch == .dock)
+    }
+
+    @Test func aFollowerLeavingAVanishedDockWithNoRoomUpTopDropsOutOfSightAtHome() {
+        var rng = SeededRandom(state: 8)
+        let resting = RoamPhase.resting(at: .dock(40), until: t0 + 9)
+        let crowded: [Perch: [ClosedRange<Double>]] = [.topEdge: [-200...200]]
+        let next = RoamRules.next(resting, inputs(range: -200...200, occupied: crowded, follower: true), using: &rng)
+        #expect(next == .transferring(from: .dock(40), to: .home, start: t0))
     }
 
     @Test func wakingBesideAnotherStepsToTheNearestClearSpot() {
@@ -198,7 +226,7 @@ struct PartySimulation {
         var others = phases
         others.remove(at: member)
         let occupied = RoamRules.occupied(by: others, at: now, follower: member > 0)
-        let inputs = RoamInputs(now: now, range: range, dock: dock, homing: homing, occupied: occupied)
+        let inputs = RoamInputs(now: now, range: range, dock: dock, homing: homing, occupied: occupied, follower: member > 0)
         phases[member] = RoamRules.next(phases[member], inputs, using: &generators[member])
     }
 

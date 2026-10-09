@@ -65,7 +65,7 @@ struct PanelRenderTests {
         let wild = WildWalker()
         var rng = SplitMix64(seed: 2)
         wild.begin(WildVisit.plan(on: .topEdge, in: 120...400, start: Date() - 1, using: &rng), serial: encounter.serial)
-        let strip = NotchRootView(presentation: presentation, model: model, roamer: Roamer(), wild: wild)
+        let strip = NotchRootView(presentation: presentation, model: model, party: Party(), wild: wild)
         try render(strip, size: metrics.windowSize, padding: 0, to: folder.appendingPathComponent("visitor-strip.png"))
         model.catchEncounter()
         for _ in 0..<200 where model.snapshot.banner == nil {

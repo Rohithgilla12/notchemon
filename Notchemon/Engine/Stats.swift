@@ -6,17 +6,26 @@ import os
 let statsLog = Logger(subsystem: "com.rohithgilla.Notchemon", category: "stats")
 
 /// Something the companion did, emitted once when a phase changes. Stats
-/// are a fold over these and nothing samples them per frame.
+/// are a fold over these and nothing samples them per frame. Moves name the
+/// root of the party member that made them.
 enum CompanionEvent: Sendable, Equatable {
     /// A walk ended or was cut short, `points` along `perch` either way.
-    case walked(points: Double, perch: Perch)
-    case hopped
+    case walked(points: Double, perch: Perch, partner: Int)
+    case hopped(partner: Int)
     case napped
-    case transferred(to: Perch)
+    case transferred(to: Perch, partner: Int)
     case focusCompleted(minutes: Int)
     case evolved
     case encounterSeen
     case encounterCaught
+
+    /// The party member that moved, for a move.
+    var partner: Int? {
+        switch self {
+        case .walked(_, _, let partner), .hopped(let partner), .transferred(_, let partner): partner
+        case .napped, .focusCompleted, .evolved, .encounterSeen, .encounterCaught: nil
+        }
+    }
 }
 
 /// Converts walked points into the two fun distances, measured where and
@@ -70,7 +79,7 @@ enum StatsReducer {
     static func apply(_ event: CompanionEvent, to stats: Stats, scale: WalkScale = .none) -> Stats {
         var next = stats
         switch event {
-        case .walked(let points, let perch):
+        case .walked(let points, let perch, _):
             let walked = max(0, points)
             switch perch {
             case .topEdge: next.topEdgePoints += walked
@@ -82,7 +91,7 @@ enum StatsReducer {
             next.hops += 1
         case .napped:
             next.naps += 1
-        case .transferred(let perch):
+        case .transferred(let perch, _):
             if perch == .dock { next.dockVisits += 1 }
         case .focusCompleted(let minutes):
             next.focusSessions += 1

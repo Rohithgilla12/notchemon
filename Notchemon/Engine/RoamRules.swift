@@ -1,4 +1,26 @@
 import Foundation
+import os
+
+/// Each party member's phase changes, at debug level. Read with
+/// `log show --debug --predicate 'subsystem == "com.rohithgilla.Notchemon" && category == "roam"'`.
+let roamLog = Logger(subsystem: "com.rohithgilla.Notchemon", category: "roam")
+
+/// A small seedable generator, so each roamer, and each test, replays its own draws.
+struct SplitMix64: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed
+    }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
 
 /// What the creature walks along.
 enum Perch: Sendable, Equatable {
@@ -187,6 +209,9 @@ struct RoamInputs: Sendable, Equatable {
     /// spot padded by `RoamRules.gap`. New walk targets, rests, and landings
     /// keep out of these spans.
     var occupied: [Perch: [ClosedRange<Double>]] = [:]
+    /// A follower is out of sight at home, where the leader stands, and
+    /// hops out of it rather than resting or walking out from there.
+    var follower = false
 
     func range(of perch: Perch) -> ClosedRange<Double>? {
         switch perch {
@@ -297,8 +322,7 @@ enum RoamRules {
         guard let range = inputs.range(of: spot.perch) else { return transfer(from: spot, to: .topEdge, inputs, using: &rng) }
         switch phase {
         case .home:
-            // Home taken by the leader, a follower hops out to a clear spot.
-            guard inputs.isFree(.home) else { return emerge(inputs, using: &rng) }
+            if inputs.follower { return emerge(inputs, using: &rng) }
             return .resting(at: .home, until: now + .random(in: rest, using: &rng))
         case .stopped:
             guard range.contains(spot.x) else { return walkBack(from: spot, to: range, at: now) }
@@ -307,7 +331,10 @@ enum RoamRules {
             return .resting(at: spot, until: now + .random(in: rest, using: &rng))
         case .resting(_, let until):
             guard range.contains(spot.x) else { return walkBack(from: spot, to: range, at: now) }
-            return now < until ? phase : afterRest(at: spot, inputs, using: &rng)
+            guard now >= until else { return phase }
+            // A follower that found no room waited out of sight, so it tries hopping out again.
+            if inputs.follower, spot == .home { return emerge(inputs, using: &rng) }
+            return afterRest(at: spot, inputs, using: &rng)
         case .walking(let walk), .returning(let walk):
             guard range.contains(walk.to) else {
                 return range.contains(spot.x) ? .resting(at: spot, until: now + .random(in: rest, using: &rng)) : walkBack(from: spot, to: range, at: now)
@@ -336,17 +363,17 @@ enum RoamRules {
         return spans
     }
 
-    /// What moving from `old` to `new` at `now` did, for the stats: a walk
-    /// that ended or was cut short counts the ground it covered, and a hop
-    /// to the other perch counts once as it sets off.
-    static func events(from old: RoamPhase, to new: RoamPhase, at now: Date) -> [CompanionEvent] {
+    /// What party member `partner` moving from `old` to `new` at `now` did,
+    /// for the stats: a walk that ended or was cut short counts the ground
+    /// it covered, and a hop to the other perch counts once as it sets off.
+    static func events(from old: RoamPhase, to new: RoamPhase, at now: Date, partner: Int) -> [CompanionEvent] {
         var events: [CompanionEvent] = []
         if let walk = old.walk, new.walk != walk {
             let points: Double = abs(walk.x(at: now) - walk.from)
-            if points > 0 { events.append(.walked(points: points, perch: walk.perch)) }
+            if points > 0 { events.append(.walked(points: points, perch: walk.perch, partner: partner)) }
         }
-        if case .transferring(_, let to, _) = new, new != old {
-            events.append(.transferred(to: to.perch))
+        if case .transferring(let from, let to, _) = new, new != old, from.perch != to.perch {
+            events.append(.transferred(to: to.perch, partner: partner))
         }
         return events
     }
@@ -370,14 +397,17 @@ enum RoamRules {
         return stroll(from: spot, inputs, using: &rng)
     }
 
-    /// Lands anywhere on `perch` clear of the party, or anywhere on it at all
-    /// when there is no clear spot, since only a creature that must leave
-    /// its perch gets here then. The top edge is always open.
+    /// Lands anywhere on `perch` clear of the party. With no clear spot,
+    /// which only a creature that must leave its perch meets, a follower
+    /// drops out of sight at home and anyone else lands anywhere on it. The
+    /// top edge is always open.
     private static func transfer(from spot: RoamSpot, to perch: Perch, _ inputs: RoamInputs, using rng: inout some RandomNumberGenerator) -> RoamPhase {
         let range = inputs.range(of: perch) ?? 0...0
         let alone = inputs.occupied[perch]?.isEmpty ?? true
-        let clear = alone ? nil : pick(in: inputs.free(on: perch), using: &rng)
-        let landing = RoamSpot(perch: perch, x: clear ?? .random(in: range, using: &rng))
+        if !alone, let x = pick(in: inputs.free(on: perch), using: &rng) {
+            return .transferring(from: spot, to: RoamSpot(perch: perch, x: x), start: inputs.now)
+        }
+        let landing: RoamSpot = inputs.follower && perch == .topEdge ? .home : RoamSpot(perch: perch, x: .random(in: range, using: &rng))
         return .transferring(from: spot, to: landing, start: inputs.now)
     }
 

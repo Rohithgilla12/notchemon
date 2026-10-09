@@ -97,7 +97,12 @@ struct PartnerCollection: Codable, Sendable, Equatable {
     }
 
     mutating func updateActive(_ change: (inout Partner) -> Void) {
-        guard let index = partners.firstIndex(where: { $0.root == active }) else { return }
+        guard let active else { return }
+        update(active, change)
+    }
+
+    mutating func update(_ root: Int, _ change: (inout Partner) -> Void) {
+        guard let index = partners.firstIndex(where: { $0.root == root }) else { return }
         change(&partners[index])
     }
 

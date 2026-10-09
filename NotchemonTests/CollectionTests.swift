@@ -275,9 +275,9 @@ struct EngineCollectionTests {
 
     @Test func distanceIsTalliedForThePartnerThatWalkedIt() async {
         let engine = await twoPartners()
-        await engine.record(.walked(points: 80, perch: .topEdge))
+        await engine.record(.walked(points: 80, perch: .topEdge, partner: 904))
         await engine.switchPartner(to: 901)
-        await engine.record(.walked(points: 40, perch: .dock))
+        await engine.record(.walked(points: 40, perch: .dock, partner: 901))
         let collection = store.load().collection
         let metresPerPoint = Distance.creatureMetresPerPoint(heightMetres: nil)
         #expect(abs((collection.partner(904)?.creatureMetres ?? 0) - 80 * metresPerPoint) < 1e-9)

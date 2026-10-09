@@ -3,7 +3,7 @@ import SwiftUI
 struct NotchRootView: View {
     let presentation: NotchPresentation
     let model: CompanionModel
-    let roamer: Roamer
+    let party: Party
     let wild: WildWalker
 
     var body: some View {
@@ -26,9 +26,15 @@ struct NotchRootView: View {
                     .frame(maxWidth: .infinity, alignment: .top)
                     .gesture(panelClick, including: presentation.clickToOpen ? .all : .none)
 
-                // Under the open panel, which covers the strip it walks.
+                // Under the open panel, which covers the strip they walk.
+                let strip = metrics.collapsedSpriteFrame
+                ForEach(model.snapshot.followers, id: \.root) { (follower: Follower) in
+                    FollowerSprite(follower: follower, party: party, snapshot: model.snapshot, perch: .topEdge)
+                        .frame(width: strip.width, height: strip.height)
+                        .offset(x: strip.minX, y: strip.minY)
+                }
+
                 if let encounter = model.snapshot.encounter, wild.visit?.perch == .topEdge, let track = wild.track {
-                    let strip = metrics.collapsedSpriteFrame
                     SpriteView(pose: .wild(encounter.show, track: track, idleStyle: .lively))
                         .frame(width: strip.width, height: strip.height)
                         .offset(x: strip.minX, y: strip.minY)
@@ -43,7 +49,7 @@ struct NotchRootView: View {
 
                 // The partner picker fills the panel, the sprite's slot included.
                 if model.activeSpecies != nil, !(expanded && model.showsPartners),
-                   let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .topEdge, expanded: expanded) {
+                   let pose = SpritePose(model.snapshot, roam: party.leaderRoamer?.phase ?? .home, on: .topEdge, expanded: expanded) {
                     SpriteView(pose: pose)
                         .frame(width: sprite.width, height: sprite.height)
                         .offset(x: sprite.minX, y: sprite.minY)

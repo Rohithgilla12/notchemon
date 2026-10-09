@@ -52,25 +52,54 @@ extension SpritePose {
             guard let found = Self.track(of: roam, on: perch) else { return nil }
             track = found
         }
-        var show = snapshot.sprite
-        if case .walk(let walk) = track, snapshot.behaviour != .sleeping, let cycle = show?.walk {
-            show?.loop = cycle.frames(toward: walk.direction)
-            show?.loopState = .walking
-            show?.playback = .cycle
-            show?.facing = walk.direction
-        }
         let tucked = snapshot.behaviour == .sleeping && !expanded && roam == .home
+        self.init(
+            Self.walking(snapshot.sprite, along: track, asleep: snapshot.behaviour == .sleeping),
+            track: track, tucked: tucked, flashToken: snapshot.evolutionCount, preferences: snapshot.preferences,
+            fit: expanded ? .contain : .peek, ground: ground
+        )
+    }
+
+    /// A follower's pose on `perch`'s window, in its own frames: asleep with
+    /// the party, else watching the cursor from its own spot. It is out of
+    /// sight while at home, where the leader stands, and hops out from there.
+    init?(follower sprites: SpriteSet, look: FollowerLook, _ snapshot: CompanionSnapshot, roam: RoamPhase, on perch: Perch, ground: GroundStep? = nil) {
+        guard let track = Self.followerTrack(of: roam, on: perch) else { return nil }
+        let asleep = snapshot.behaviour == .sleeping
+        let behaviour: Behaviour = asleep ? .sleeping : look.facing.map { .watching(facing: $0) } ?? .idle
+        var show = sprites.show(for: behaviour, style: snapshot.preferences.idleStyle)
+        if look.hops > 0, let loop = show?.loop {
+            let hop = sprites.anims[.hop]?[behaviour.facing] ?? loop
+            show?.oneShot = OneShot(state: .hop, frames: hop, serial: look.hops)
+        }
+        self.init(
+            Self.walking(show, along: track, asleep: asleep),
+            track: track, tucked: false, flashToken: 0, preferences: snapshot.preferences, fit: .peek, ground: ground
+        )
+    }
+
+    private init(_ show: SpriteShow?, track: SpriteTrack, tucked: Bool, flashToken: Int, preferences: Preferences, fit: SpriteFit, ground: GroundStep?) {
         let still = if case .still = track { true } else { false }
         self.init(
             show: show,
             tucked: tucked,
-            flashToken: snapshot.evolutionCount,
-            fidgets: snapshot.preferences.fidgets && !tucked && still,
-            fit: expanded ? .contain : .peek,
-            idleStyle: snapshot.preferences.idleStyle,
+            flashToken: flashToken,
+            fidgets: preferences.fidgets && !tucked && still,
+            fit: fit,
+            idleStyle: preferences.idleStyle,
             track: track,
             ground: ground
         )
+    }
+
+    /// Plays the walk cycle toward the way a walk heads, unless asleep.
+    private static func walking(_ show: SpriteShow?, along track: SpriteTrack, asleep: Bool) -> SpriteShow? {
+        guard case .walk(let walk) = track, !asleep, var show, let cycle = show.walk else { return show }
+        show.loop = cycle.frames(toward: walk.direction)
+        show.loopState = .walking
+        show.playback = .cycle
+        show.facing = walk.direction
+        return show
     }
 
     /// A wild creature's pose: it walks with its own walk cycle and never fidgets.
@@ -83,6 +112,24 @@ extension SpritePose {
             show.facing = walk.direction
         }
         return SpritePose(show: show, fidgets: false, fit: .peek, idleStyle: idleStyle, track: track, ground: ground)
+    }
+
+    /// Like the leader's, less any moment at home: a follower there is out
+    /// of sight, so hopping out of home it is seen only arriving, and
+    /// dropping into home only leaving.
+    private static func followerTrack(of roam: RoamPhase, on perch: Perch) -> SpriteTrack? {
+        switch roam {
+        case .home:
+            return nil
+        case .resting(let spot, _) where spot == .home, .stopped(let spot) where spot == .home:
+            return nil
+        case .transferring(let from, let to, let start) where from == .home:
+            return to.perch == perch && to != .home ? .arrive(to.x, start: start + RoamRules.transferHalf) : nil
+        case .transferring(let from, let to, let start) where to == .home:
+            return from.perch == perch ? .leave(from.x, start: start) : nil
+        case .resting, .stopped, .walking, .returning, .transferring:
+            return track(of: roam, on: perch)
+        }
     }
 
     private static func track(of roam: RoamPhase, on perch: Perch) -> SpriteTrack? {
