@@ -30,9 +30,20 @@ struct OriginalCreatureProvider: CreatureProvider {
         109: Design(name: "Maelstride", stage: 3, crest: .fin, body: (0.18, 0.40, 0.78), evolvesTo: nil, evolvesAtLevel: nil),
         110: Design(name: "Zapling", stage: 1, crest: .bolt, body: (0.99, 0.85, 0.30), evolvesTo: 111, evolvesAtLevel: 22),
         111: Design(name: "Stormling", stage: 2, crest: .bolt, body: (0.95, 0.72, 0.18), evolvesTo: nil, evolvesAtLevel: nil),
+        112: Design(name: "Duskit", stage: 1, crest: .bolt, body: (0.62, 0.48, 0.86), evolvesTo: 113, evolvesAtLevel: 20),
+        113: Design(name: "Gloamer", stage: 2, crest: .bolt, body: (0.48, 0.34, 0.74), evolvesTo: nil, evolvesAtLevel: nil),
+        114: Design(name: "Mossel", stage: 1, crest: .leaf, body: (0.62, 0.72, 0.32), evolvesTo: 115, evolvesAtLevel: 24),
+        115: Design(name: "Bramblot", stage: 2, crest: .leaf, body: (0.46, 0.58, 0.22), evolvesTo: nil, evolvesAtLevel: nil),
+        116: Design(name: "Coralyn", stage: 1, crest: .fin, body: (0.98, 0.56, 0.64), evolvesTo: 117, evolvesAtLevel: 22),
+        117: Design(name: "Reefmaw", stage: 2, crest: .fin, body: (0.88, 0.40, 0.50), evolvesTo: nil, evolvesAtLevel: nil),
     ]
 
     let starterIDs = [101, 104, 107, 110]
+    let unlockTiers = [[101, 104, 107, 110], [112, 114, 116]]
+
+    func speciesIndex() async throws -> [SpeciesEntry] {
+        Self.roster.keys.sorted().compactMap { id in Self.roster[id].map { SpeciesEntry(id: id, name: $0.name) } }
+    }
 
     func species(id: Int) async throws -> Species {
         guard let design = Self.roster[id] else { throw CreatureError.unknownSpecies }

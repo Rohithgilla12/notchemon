@@ -45,6 +45,11 @@ enum Fixtures {
         """.utf8)
     }
 
+    static func speciesIndexJSON(_ entries: [(id: Int, name: String)]) -> Data {
+        let results: [String] = entries.map { #"{"name": "\#($0.name)", "url": "https://pokeapi.co/api/v2/pokemon-species/\#($0.id)/"}"# }
+        return Data(#"{"count": \#(entries.count), "results": [\#(results.joined(separator: ", "))]}"#.utf8)
+    }
+
     /// testmon (901) -> levels into testmid (902) at 18 -> stone-only into testmax (903).
     static let chainJSON = Data("""
     {"id": 90, "chain": {

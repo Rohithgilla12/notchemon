@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - A Stats submenu in the menu-bar menu: distance walked at the creature's own scale and in real millimetres on screen, hops, naps, Dock trips, focus sessions and minutes, evolutions, and days together. Stats are folded from events emitted when a walk, hop, nap, focus session, or evolution ends, so nothing runs between them. Events are logged at debug level under category `stats`.
 - A collection of partners. Each creature you choose keeps its own stage, level, and XP, and **Partners…** in the menu-bar menu shows them all with their levels. Switching sends another partner out without resetting anyone. Starters you do not have yet can join at level 5. Focus XP goes to the partner that is out, evolution applies per partner, and distance is also tallied per partner.
+- Unlocks. Later generations' starters become available in tiers, opened by focus minutes or creature-scale kilometres, whichever comes first. The open panel shows **New partners available** when a tier opens, and the Partners picker says what opens the next one. Unlocks are derived from the stats and never stored.
+- Developer access. Debug builds treat every species as available and add a Developer submenu with Unlock All, Add 1 km, Add 1 Focus Hour, and Reset Collection…. Release builds honour `defaults write com.rohithgilla.Notchemon NotchemonUnlockAll -bool YES`. With the override on, the Partners picker searches every species the provider can show, by name or number.
+- Three more original creature families, which form the original provider's second tier.
 - Species now carry their real height, which sets the creature-scale distance. PokéAPI gives it per species; the original creatures have their own.
 
 ### Changed

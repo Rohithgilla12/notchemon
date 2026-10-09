@@ -67,6 +67,18 @@ struct MenuBarContent: View {
             Button("Clear Stash") { model.clearStash(animated: false) }
                 .disabled(model.snapshot.stash.isEmpty)
         }
+        if UnlockOverride.isDeveloperBuild(bundleIdentifier: Bundle.main.bundleIdentifier) {
+            Menu("Developer") {
+                // A closure, not the method itself: CI's Swift 6.2 crashes emitting the thunk for a main-actor method reference here.
+                Toggle("Unlock All", isOn: Binding(get: { model.snapshot.unlocks.override }, set: { app.setUnlockAll($0) }))
+                Button("Add 1 km", action: model.addCreatureKilometre)
+                    .disabled(model.activeSpecies == nil)
+                Button("Add 1 Focus Hour", action: model.addFocusHour)
+                    .disabled(model.activeSpecies == nil)
+                Divider()
+                Button("Reset Collection…", action: app.confirmResetCollection)
+            }
+        }
         Divider()
         AppMenuSection()
         Divider()

@@ -24,6 +24,20 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **Click to Open.** Turn on Click to Open in the menu bar menu, and the notch opens on a click instead of on hover. It stays open wherever the cursor goes. A click on the notch or on empty panel space closes it, and so does ⌃⌥N. Clicks on the panel's controls never close it.
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger. The Focus Sound menu plays a chime, a fanfare, or a ping when a session completes, and is off by default.
 - **Collection.** Every creature you choose joins your collection and keeps its own stage, level, and XP. Choose **Partners…** in the menu bar to open the notch on your partners, each with its level. Click one to send it out instead. The starters you do not have yet are listed after them; clicking one adds it at level 5. Focus XP goes to the partner that is out, and each partner evolves on its own. Hover a partner to see how far it has walked at its own scale. Stats stay shared across the collection.
+- **Unlocks.** More species become available as you focus and as your creature walks. Tier 0 is the four starters. Each later tier is the three starters of a later generation, in their first stage. A tier opens at a focus total or a creature-scale walking total, whichever you reach first. The open panel then shows **New partners available**, and the picker lists the new species. An open tier only makes its species available. You still add them one at a time, each at level 5. The picker's last line says what opens the next tier.
+
+  | Tier | Focus minutes | Or creature-scale km |
+  | --- | --- | --- |
+  | 1 | 250 | 15 |
+  | 2 | 600 | 35 |
+  | 3 | 1,200 | 70 |
+  | 4 | 2,000 | 120 |
+  | 5 | 3,000 | 180 |
+  | 6 | 4,200 | 250 |
+  | 7 | 5,600 | 340 |
+  | 8 | 7,200 | 440 |
+
+  Unlocks are worked out from the stats each time and never stored, so nothing can fall out of step with them.
 - **Stats.** The menu bar's Stats submenu keeps a tally of your time together: how far the creature has walked, its hops and naps, its trips to the Dock, your focus sessions and minutes, its evolutions, and how many days you have been together. Distance reads two ways. **Creature-scale** treats one body height on screen as the species' real height, so a 0.4 m creature drawn 40 pt tall covers 1 cm per point. **On screen** is how far the sprite really moved across the glass, from the display's physical size. Stats count only when something ends, such as a walk, a hop to the Dock, or a nap, so they cost nothing between. Each counted event is logged at debug level under category `stats`:
 
   ```sh
@@ -119,6 +133,8 @@ Debug builds are signed ad hoc, so they need no certificate. They are a separate
 | `NotchemonDebugSleepSeconds` | Puts the creature to sleep after this many seconds without input, instead of 10 minutes. |
 | `NotchemonCreatureProvider` | Set to `original` to use the built-in procedural creatures instead of PokéAPI. See [docs/takedown.md](docs/takedown.md). |
 
+| `NotchemonUnlockAll` | Set to `YES` to make every species available: every tier opens, and the Partners picker gets a search field that finds any species by name or number. Set to `NO` in a Debug build to see the real unlock flow. |
+
 A Debug build reads the `com.rohithgilla.Notchemon.debug` domain. Use `com.rohithgilla.Notchemon` for the installed release build.
 
 ```sh
@@ -130,6 +146,24 @@ defaults delete com.rohithgilla.Notchemon.debug NotchemonDebugSleepSeconds
 ```
 
 The first time a version with the collection loads a state saved before it, it copies that file to `state.v1.backup.json` beside it, once, before saving anything in the new format.
+
+### Developer access
+
+Debug builds start with every species available and add a **Developer** submenu to the menu-bar menu:
+
+- **Unlock All** turns the override on or off. It writes `NotchemonUnlockAll` in the Debug domain.
+- **Add 1 km** folds a walk of one kilometre at the current partner's scale into the stats.
+- **Add 1 Focus Hour** folds a 60-minute focus session into the stats. It gives no XP.
+- **Reset Collection…** removes every partner after a confirmation and keeps the stats.
+
+A release build honours the same override from Terminal:
+
+```sh
+defaults write com.rohithgilla.Notchemon NotchemonUnlockAll -bool YES
+defaults delete com.rohithgilla.Notchemon NotchemonUnlockAll
+```
+
+With the override on, type a name or a number in the Partners search field, for example `658`, and click the result to add it at level 5. A later stage joins as itself, and its family counts as one partner.
 
 To start fresh, quit the app and delete `~/Library/Application Support/Notchemon Debug/` for a Debug build, or `~/Library/Application Support/Notchemon/` for the installed one.
 

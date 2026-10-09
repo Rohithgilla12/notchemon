@@ -31,33 +31,74 @@ struct StarterPickerView: View {
 }
 
 /// The collection in one row: partners first, the one that is out
-/// highlighted, then species that could join at the starting level.
+/// highlighted, then species that could join at the starting level. With
+/// the unlock override on, a search reaches every species.
 struct PartnersView: View {
     let model: CompanionModel
+    @State private var query: String
+
+    init(model: CompanionModel, query: String = "") {
+        self.model = model
+        _query = State(initialValue: query)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("Partners").font(.system(size: 12, weight: .semibold))
-                Spacer()
+                if model.snapshot.unlocks.override {
+                    TextField("Any species by name or number", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 6))
+                } else {
+                    Spacer()
+                }
                 Button("Done") { model.showsPartners = false }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.7))
             }
-            if model.partnerOptions.isEmpty {
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            let shown = query.isEmpty ? model.partnerOptions : model.searchResults
+            if shown.isEmpty {
+                Group {
+                    if query.isEmpty {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("No species matches.").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(model.partnerOptions) { option in
+                        ForEach(shown) { option in
                             PartnerCard(option: option, caption: caption(option), highlighted: isOut(option)) { model.choose(option) }
                                 .help(help(option))
                         }
                     }
                 }
             }
+            if let next = model.snapshot.unlocks.next {
+                Text(Self.nextLine(next, stats: model.snapshot.stats))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
         }
+        .task(id: query) {
+            // Waits out a burst of typing before asking the provider.
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await model.search(query)
+        }
+    }
+
+    static func nextLine(_ next: UnlockThreshold, stats: Stats) -> String {
+        let walked = StatsSummary.metres(stats.creatureMetres)
+        let goal = StatsSummary.metres(next.creatureKilometres * 1000)
+        return "More partners at \(next.focusMinutes) focus min or \(goal) walked. So far \(stats.focusMinutes) min, \(walked)."
     }
 
     private func isOut(_ option: PartnerOption) -> Bool {
@@ -66,7 +107,8 @@ struct PartnersView: View {
 
     private func caption(_ option: PartnerOption) -> String {
         guard let partner = option.partner else { return "New · Lv \(XPRules.startingLevel)" }
-        return "Lv \(partner.progress.level)"
+        // A search can find another stage of a family already here.
+        return partner.progress.speciesId == option.species.id ? "Lv \(partner.progress.level)" : "Family at Lv \(partner.progress.level)"
     }
 
     private func help(_ option: PartnerOption) -> String {

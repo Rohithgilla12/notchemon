@@ -6,6 +6,20 @@ import Foundation
 /// lands in the user's cache directory.
 struct PokeAPICreatureProvider: CreatureProvider {
     let starterIDs = [1, 4, 7, 25]
+    /// Today's starters, then each later generation's three starters in their first stage.
+    let unlockTiers: [[Int]] = [
+        [1, 4, 7, 25],
+        [152, 155, 158],
+        [252, 255, 258],
+        [387, 390, 393],
+        [495, 498, 501],
+        [650, 653, 656],
+        [722, 725, 728],
+        [810, 813, 816],
+        [906, 909, 912],
+    ]
+    /// More than PokeAPI lists, so one page holds them all.
+    static let indexLimit = 2_000
     let cache: DiskCache
     let fetcher: any DataFetcher
     let spriteCollab: SpriteCollabClient
@@ -24,6 +38,13 @@ struct PokeAPICreatureProvider: CreatureProvider {
         // Height is a nicety for stats; a species still loads without it.
         let height = try? PokeAPIParser.heightMetres(try await load(baseURL.appendingPathComponent("pokemon/\(id)/")))
         return try PokeAPIParser.species(dto, chainJSON: chainJSON, heightMetres: height)
+    }
+
+    func speciesIndex() async throws -> [SpeciesEntry] {
+        var components = URLComponents(url: baseURL.appendingPathComponent("pokemon-species/"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "limit", value: String(Self.indexLimit))]
+        guard let url = components?.url else { return [] }
+        return try PokeAPIParser.speciesIndex(try await cache.data(for: url, using: fetcher))
     }
 
     /// SpriteCollab has a sheet per anim and facing. Species or anims it lacks

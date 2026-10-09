@@ -143,8 +143,11 @@ enum StatsSummary {
     }
 
     static func metres(_ metres: Double) -> String {
-        if metres >= 1000 { return String(format: "%.1f km", metres / 1000) }
-        if metres >= 1 { return "\(Int(metres)) m" }
+        if metres >= 1000 {
+            let kilometres: String = String(format: "%.1f", metres / 1000)
+            return (kilometres.hasSuffix(".0") ? String(kilometres.dropLast(2)) : kilometres) + " km"
+        }
+        if metres >= 1 || metres <= 0 { return "\(Int(metres)) m" }
         return "\(Int(metres * 100)) cm"
     }
 

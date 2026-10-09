@@ -14,16 +14,17 @@ struct PanelRenderTests {
     let directory = Fixtures.temporaryDirectory()
 
     /// A collection of two partners, the second out, with the other starters to add.
-    func model() async throws -> CompanionModel {
+    func model(unlockAll: Bool = false, evolve: Bool = true) async throws -> CompanionModel {
         let engine = CreatureEngine(
             provider: OriginalCreatureProvider(),
             store: StateStore(url: directory.appendingPathComponent("state.json")),
             notesURL: directory.appendingPathComponent("notes.md"),
-            idleSeconds: { 0 }
+            idleSeconds: { 0 },
+            unlockAll: { unlockAll }
         )
         await engine.start()
         await engine.adopt(101)
-        await engine.award(5_000)
+        if evolve { await engine.award(5_000) }
         await engine.adopt(104)
         let model = CompanionModel(engine: engine)
         Task { await model.run() }
@@ -40,16 +41,37 @@ struct PanelRenderTests {
         try render(PartnersView(model: model), to: folder.appendingPathComponent("partners.png"))
     }
 
-    func render(_ view: some View, size: CGSize = CGSize(width: 408, height: 156), to url: URL) throws {
+    @Test func rendersTheDeveloperSearch() async throws {
+        let folder = try #require(panelRenderFolder)
+        let model = try await model(unlockAll: true)
+        await model.search("o")
+        try render(PartnersView(model: model, query: "o"), to: folder.appendingPathComponent("partners-search.png"))
+        try render(PartnersView(model: model), to: folder.appendingPathComponent("partners-unlocked.png"))
+    }
+
+    @Test func rendersTheNewPartnersBanner() async throws {
+        let folder = try #require(panelRenderFolder)
+        let model = try await model(evolve: false)
+        model.newPartnersWaiting = true
+        let screen = ScreenMetrics(frame: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 32, auxiliaryTopLeftWidth: 656, auxiliaryTopRightWidth: 656)
+        let layout = try #require(NotchGeometry.layout(for: screen, virtualNotchEnabled: true, wander: .off))
+        let metrics = PanelMetrics(layout: layout)
+        let panel = ExpandedView(model: model, presentation: NotchPresentation(), metrics: metrics)
+            .frame(width: metrics.panelSize.width, height: metrics.panelSize.height)
+        try render(panel, size: metrics.panelSize, padding: 0, to: folder.appendingPathComponent("new-partners-banner.png"))
+    }
+
+    func render(_ view: some View, size: CGSize = CGSize(width: 408, height: 156), padding: CGFloat = 16, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let outer = CGSize(width: size.width + 2 * padding, height: size.height + 2 * padding)
         let framed = view
-            .padding(16)
-            .frame(width: size.width + 32, height: size.height + 32, alignment: .topLeading)
+            .padding(padding)
+            .frame(width: outer.width, height: outer.height, alignment: .topLeading)
             .background(.black)
             .foregroundStyle(.white)
             .environment(\.colorScheme, .dark)
         let hosting = NSHostingView(rootView: framed)
-        hosting.frame = CGRect(origin: .zero, size: CGSize(width: size.width + 32, height: size.height + 32))
+        hosting.frame = CGRect(origin: .zero, size: outer)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: true)
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = hosting
