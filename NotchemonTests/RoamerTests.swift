@@ -7,7 +7,7 @@ struct RoamerTests {
     let range: ClosedRange<Double> = -800...800
 
     @Test func anUpdateFromInsideANotificationLandsAndTheOuterOneSeesItsResult() {
-        let roamer = Roamer()
+        let roamer = Roamer(partner: 1, seed: 1)
         var seen: [RoamPhase] = []
         var afterNested: RoamPhase?
         roamer.onLookAgain = {

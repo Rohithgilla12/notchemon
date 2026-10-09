@@ -109,8 +109,8 @@ private struct ToolsColumn: View {
                 }
             StashRow(model: model)
             SystemStatsView()
-            if let attribution = model.snapshot.sprite?.loop.attribution {
-                SpriteCreditLine(attribution: attribution)
+            if let credits = SpriteCredits(model.snapshot.drawnCreatures) {
+                SpriteCreditLine(credits: credits)
             }
         }
         .task(id: presentation.noteFocusRequested) {
@@ -185,29 +185,35 @@ private struct StashRow: View {
     }
 }
 
-/// Licences like CC BY-NC require attribution wherever the sprite is shown.
+/// Licences like CC BY-NC require attribution wherever a sprite is shown, so
+/// the line credits every creature drawn, not only the leader.
 private struct SpriteCreditLine: View {
-    let attribution: Attribution
+    let credits: SpriteCredits
 
     var body: some View {
-        let names = attribution.authors.joined(separator: ", ")
-        let terms = "\(attribution.source) (\(attribution.license))"
         Button {
-            NSWorkspace.shared.open(attribution.url)
+            for source in credits.sources {
+                NSWorkspace.shared.open(source.url)
+            }
         } label: {
             HStack(spacing: 0) {
-                if names.isEmpty {
-                    Text("Sprite from \(terms)").fixedSize()
-                } else {
-                    Text("Sprite by \(names)").lineLimit(1).truncationMode(.tail)
-                    Text(" · \(terms)").fixedSize()
+                ForEach(Array(credits.sources.enumerated()), id: \.offset) { (index: Int, source: SpriteCredits.Source) in
+                    if index > 0 {
+                        Text("; ").fixedSize()
+                    }
+                    if let byline = source.byline {
+                        Text(byline).lineLimit(1).truncationMode(.tail)
+                        Text(" · \(source.terms)").fixedSize()
+                    } else {
+                        Text(source.line).fixedSize()
+                    }
                 }
             }
             .font(.system(size: 9))
             .foregroundStyle(.white.opacity(0.4))
         }
         .buttonStyle(.plain)
-        .help(names.isEmpty ? "Opens the \(attribution.source) project page." : "Sprite by \(names). Opens the \(attribution.source) project page.")
+        .help(credits.fullList)
     }
 }
 

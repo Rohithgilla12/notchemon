@@ -153,6 +153,11 @@ final class CompanionModel {
         }
     }
 
+    /// Returns `.partyFull` when the leader already has every follower it can.
+    func setWalking(_ root: Int, _ walking: Bool) async -> WalkingChange {
+        await engine.setWalking(root, walking)
+    }
+
     func record(_ event: CompanionEvent, screenMillimetresPerPoint: Double) {
         Task { await engine.record(event, screenMillimetresPerPoint: screenMillimetresPerPoint) }
     }

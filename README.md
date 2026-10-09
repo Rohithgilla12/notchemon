@@ -24,6 +24,16 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **Click to Open.** Turn on Click to Open in the menu bar menu, and the notch opens on a click instead of on hover. It stays open wherever the cursor goes. A click on the notch or on empty panel space closes it, and so does ⌃⌥N. Clicks on the panel's controls never close it.
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger. The Focus Sound menu plays a chime, a fanfare, or a ping when a session completes, and is off by default.
 - **Collection.** Every creature you choose joins your collection and keeps its own stage, level, and XP. Choose **Partners…** in the menu bar to open the notch on your partners, each with its level. Click one to send it out instead. The starters you do not have yet are listed after them; clicking one adds it at level 5. Focus XP goes to the partner that is out, and each partner evolves on its own. Hover a partner to see how far it has walked at its own scale. Stats stay shared across the collection.
+- **Walking party.** Up to two more partners can walk along with the one that is out. In **Partners…**, tick **Walking** under a partner to bring it along. The partner that is out shows **Leading** and always walks. With two already walking, ticking a third is refused with a hint to stop one first. The choice is saved with the collection.
+  - Each walker wanders the top edge and the Dock on its own, with its own rests, walks, and hops between perches. When a walker picks where to go next, it keeps at least 60 pt from where the others stand and are heading. If no spot is clear, it rests where it is.
+  - The leader behaves as a lone creature does. It is the one in the open panel, it earns the focus XP, and it is the one that goes home for the open panel, a focus session, or a cursor at the notch.
+  - Followers keep wandering while the panel is open or a session runs, and they never take the leader's place under the notch. Each faces the cursor and hops at it from its own spot.
+  - Everyone falls asleep together where they stand. Everyone leaves full screen, and the Dock when it goes, as the leader does. Wander set to **Off** keeps the followers in. A wild creature keeps clear of every walker, and every walker stops to watch it.
+  - Each walker's distance, hops, and Dock trips add to the shared stats and to its own distance, measured at its own height. Each walker's moves are logged at debug level under category `roam`:
+
+  ```sh
+  log stream --debug --predicate 'subsystem == "com.rohithgilla.Notchemon" && category == "roam"'
+  ```
 - **Unlocks.** More species become available as you focus and as your creature walks. Tier 0 is the four starters. Each later tier is the three starters of a later generation, in their first stage. A tier opens at a focus total or a creature-scale walking total, whichever you reach first. The open panel then shows **New partners available**, and the picker lists the new species. An open tier only makes its species available. You still add them one at a time, each at level 5. The picker's last line says what opens the next tier.
 
   | Tier | Focus minutes | Or creature-scale km |
@@ -191,7 +201,7 @@ Releases are Developer ID signed, notarised, and published on GitHub Releases on
 
 ## Credits
 
-- **Sprites.** Creature sprites come from [SpriteCollab](https://github.com/PMDCollab/SpriteCollab), a community project in which many artists draw sprites in the style of the Mystery Dungeon games. The sprites are licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The expanded notch names the artists of the sprite on screen, as the licence requires. The app downloads sprites at runtime and never bundles them.
+- **Sprites.** Creature sprites come from [SpriteCollab](https://github.com/PMDCollab/SpriteCollab), a community project in which many artists draw sprites in the style of the Mystery Dungeon games. The sprites are licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The expanded notch names the artists of the leader, its walking followers, and any wild visitor on screen, as the licence requires. The app downloads sprites at runtime and never bundles them.
 - **Species data and fallback art.** Names, evolution data, portraits, and fallback sprites come from [PokéAPI](https://pokeapi.co), also fetched at runtime.
 
 ## License

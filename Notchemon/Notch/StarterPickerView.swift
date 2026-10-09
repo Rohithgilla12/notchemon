@@ -31,15 +31,20 @@ struct StarterPickerView: View {
 }
 
 /// The collection in one row: partners first, the one that is out
-/// highlighted, then species that could join at the starting level. With
-/// the unlock override on, a search reaches every species.
+/// highlighted, then species that could join at the starting level. Each
+/// partner can walk along with the one that is out. With the unlock
+/// override on, a search reaches every species.
 struct PartnersView: View {
+    static let partyFullHint = "Two partners can walk with the leader. Stop one first."
+
     let model: CompanionModel
     @State private var query: String
+    @State private var hint: String?
 
-    init(model: CompanionModel, query: String = "") {
+    init(model: CompanionModel, query: String = "", hint: String? = nil) {
         self.model = model
         _query = State(initialValue: query)
+        _hint = State(initialValue: hint)
     }
 
     var body: some View {
@@ -75,13 +80,22 @@ struct PartnersView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(shown) { option in
-                            PartnerCard(option: option, caption: caption(option), highlighted: isOut(option)) { model.choose(option) }
-                                .help(help(option))
+                            VStack(spacing: 4) {
+                                PartnerCard(option: option, caption: caption(option), highlighted: isOut(option)) { model.choose(option) }
+                                    .help(help(option))
+                                // A closure, not the method: CI's Swift 6.2 crashes emitting a main-actor method reference's thunk.
+                                WalkingToggle(model: model, option: option) { showPartyFull() }
+                            }
+                            .frame(maxHeight: .infinity, alignment: .top)
                         }
                     }
                 }
             }
-            if let next = model.snapshot.unlocks.next {
+            if let hint {
+                Text(hint)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.orange)
+            } else if let next = model.snapshot.unlocks.next {
                 Text(Self.nextLine(next, stats: model.snapshot.stats))
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.5))
@@ -101,6 +115,14 @@ struct PartnersView: View {
         return "More partners at \(next.focusMinutes) focus min or \(goal) walked. So far \(stats.focusMinutes) min, \(walked)."
     }
 
+    private func showPartyFull() {
+        hint = Self.partyFullHint
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if hint == Self.partyFullHint { hint = nil }
+        }
+    }
+
     private func isOut(_ option: PartnerOption) -> Bool {
         option.partner != nil && option.species.id == model.activeSpecies?.id
     }
@@ -114,6 +136,45 @@ struct PartnersView: View {
     private func help(_ option: PartnerOption) -> String {
         guard let partner = option.partner else { return "Add to your collection at level \(XPRules.startingLevel)" }
         return "Walked \(StatsSummary.metres(partner.creatureMetres)) at its own scale"
+    }
+}
+
+/// Under a partner's own card, not another stage of its family a search
+/// found. The one that is out always walks.
+private struct WalkingToggle: View {
+    let model: CompanionModel
+    let option: PartnerOption
+    /// Called when the party is already full.
+    let refused: () -> Void
+
+    var body: some View {
+        if let partner = option.partner, partner.progress.speciesId == option.species.id {
+            if partner.root == model.snapshot.leader {
+                Label("Leading", systemImage: "figure.walk")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.green.opacity(0.9))
+                    .frame(height: 14)
+                    .help("The partner that is out always walks.")
+            } else {
+                Toggle("Walking", isOn: walking(partner.root))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.mini)
+                    .font(.system(size: 9, weight: .medium))
+                    .frame(height: 14)
+                    .help("Walk along the top edge and the Dock with the partner that is out.")
+            }
+        }
+    }
+
+    private func walking(_ root: Int) -> Binding<Bool> {
+        Binding(
+            get: { model.snapshot.followerRoots.contains(root) },
+            set: { (walking: Bool) in
+                Task {
+                    if await model.setWalking(root, walking) == .partyFull { refused() }
+                }
+            }
+        )
     }
 }
 

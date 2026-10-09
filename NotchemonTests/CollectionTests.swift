@@ -45,6 +45,79 @@ struct PartnerCollectionTests {
         #expect(collection.active == 25)
     }
 
+    func fourPartners() -> PartnerCollection {
+        var collection = PartnerCollection(only: .starter(25))
+        for root in [1, 4, 7] {
+            collection.add(Partner(root: root, progress: .starter(root)))
+        }
+        return collection
+    }
+
+    @Test func upToTwoPartnersWalkWithTheLeaderAndAThirdIsRefused() {
+        var collection = fourPartners()
+        #expect(collection.setWalking(1, true) == .changed)
+        #expect(collection.setWalking(4, true) == .changed)
+        #expect(collection.setWalking(7, true) == .partyFull)
+        #expect(collection.followers == [1, 4])
+        #expect(collection.party == [25, 1, 4])
+        #expect(collection.setWalking(1, false) == .changed)
+        #expect(collection.setWalking(7, true) == .changed)
+        #expect(collection.followers == [4, 7])
+    }
+
+    @Test func theLeaderAndStrangersCannotBeToggled() {
+        var collection = fourPartners()
+        #expect(collection.setWalking(25, false) == .unchanged)
+        #expect(collection.setWalking(25, true) == .unchanged)
+        #expect(collection.setWalking(99, true) == .unchanged)
+        #expect(collection.setWalking(1, false) == .unchanged)
+        #expect(collection.party == [25])
+    }
+
+    @Test func sendingOutAFollowerSwapsItWithTheLeader() {
+        var collection = fourPartners()
+        _ = collection.setWalking(1, true)
+        _ = collection.setWalking(4, true)
+        collection.activate(4)
+        #expect(collection.party == [4, 1, 25])
+        collection.activate(7)
+        #expect(collection.party == [7, 1, 25])
+    }
+
+    @Test func followersFollowARekeyAndNeverDuplicateTheLeader() {
+        var collection = fourPartners()
+        _ = collection.setWalking(1, true)
+        collection.rekey(1, to: 2)
+        #expect(collection.followers == [2])
+        collection.rekey(2, to: 25)
+        #expect(collection.followers.isEmpty)
+        #expect(collection.active == 25)
+    }
+
+    @Test func followersRoundTripAndAFileWithoutThemHasNone() throws {
+        var collection = fourPartners()
+        _ = collection.setWalking(7, true)
+        _ = collection.setWalking(1, true)
+        let saved = try JSONEncoder().encode(collection)
+        #expect(try JSONDecoder().decode(PartnerCollection.self, from: saved).followers == [7, 1])
+        let old = #"{"partners":[{"root":1,"progress":{"speciesId":1,"level":8}}],"active":1}"#
+        #expect(try JSONDecoder().decode(PartnerCollection.self, from: Data(old.utf8)).followers.isEmpty)
+    }
+
+    @Test func savedFollowersThatCannotWalkAreDropped() throws {
+        let json = """
+        {"partners":[{"root":1,"progress":{"speciesId":1}},{"root":4,"progress":{"speciesId":4}},
+         {"root":7,"progress":{"speciesId":7}},{"root":9,"progress":{"speciesId":9}}],
+         "active":1,"followers":[1,42,4,4,7,9]}
+        """
+        let collection = try JSONDecoder().decode(PartnerCollection.self, from: Data(json.utf8))
+        #expect(collection.followers == [4, 7])
+        let garbled = #"{"partners":[{"root":1,"progress":{"speciesId":1}}],"active":1,"followers":"lots"}"#
+        let kept = try JSONDecoder().decode(PartnerCollection.self, from: Data(garbled.utf8))
+        #expect(kept.followers.isEmpty)
+        #expect(kept.active == 1)
+    }
+
     @Test func anUnreadablePartnerIsDroppedAndTheRestKept() throws {
         let json = #"{"partners":[{"root":1,"progress":{"speciesId":1,"level":8}},{"root":4},{"root":1,"progress":{"speciesId":2}}],"active":4}"#
         let collection = try JSONDecoder().decode(PartnerCollection.self, from: Data(json.utf8))
@@ -202,9 +275,9 @@ struct EngineCollectionTests {
 
     @Test func distanceIsTalliedForThePartnerThatWalkedIt() async {
         let engine = await twoPartners()
-        await engine.record(.walked(points: 80, perch: .topEdge))
+        await engine.record(.walked(points: 80, perch: .topEdge, partner: 904))
         await engine.switchPartner(to: 901)
-        await engine.record(.walked(points: 40, perch: .dock))
+        await engine.record(.walked(points: 40, perch: .dock, partner: 901))
         let collection = store.load().collection
         let metresPerPoint = Distance.creatureMetresPerPoint(heightMetres: nil)
         #expect(abs((collection.partner(904)?.creatureMetres ?? 0) - 80 * metresPerPoint) < 1e-9)

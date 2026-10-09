@@ -77,14 +77,18 @@ final class DockPanel: NSPanel {
 
 struct DockRootView: View {
     let model: CompanionModel
-    let roamer: Roamer
+    let party: Party
     let wild: WildWalker
     let dock: DockWatcher
 
     var body: some View {
         ZStack {
+            ForEach(model.snapshot.followers, id: \.root) { (follower: Follower) in
+                FollowerSprite(follower: follower, party: party, snapshot: model.snapshot, perch: .dock, ground: dock.shelf?.step)
+                    .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
+            }
             if model.activeSpecies != nil,
-               let pose = SpritePose(model.snapshot, roam: roamer.phase, on: .dock, expanded: false, ground: dock.shelf?.step) {
+               let pose = SpritePose(model.snapshot, roam: party.leaderRoamer?.phase ?? .home, on: .dock, expanded: false, ground: dock.shelf?.step) {
                 SpriteView(pose: pose)
                     .frame(width: DockShelf.spriteSide, height: DockShelf.spriteSide)
             }

@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let debugSleepSecondsKey = "NotchemonDebugSleepSeconds"
 
     let presentation = NotchPresentation()
-    let roamer = Roamer()
+    let party = Party()
     let wild = WildWalker()
     let dockWatcher = DockWatcher()
     let model: CompanionModel
@@ -73,10 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             virtualNotchEnabled: model.snapshot.preferences.virtualNotchEnabled,
             wander: model.snapshot.preferences.wander,
             clickToOpen: model.snapshot.preferences.clickToOpen,
-            content: NotchRootView(presentation: presentation, model: model, roamer: roamer, wild: wild)
+            content: NotchRootView(presentation: presentation, model: model, party: party, wild: wild)
         )
         windowController = controller
-        dockController = DockWindowController(content: DockRootView(model: model, roamer: roamer, wild: wild, dock: dockWatcher))
+        dockController = DockWindowController(content: DockRootView(model: model, party: party, wild: wild, dock: dockWatcher))
         controller.onCursorMoved = { [weak self] point in self?.cursorMoved(to: point) }
         controller.wildBox = { [weak self] in self?.wildBox(on: .topEdge) }
         wild.onChange = { [weak self] in
@@ -101,20 +101,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the creature, not the cursor, so it looks again from where it is.
         // On or bound for the Dock, the Dock may have changed size since the
         // last read, so it is read again here rather than polled.
-        roamer.onLookAgain = { [weak self] in
+        party.onLookAgain = { [weak self] roamer in
             guard let self else { return }
             if roamer.phase.touches(.dock) { dockWatcher.refresh() }
             refreshExtent()
             showDock()
             cursorMoved(to: NSEvent.mouseLocation)
         }
-        roamer.onEvent = { [weak self] event in self?.record(event) }
+        party.onEvent = { [weak self] event in self?.record(event) }
         dockWatcher.onChange = { [weak self] in
             guard let self else { return }
             showDock()
             cursorMoved(to: NSEvent.mouseLocation)
         }
         model.onSnapshot = { [weak self] in
+            self?.syncParty()
             self?.refreshRoam()
             self?.syncWild()
         }
@@ -172,14 +173,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showDock() {
-        let there = roamer.phase.touches(.dock) || wild.visit?.perch == .dock
+        let there = party.all.contains { $0.phase.touches(.dock) } || wild.visit?.perch == .dock
         dockController?.show(on: dockWatcher.shelf, creatureThere: there)
     }
 
-    /// The notch window stays wide enough for the partner and any visitor on the top edge.
+    /// The notch window stays wide enough for the whole party and any visitor on the top edge.
     private func refreshExtent() {
         let visitor = wild.visit.map { $0.perch == .topEdge ? $0.farthest : 0 } ?? 0
-        windowController?.setCreatureExtent(max(roamer.phase.farthestAlongTopEdge, visitor))
+        let members: Double = party.all.map(\.phase.farthestAlongTopEdge).max() ?? 0
+        windowController?.setCreatureExtent(max(members, visitor))
+    }
+
+    /// One roamer per member whose frames have loaded; none before a starter is chosen.
+    private func syncParty() {
+        let snapshot = model.snapshot
+        let followers: [Int] = snapshot.leader == nil ? [] : snapshot.followers.map(\.root)
+        party.sync(leader: snapshot.leader, followers: followers)
     }
 
     /// Follows the engine: a new visitor gets a path, a caught one its
@@ -196,16 +205,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The Dock when the creature may walk it and the partner is not on
-    /// it, else the top edge, in the widest stretch clear of the partner
+    /// The Dock when the creature may walk it and no party member is on
+    /// it, else the top edge, in the widest stretch clear of every member
     /// and of home.
     private func beginWild(_ encounter: Encounter) {
         let now = Date()
-        let partner = roamer.phase.heldSpot(at: now)
+        let members: [RoamSpot] = party.all.map { $0.phase.heldSpot(at: now) }
         let dock = model.snapshot.preferences.wander.includesDock ? dockWatcher.shelf?.range : nil
-        let perch: Perch = dock != nil && partner.perch != .dock ? .dock : .topEdge
+        let perch: Perch = dock != nil && !members.contains { $0.perch == .dock } ? .dock : .topEdge
         var range: ClosedRange<Double>?
-        var avoiding: [Double] = partner.perch == perch ? [partner.x] : []
+        var avoiding: [Double] = members.filter { $0.perch == perch }.map(\.x)
         if perch == .dock {
             range = dock
         } else if let screen = NSScreen.notchHost {
@@ -263,25 +272,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// Offsets are measured from where the creature is now, mid-walk and on
+    /// Offsets are measured from where each creature is now, mid-walk and on
     /// the Dock too, so it faces and hops at the cursor from its own spot. A
-    /// cursor near home calls it running back to greet it.
+    /// cursor near home calls the leader running back to greet it.
     private func cursorMoved(to point: CGPoint) {
         dockWatcher.cursorMoved(to: point)
         dockController?.setTakesClicks(wildBox(on: .dock)?.contains(point) == true)
         scheduleHitRefresh(for: point)
         guard let layout = presentation.layout, let metrics = presentation.metrics else {
-            roamer.watch(nil)
+            for roamer in party.all { roamer.watch(nil) }
             refreshRoam()
             return
         }
         let home = metrics.spriteCentre(expanded: false, roamX: 0, panelFrame: layout.expanded)
         cursorNearHome = hypot(point.x - home.x, point.y - home.y) <= BehaviourRules.watchRadius
-        let perchOrigin = closedCentre(on: roamer.phase.perch, at: 0) ?? home
-        roamer.watch(CursorOffset(dx: point.x - perchOrigin.x, dy: point.y - perchOrigin.y))
+        for roamer in party.all {
+            let perchOrigin = closedCentre(on: roamer.phase.perch, at: 0) ?? home
+            roamer.watch(CursorOffset(dx: point.x - perchOrigin.x, dy: point.y - perchOrigin.y))
+        }
         refreshRoam()
+        party.cursorMoved(to: point, hopsEnabled: model.snapshot.preferences.hopsOnApproach) { spot in
+            closedCentre(on: spot.perch, at: spot.x)
+        }
         let expanded = presentation.isExpanded
-        let spot = roamer.phase.spot(at: Date())
+        let spot = (party.leaderRoamer?.phase ?? .home).spot(at: Date())
         let centre = expanded
             ? metrics.spriteCentre(expanded: true, roamX: 0, panelFrame: layout.expanded)
             : closedCentre(on: spot.perch, at: spot.x) ?? home
@@ -302,7 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func record(_ event: CompanionEvent) {
         var millimetres = 0.0
-        if case .walked(_, let perch) = event { millimetres = screenMillimetresPerPoint(on: perch) }
+        if case .walked(_, let perch, _) = event { millimetres = screenMillimetresPerPoint(on: perch) }
         model.record(event, screenMillimetresPerPoint: millimetres)
     }
 
@@ -317,22 +331,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return Distance.screenMillimetresPerPoint(physicalWidth: Double(physical.width), widthInPoints: Double(screen.frame.width))
     }
 
+    /// The leader first, so followers deciding after it see where it went.
     private func refreshRoam() {
         let snapshot = model.snapshot
-        let conditions = HomingConditions(
-            wander: snapshot.preferences.wander,
-            panelOpen: presentation.isExpanded,
-            sleeping: snapshot.behaviour == .sleeping,
-            focusing: snapshot.focus != nil,
-            fullScreen: presentation.isFullScreen,
-            cursorNearHome: cursorNearHome,
-            hasCreature: model.activeSpecies != nil,
-            perch: roamer.phase.perch,
-            visitor: snapshot.encounter != nil
-        )
         model.setFullScreen(presentation.isFullScreen)
         let reach = Double(presentation.layout?.roamReach ?? 0)
-        roamer.update(range: -reach...reach, dock: dockWatcher.shelf?.range, homing: RoamRules.homing(conditions))
+        for roamer in party.all {
+            let conditions = HomingConditions(
+                wander: snapshot.preferences.wander,
+                panelOpen: presentation.isExpanded,
+                sleeping: snapshot.behaviour == .sleeping,
+                focusing: snapshot.focus != nil,
+                fullScreen: presentation.isFullScreen,
+                cursorNearHome: cursorNearHome,
+                hasCreature: model.activeSpecies != nil,
+                perch: roamer.phase.perch,
+                visitor: snapshot.encounter != nil,
+                leads: roamer.partner == party.leader
+            )
+            roamer.update(range: -reach...reach, dock: dockWatcher.shelf?.range, homing: RoamRules.homing(conditions))
+        }
     }
 
     func showPartners() {

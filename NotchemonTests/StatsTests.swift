@@ -5,13 +5,13 @@ import Testing
 struct StatsReducerTests {
     @Test func foldsALedgerOfEveryKindOfEvent() {
         let ledger: [CompanionEvent] = [
-            .walked(points: 100, perch: .topEdge),
-            .walked(points: 40, perch: .dock),
-            .walked(points: 60, perch: .topEdge),
-            .hopped, .hopped,
+            .walked(points: 100, perch: .topEdge, partner: 1),
+            .walked(points: 40, perch: .dock, partner: 1),
+            .walked(points: 60, perch: .topEdge, partner: 4),
+            .hopped(partner: 1), .hopped(partner: 4),
             .napped,
-            .transferred(to: .dock),
-            .transferred(to: .topEdge),
+            .transferred(to: .dock, partner: 4),
+            .transferred(to: .topEdge, partner: 4),
             .focusCompleted(minutes: 25),
             .focusCompleted(minutes: 45),
             .evolved,
@@ -27,14 +27,14 @@ struct StatsReducerTests {
 
     @Test func aWalkAddsBothFunDistancesAtItsOwnScale() {
         let scale = WalkScale(creatureMetresPerPoint: 0.01, screenMillimetresPerPoint: 0.2)
-        let stats = StatsReducer.apply(.walked(points: 250, perch: .dock), to: Stats(), scale: scale)
+        let stats = StatsReducer.apply(.walked(points: 250, perch: .dock, partner: 1), to: Stats(), scale: scale)
         #expect(stats.dockPoints == 250)
         #expect(abs(stats.creatureMetres - 2.5) < 1e-9)
         #expect(abs(stats.screenMillimetres - 50) < 1e-9)
     }
 
     @Test func aBackwardWalkNeverSubtracts() {
-        let stats = StatsReducer.apply(.walked(points: -30, perch: .topEdge), to: Stats(topEdgePoints: 10))
+        let stats = StatsReducer.apply(.walked(points: -30, perch: .topEdge, partner: 1), to: Stats(topEdgePoints: 10))
         #expect(stats.topEdgePoints == 10)
     }
 
@@ -115,26 +115,32 @@ struct RoamEventTests {
     var walk: RoamWalk { RoamWalk(on: .topEdge, from: 0, to: 140, start: start, speed: 35) }
 
     @Test func aFinishedWalkCountsItsWholeLength() {
-        let events = RoamRules.events(from: .walking(walk), to: .resting(at: .topEdge(140), until: walk.end + 5), at: walk.end)
-        #expect(events == [.walked(points: 140, perch: .topEdge)])
+        let events = RoamRules.events(from: .walking(walk), to: .resting(at: .topEdge(140), until: walk.end + 5), at: walk.end, partner: 7)
+        #expect(events == [.walked(points: 140, perch: .topEdge, partner: 7)])
     }
 
     @Test func aWalkCutShortCountsOnlyTheGroundCovered() {
-        let events = RoamRules.events(from: .walking(walk), to: .home, at: start + 2)
-        #expect(events == [.walked(points: 70, perch: .topEdge)])
+        let events = RoamRules.events(from: .walking(walk), to: .home, at: start + 2, partner: 7)
+        #expect(events == [.walked(points: 70, perch: .topEdge, partner: 7)])
     }
 
     @Test func handingTheSameWalkFromReturningToWalkingCountsNothing() {
-        #expect(RoamRules.events(from: .returning(walk), to: .walking(walk), at: start + 1).isEmpty)
+        #expect(RoamRules.events(from: .returning(walk), to: .walking(walk), at: start + 1, partner: 7).isEmpty)
     }
 
     @Test func aHopToTheDockCountsOneTripAndNoWalk() {
         let hop = RoamPhase.transferring(from: .topEdge(140), to: .dock(-20), start: start)
-        #expect(RoamRules.events(from: .resting(at: .topEdge(140), until: start), to: hop, at: start) == [.transferred(to: .dock)])
+        let events = RoamRules.events(from: .resting(at: .topEdge(140), until: start), to: hop, at: start, partner: 7)
+        #expect(events == [.transferred(to: .dock, partner: 7)])
+    }
+
+    @Test func aFollowerHoppingOutOfHomeOntoTheTopEdgeMakesNoTrip() {
+        let out = RoamPhase.transferring(from: .home, to: .topEdge(300), start: start)
+        #expect(RoamRules.events(from: .home, to: out, at: start, partner: 7).isEmpty)
     }
 
     @Test func aWalkThatStartsCountsNothingYet() {
-        #expect(RoamRules.events(from: .resting(at: .home, until: start), to: .walking(walk), at: start).isEmpty)
+        #expect(RoamRules.events(from: .resting(at: .home, until: start), to: .walking(walk), at: start, partner: 7).isEmpty)
     }
 }
 
@@ -173,7 +179,7 @@ struct EngineStatsTests {
     @Test func eventsBeforeAnyCreatureAreNotCounted() async {
         let engine = engine()
         await engine.start()
-        await engine.record(.walked(points: 100, perch: .topEdge))
+        await engine.record(.walked(points: 100, perch: .topEdge, partner: 901))
         #expect(await engine.currentSnapshot.stats == Stats())
     }
 
@@ -181,7 +187,7 @@ struct EngineStatsTests {
         let engine = engine()
         await engine.start()
         await engine.adopt(901)
-        await engine.record(.walked(points: 80, perch: .topEdge), screenMillimetresPerPoint: 0.2)
+        await engine.record(.walked(points: 80, perch: .topEdge, partner: 901), screenMillimetresPerPoint: 0.2)
         let stats = store.load().stats
         #expect(stats.topEdgePoints == 80)
         #expect(abs(stats.creatureMetres - 80 * Distance.assumedHeightMetres / Distance.drawnHeight) < 1e-9)
@@ -216,7 +222,7 @@ struct EngineStatsTests {
         let first = engine()
         await first.start()
         await first.adopt(901)
-        await first.record(.transferred(to: .dock))
+        await first.record(.transferred(to: .dock, partner: 901))
         let second = engine()
         await second.start()
         #expect(await second.currentSnapshot.stats.dockVisits == 1)
