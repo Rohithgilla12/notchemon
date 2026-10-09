@@ -126,8 +126,22 @@ names_fixture() {
   printf 'struct PokeAPICreatureProvider {}\n' >"$work/names/Notchemon/PokeAPICreatureProvider.swift"
 }
 
+# Made-up species, so these tests never download the real list.
+species="$work/species.txt"
+printf 'zorbleflax\nquimbly\nmister-glonk\nvexel-f\n' >"$species"
+
 names_check() {
-  "$work/names/scripts/check-no-assets.sh" >/dev/null 2>&1
+  NOTCHEMON_SPECIES_LIST="$species" "$work/names/scripts/check-no-assets.sh" "$@" >"$work/names.out" 2>&1
+}
+
+# Runs the check with no list given, an empty cache, and a download that
+# reads $work/download.json instead of the network.
+download_check() {
+  rm -rf "$work/cache"
+  mkdir -p "$work/cache"
+  env -u NOTCHEMON_SPECIES_LIST -u RUNNER_TEMP -u CI TMPDIR="$work/cache" \
+    NOTCHEMON_SPECIES_URL="file://$work/download.json" "$@" \
+    "$work/names/scripts/check-no-assets.sh" >"$work/names.out" 2>&1
 }
 
 names_fixture
@@ -151,6 +165,65 @@ names_fixture
 printf 'let note = "Pok\xc3\xa9mon is a trademark of Nintendo, The Pok\xc3\xa9mon Company"\n' >"$work/names/Notchemon/Other.swift"
 names_check
 check "name check allows the disclaimer only where it belongs" "1" "$?"
+
+species_case() {
+  local name="$1" expected="$2" file="$3" text="$4"
+  names_fixture
+  mkdir -p "$(dirname "$work/names/$file")"
+  printf '%s\n' "$text" >"$work/names/$file"
+  names_check
+  check "species check: $name" "$expected" "$?"
+}
+
+species_case "fails on a name in a string" 1 Notchemon/Title.swift 'let title = "Zorbleflax Forecast"'
+species_case "fails on a name inside a camel-case identifier" 1 Notchemon/View.swift 'struct ZorbleflaxForecastView {}'
+species_case "ignores case" 1 Notchemon/Title.swift 'let title = "QUIMBLY"'
+species_case "ignores accents" 1 Notchemon/Title.swift 'let title = "Quïmbly"'
+species_case "matches whole words only" 0 Notchemon/Title.swift 'let title = "Zorbleflaxing quimblyish"'
+species_case "fails on a hyphenated name written apart" 1 Notchemon/Title.swift 'let title = "Mister Glonk"'
+species_case "fails on a hyphenated name written joined" 1 Notchemon/View.swift 'struct MisterGlonkView {}'
+check "species check: reports a joined name by its listed name" "1" "$(grep -c 'species name MisterGlonk (mister-glonk) in' "$work/names.out")"
+species_case "fails on a form name without its letter" 1 Notchemon/Title.swift 'let title = "Vexel"'
+species_case "fails on a name in project.yml" 1 project.yml 'NSLocationWhenInUseUsageDescription: "Quimbly weather"'
+species_case "fails on a name in Info.plist" 1 Notchemon/Info.plist '<string>Quimbly weather</string>'
+species_case "leaves Markdown to the franchise check" 0 README.md 'Quimbly'
+
+names_fixture
+mkdir -p "$work/names/Fake.app/Contents/MacOS"
+printf 'abc\0Zorbleflax\0def' >"$work/names/Fake.app/Contents/MacOS/Fake"
+names_check "$work/names/Fake.app"
+check "species check: fails on a name in a built app" "1" "$?"
+check "species check: names the file and line" "FAIL: Fake.app: species name Zorbleflax in Fake.app/Contents/MacOS/Fake:1 (string at byte 4)" \
+  "$(grep '^FAIL: .*species name ' "$work/names.out")"
+
+names_fixture
+printf 'let tool = "/usr/bin/ditto"\n' >"$work/names/Notchemon/Title.swift"
+printf 'ditto\n' >>"$species"
+names_check
+check "species check: fails on an ordinary word outside allowed_species" "1" "$?"
+mkdir -p "$work/names/Fake.app/Contents/Frameworks/Sparkle.framework/Versions/B"
+printf '/usr/bin/ditto' >"$work/names/Fake.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+rm "$work/names/Notchemon/Title.swift"
+names_check "$work/names/Fake.app"
+check "species check: allows an ordinary word where allowed_species says" "0" "$?"
+check "species check: reports the allowed word" "1" "$(grep -c '^allowed: Fake.app: .*species name ditto' "$work/names.out")"
+printf 'zorbleflax\nquimbly\nmister-glonk\nvexel-f\n' >"$species"
+
+names_fixture
+printf 'let title = "Quimbly"\n' >"$work/names/Notchemon/Title.swift"
+perl -e 'print "{\"results\":[", join(",", map { "{\"name\":\"$_\"}" } (map { "zz$_" } "aaa" .. "bfz"), "quimbly"), "]}"' >"$work/download.json"
+download_check
+check "species check: downloads, parses, and fails on a listed name" "1" "$?"
+check "species check: caches the download" "zzaaa quimbly" "$(sed -n '1p;$p' "$work/cache/notchemon-species-names.txt" | xargs)"
+printf '{"results":[{"name":"quimbly"}]}' >"$work/download.json"
+download_check
+check "species check: a short list counts as a failed download" "0" "$?"
+check "species check: says it skipped" "1" "$(grep -c 'species names: skipped' "$work/names.out")"
+rm -f "$work/download.json"
+download_check
+check "species check: offline outside CI skips" "0" "$?"
+download_check CI=true
+check "species check: offline in CI fails" "1" "$?"
 
 echo "test-scripts: $passed passed, $failed failed"
 [[ $failed -eq 0 ]]

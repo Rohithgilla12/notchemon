@@ -40,6 +40,7 @@ targets:
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: "MIT licensed. Unaffiliated fan work."
+        NSLocationWhenInUseUsageDescription: "Notchemon uses your approximate location to show local weather."
         SUFeedURL: https://github.com/Rohithgilla12/notchemon/releases/latest/download/appcast.xml
         # Written by scripts/setup-sparkle-keys.sh. While empty, the app never starts the updater.
         SUPublicEDKey: "noL9XzYaGUwzw1WlGpUmIN1lKxX71p7L8itIXE/PYBk="
@@ -51,6 +52,9 @@ targets:
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
+        # Hardened runtime, which notarised Release builds use, blocks Core
+        # Location without it.
+        com.apple.security.personal-information.location: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rohithgilla.Notchemon

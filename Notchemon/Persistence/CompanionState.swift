@@ -59,6 +59,7 @@ struct Preferences: Codable, Sendable, Equatable {
     var hopsOnApproach = true
     var fidgets = true
     var wander = WanderRange.topEdgeAndDock
+    var showsWeather = false
 }
 
 /// Played when a focus session completes. The raw values are stored in
@@ -134,5 +135,6 @@ extension Preferences {
         hopsOnApproach = try container.decodeIfPresent(Bool.self, forKey: .hopsOnApproach) ?? defaults.hopsOnApproach
         fidgets = try container.decodeIfPresent(Bool.self, forKey: .fidgets) ?? defaults.fidgets
         wander = (try? container.decodeIfPresent(WanderRange.self, forKey: .wander)) ?? defaults.wander
+        showsWeather = (try? container.decodeIfPresent(Bool.self, forKey: .showsWeather)) ?? defaults.showsWeather
     }
 }
