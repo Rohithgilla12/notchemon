@@ -63,6 +63,10 @@ struct SpeciesDTO: Decodable, Sendable {
     let evolutionChain: ChainReference
 }
 
+struct SpeciesListDTO: Decodable, Sendable {
+    let results: [NamedResource]
+}
+
 struct EvolutionChainDTO: Decodable, Sendable {
     struct Link: Decodable, Sendable {
         struct Detail: Decodable, Sendable {
@@ -109,6 +113,12 @@ enum PokeAPIParser {
     static func heightMetres(_ json: Data) throws -> Double? {
         let height: Int? = try decoder.decode(SpriteSetDTO.self, from: json).height
         return height.map { Double($0) / 10 }
+    }
+
+    static func speciesIndex(_ json: Data) throws -> [SpeciesEntry] {
+        try decoder.decode(SpeciesListDTO.self, from: json).results.compactMap { resource in
+            resource.id.map { SpeciesEntry(id: $0, name: resource.name) }
+        }
     }
 
     static func displayName(_ dto: SpeciesDTO) -> String {

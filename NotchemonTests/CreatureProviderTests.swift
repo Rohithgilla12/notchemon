@@ -105,6 +105,27 @@ struct PokeAPICreatureProviderTests {
         #expect(try await provider(fetcher).species(id: 901).heightMetres == 0.7)
     }
 
+    @Test func tierZeroIsTheStartersAndLaterTiersAreThreeFirstStagesEach() {
+        let tiers = provider(StubFetcher()).unlockTiers
+        #expect(tiers.first == provider(StubFetcher()).starterIDs)
+        #expect(tiers.count == 9)
+        #expect(tiers.dropFirst().allSatisfy { $0.count == 3 })
+        let all = tiers.flatMap { $0 }
+        #expect(Set(all).count == all.count)
+        #expect(tiers.dropFirst().flatMap { $0 } == tiers.dropFirst().flatMap { $0 }.sorted())
+    }
+
+    @Test func theSpeciesIndexIsOnePageOfEverySpecies() async throws {
+        var components = URLComponents(url: Fixtures.api.appendingPathComponent("pokemon-species/"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "limit", value: "2000")]
+        let fetcher = StubFetcher([
+            components.url!: Fixtures.speciesIndexJSON([(901, "testmon"), (902, "testmid")]),
+        ])
+        let index = try await provider(fetcher).speciesIndex()
+        #expect(index == [SpeciesEntry(id: 901, name: "testmon"), SpeciesEntry(id: 902, name: "testmid")])
+        #expect(fetcher.requests == [components.url!])
+    }
+
     @Test func unknownSpeciesIsReportedAsSuch() async {
         await #expect(throws: CreatureError.unknownSpecies) {
             try await provider(StubFetcher()).species(id: 4242)
@@ -273,6 +294,15 @@ struct OriginalCreatureProviderTests {
                 #expect(species.familyRoot == id)
             }
         }
+    }
+
+    @Test func everyTierHoldsFirstDesignsTheIndexLists() async throws {
+        let index = try await provider.speciesIndex().map(\.id)
+        for id in provider.unlockTiers.flatMap({ $0 }) {
+            #expect(try await provider.species(id: id).familyRoot == id)
+            #expect(index.contains(id))
+        }
+        #expect(provider.unlockTiers.first == provider.starterIDs)
     }
 
     @Test func laterStagesStandTaller() async throws {

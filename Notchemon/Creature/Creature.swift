@@ -124,8 +124,25 @@ enum CreatureError: Error, Equatable {
 /// reference a concrete provider outside `CreatureProviderFactory`.
 protocol CreatureProvider: Sendable {
     var starterIDs: [Int] { get }
+    /// Species that open together as the user's stats grow, as numeric ids.
+    /// Tier 0 is open from the start.
+    var unlockTiers: [[Int]] { get }
+    /// Every species the provider can show, for the developer search.
+    func speciesIndex() async throws -> [SpeciesEntry]
     func species(id: Int) async throws -> Species
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames
     /// Large, smooth art for the starter picker and the evolution reveal.
     func portrait(for species: Species) async throws -> CGImage
+}
+
+extension CreatureProvider {
+    var unlockTiers: [[Int]] { [starterIDs] }
+
+    func speciesIndex() async throws -> [SpeciesEntry] { [] }
+}
+
+/// A species as an index lists it: its id and the provider's own name for it.
+struct SpeciesEntry: Sendable, Equatable {
+    let id: Int
+    let name: String
 }
