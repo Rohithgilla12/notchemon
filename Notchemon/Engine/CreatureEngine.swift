@@ -18,10 +18,13 @@ enum Banner: Sendable, Equatable {
     case stashCleared(undo: [Data])
 }
 
-struct StarterOption: Sendable, Identifiable {
+/// A species the user can send out: a partner they have, or one they could add.
+struct PartnerOption: Sendable, Identifiable {
     let species: Species
     let portrait: CGImage?
-    var id: Int { species.id }
+    /// Nil for a species not yet in the collection.
+    let partner: Partner?
+    var id: Int { partner?.root ?? species.id }
 }
 
 /// A one-shot animation played once over the loop.
@@ -162,16 +165,34 @@ actor CreatureEngine {
         startSampling()
     }
 
-    func starterOptions() async -> [StarterOption] {
-        await withTaskGroup(of: (Int, StarterOption?).self) { group in
-            for (index, id) in provider.starterIDs.enumerated() {
+    func starterOptions() async -> [PartnerOption] {
+        await options(provider.starterIDs.map { OptionEntry(speciesId: $0, partner: nil) })
+    }
+
+    /// The partners in the order they joined, then the starters whose
+    /// family is not among them yet. A partner the provider cannot show,
+    /// such as one from another provider, is left out.
+    func partnerOptions() async -> [PartnerOption] {
+        let owned = state.collection.partners.map { OptionEntry(speciesId: $0.progress.speciesId, partner: $0) }
+        let fresh = provider.starterIDs.filter { !state.collection.owns($0) }.map { OptionEntry(speciesId: $0, partner: nil) }
+        return await options(owned + fresh)
+    }
+
+    private struct OptionEntry: Sendable {
+        let speciesId: Int
+        let partner: Partner?
+    }
+
+    private func options(_ entries: [OptionEntry]) async -> [PartnerOption] {
+        await withTaskGroup(of: (Int, PartnerOption?).self) { group in
+            for (index, entry) in entries.enumerated() {
                 group.addTask { [provider] in
-                    guard let species = try? await provider.species(id: id) else { return (index, nil) }
+                    guard let species = try? await provider.species(id: entry.speciesId) else { return (index, nil) }
                     let portrait = try? await provider.portrait(for: species)
-                    return (index, StarterOption(species: species, portrait: portrait))
+                    return (index, PartnerOption(species: species, portrait: portrait, partner: entry.partner))
                 }
             }
-            var options: [(Int, StarterOption)] = []
+            var options: [(Int, PartnerOption)] = []
             for await (index, option) in group {
                 if let option { options.append((index, option)) }
             }
@@ -179,31 +200,43 @@ actor CreatureEngine {
         }
     }
 
-    func chooseStarter(_ id: Int) async {
+    /// Sends out species `id`: the partner of its family when there is one,
+    /// else a new partner at the starting level. A starter chosen because
+    /// the provider no longer knows the partner that was out inherits its
+    /// level and XP.
+    func adopt(_ id: Int) async {
         guard let chosen = try? await provider.species(id: id) else { return }
+        let root = chosen.familyRoot ?? chosen.id
+        if state.collection.owns(root) {
+            await switchPartner(to: root)
+            return
+        }
         var progress = Progress.starter(id)
         if case .choosingStarter(let carryOver?) = snapshot.phase {
             progress.level = carryOver.level
             progress.xp = carryOver.xp
         }
-        state.progress = progress
+        state.collection.add(Partner(root: root, progress: progress))
+        state.collection.activate(root)
         state.stats.firstMet = state.stats.firstMet ?? now()
         snapshot.stats = state.stats
         persist()
-        await activate(chosen)
-        await resolvePendingEvolutions()
+        await sendOut(chosen)
     }
 
-    /// Re-picking a starter resets progress; the menu confirms this first.
-    func resetForNewStarter() {
-        cancelFocus()
-        state.progress = nil
-        species = nil
-        forgetSprites()
+    /// Every partner keeps its own stage, level, and XP while another is out.
+    func switchPartner(to root: Int) async {
+        guard let partner = state.collection.partner(root), root != state.collection.active || species == nil else { return }
+        guard let target = try? await provider.species(id: partner.progress.speciesId) else { return }
+        state.collection.activate(root)
         persist()
-        snapshot.sprite = nil
-        snapshot.phase = .choosingStarter(carryOver: nil)
-        publish()
+        await sendOut(target)
+    }
+
+    private func sendOut(_ next: Species) async {
+        forgetSprites()
+        await activate(next)
+        await resolvePendingEvolutions()
     }
 
     func cursorMoved(offset: CursorOffset?) async {
@@ -225,8 +258,11 @@ actor CreatureEngine {
             creatureMetresPerPoint: Distance.creatureMetresPerPoint(heightMetres: species.heightMetres),
             screenMillimetresPerPoint: screenMillimetresPerPoint
         )
-        state.stats = StatsReducer.apply(event, to: state.stats, scale: scale)
-        snapshot.stats = state.stats
+        let next = StatsReducer.apply(event, to: state.stats, scale: scale)
+        let walked = next.creatureMetres - state.stats.creatureMetres
+        if walked > 0 { state.collection.updateActive { $0.creatureMetres += walked } }
+        state.stats = next
+        snapshot.stats = next
         statsLog.debug("folded \(String(describing: event), privacy: .public)")
         persist()
         publish()
@@ -287,7 +323,7 @@ actor CreatureEngine {
     func award(_ xp: Int) async {
         guard let species, let progress = state.progress else { return }
         let (next, events) = XPRules.award(xp, to: progress, species: species)
-        state.progress = next
+        state.collection.updateActive { $0.progress = next }
         snapshot.phase = .active(species, next)
         persist()
         if let level = events.compactMap({ if case .levelledUp(let level) = $0 { level } else { nil } }).last {
@@ -305,7 +341,7 @@ actor CreatureEngine {
             guard let target = try? await provider.species(id: targetID) else { return }
             // Another entrant may have evolved, or reset, during the fetch.
             guard state.progress?.speciesId == species.id else { continue }
-            state.progress?.speciesId = targetID
+            state.collection.updateActive { $0.progress.speciesId = targetID }
             persist()
             forgetSprites()
             await activate(target)
@@ -471,6 +507,10 @@ actor CreatureEngine {
         }
         do {
             let loaded = try await provider.species(id: progress.speciesId)
+            if let root = loaded.familyRoot, let active = state.collection.active, root != active {
+                state.collection.rekey(active, to: root)
+                persist()
+            }
             await activate(loaded)
             await resolvePendingEvolutions()
         } catch CreatureError.unknownSpecies {

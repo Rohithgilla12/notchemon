@@ -10,8 +10,11 @@ import SwiftUI
 @Observable
 final class CompanionModel {
     private(set) var snapshot = CompanionSnapshot()
-    private(set) var starterOptions: [StarterOption] = []
+    private(set) var starterOptions: [PartnerOption] = []
     private(set) var isLoadingStarters = false
+    private(set) var partnerOptions: [PartnerOption] = []
+    /// The open panel shows the partner picker instead of the tools.
+    var showsPartners = false
     var noteDraft = ""
     @ObservationIgnored var onPreferencesChanged: ((Preferences) -> Void)?
     @ObservationIgnored var onSnapshot: (() -> Void)?
@@ -75,13 +78,24 @@ final class CompanionModel {
         isLoadingStarters = false
     }
 
-    func choose(_ option: StarterOption) {
-        Task { await engine.chooseStarter(option.id) }
+    func showPartners() {
+        showsPartners = true
+        Task { await loadPartners() }
     }
 
-    func resetForNewStarter() {
-        starterOptions = []
-        Task { await engine.resetForNewStarter() }
+    func loadPartners() async {
+        partnerOptions = await engine.partnerOptions()
+    }
+
+    func choose(_ option: PartnerOption) {
+        showsPartners = false
+        Task {
+            if let partner = option.partner {
+                await engine.switchPartner(to: partner.root)
+            } else {
+                await engine.adopt(option.species.id)
+            }
+        }
     }
 
     func record(_ event: CompanionEvent, screenMillimetresPerPoint: Double) {

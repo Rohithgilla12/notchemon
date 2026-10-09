@@ -171,7 +171,7 @@ struct EngineTests {
 
     func started(_ engine: CreatureEngine, choosing starter: Int = 901) async -> CreatureEngine {
         await engine.start()
-        await engine.chooseStarter(starter)
+        await engine.adopt(starter)
         return engine
     }
 
@@ -179,7 +179,7 @@ struct EngineTests {
         let engine = engine()
         await engine.start()
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: nil))
-        await engine.chooseStarter(904)
+        await engine.adopt(904)
         #expect(store.load().progress == .starter(904))
         #expect(await engine.currentSnapshot.phase == .active(FakeProvider().roster[904]!, .starter(904)))
     }
@@ -257,7 +257,7 @@ struct EngineTests {
     /// Loading and an award both find the same stage pending and both wait on
     /// the fetch. The loser must not evolve it again or roll the winner back.
     @Test func concurrentEntrantsEvolveEachStageOnce() async throws {
-        try store.save(CompanionState(progress: Progress(speciesId: 901, level: 7, xp: 0), stash: []))
+        try store.save(CompanionState(collection: PartnerCollection(only: Progress(speciesId: 901, level: 7, xp: 0))))
         let provider = GatedProvider(gating: 902)
         let engine = engine(provider: provider)
         let loading = Task { await engine.start() }
@@ -386,21 +386,14 @@ struct EngineTests {
     }
 
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
-        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), stash: []))
+        try? store.save(CompanionState(collection: PartnerCollection(only: Progress(speciesId: 4242, level: 12, xp: 30))))
         let engine = engine()
         await engine.start()
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: Progress(speciesId: 4242, level: 12, xp: 30)))
-        await engine.chooseStarter(904)
+        await engine.adopt(904)
         #expect(store.load().progress == Progress(speciesId: 904, level: 12, xp: 30))
     }
 
-    @Test func repickingResetsProgress() async {
-        let engine = await started(engine(), choosing: 904)
-        await engine.award(150)
-        await engine.resetForNewStarter()
-        #expect(store.load().progress == nil)
-        #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: nil))
-    }
 
     @Test func watchingSwapsToTheFacingRowAndFetchesEachRowOnce() async throws {
         let provider = RecordingProvider()
@@ -502,7 +495,7 @@ struct EngineTests {
             sleepAfter: 5
         )
         await engine.start()
-        await engine.chooseStarter(904)
+        await engine.adopt(904)
         idle.seconds = 6
         await engine.sample()
         let asleep = await engine.currentSnapshot
@@ -534,8 +527,11 @@ struct StateStoreTests {
     let store = StateStore(url: Fixtures.temporaryDirectory().appendingPathComponent("state.json"))
 
     @Test func roundTripsEveryField() throws {
+        var collection = PartnerCollection(only: Progress(speciesId: 7, level: 9, xp: 120))
+        collection.add(Partner(root: 1, progress: Progress(speciesId: 2, level: 17, xp: 30), creatureMetres: 12.5))
+        collection.activate(1)
         let state = CompanionState(
-            progress: Progress(speciesId: 7, level: 9, xp: 120),
+            collection: collection,
             stats: Stats(hops: 3, focusSessions: 12, focusMinutes: 300, firstMet: Date(timeIntervalSince1970: 1_800_000_000)),
             stash: [Data([1, 2, 3])],
             preferences: Preferences(focusMinutes: 45, sleepEnabled: false, virtualNotchEnabled: false)
@@ -626,7 +622,7 @@ struct StateStoreTests {
         var preferences = Preferences()
         preferences.clickToOpen = true
         preferences.focusSound = .fanfare
-        try store.save(CompanionState(progress: .starter(4), stash: [], preferences: preferences))
+        try store.save(CompanionState(collection: PartnerCollection(only: .starter(4)), preferences: preferences))
         #expect(store.load().preferences == preferences)
     }
 
@@ -636,7 +632,7 @@ struct StateStoreTests {
         preferences.hopsOnApproach = false
         preferences.fidgets = false
         preferences.wander = .nearNotch
-        try store.save(CompanionState(progress: .starter(4), stash: [], preferences: preferences))
+        try store.save(CompanionState(collection: PartnerCollection(only: .starter(4)), preferences: preferences))
         #expect(store.load().preferences == preferences)
     }
 

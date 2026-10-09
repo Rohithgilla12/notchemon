@@ -215,15 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roamer.update(range: -reach...reach, dock: dockWatcher.shelf?.range, homing: RoamRules.homing(conditions))
     }
 
-    func confirmNewStarter() {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.messageText = "Choose a new creature?"
-        alert.informativeText = "Your current companion's level and XP will be reset. This cannot be undone."
-        alert.addButton(withTitle: "Choose New Creature")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        model.resetForNewStarter()
+    func showPartners() {
+        model.showPartners()
+        windowController?.expandPinned(focusNote: false)
     }
 
     /// The only place the app asks for Accessibility, and only when the user

@@ -58,7 +58,8 @@ struct MenuBarContent: View {
             .keyboardShortcut("n", modifiers: [.control, .option])
         Button("Floating Notes") { FloatingNotes.shared.toggle() }
             .keyboardShortcut("n", modifiers: [.control, .option, .command])
-        Button("Choose Creature…", action: app.confirmNewStarter)
+        Button("Partners…", action: app.showPartners)
+            .disabled(model.activeSpecies == nil)
         Button("Open Notes Folder", action: app.openNotesFolder)
         if case .stashCleared = model.snapshot.banner {
             Button("Undo Clear Stash") { model.undoClearStash(animated: false) }

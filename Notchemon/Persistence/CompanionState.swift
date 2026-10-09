@@ -1,16 +1,19 @@
 import Foundation
 
 /// Persisted at `~/Library/Application Support/Notchemon/state.json`.
-/// `progress` is nil until the user picks a starter.
+/// The collection is empty until the user picks a starter.
 struct CompanionState: Codable, Sendable, Equatable {
-    var progress: Progress?
+    var collection = PartnerCollection()
     var stats = Stats()
     /// File bookmark data, oldest first.
     var stash: [Data] = []
     var preferences = Preferences()
 
-    static let empty = CompanionState(progress: nil)
+    static let empty = CompanionState()
     static let stashCapacity = 5
+
+    /// The progress of the partner that is out.
+    var progress: Progress? { collection.activePartner?.progress }
 }
 
 extension CompanionState {
@@ -18,18 +21,24 @@ extension CompanionState {
     /// that are no longer read.
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        progress = try container.decodeIfPresent(Progress.self, forKey: .progress)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        if let collection = try container.decodeIfPresent(PartnerCollection.self, forKey: .collection) {
+            self.collection = collection
+        } else if let progress = try legacy.decodeIfPresent(Progress.self, forKey: .progress) {
+            // Before the collection, the one companion was the whole of it.
+            collection = PartnerCollection(only: progress)
+        }
         stats = try container.decodeIfPresent(Stats.self, forKey: .stats) ?? Stats()
         // Before stats, focus minutes were the one tally kept.
         if !container.contains(.stats) {
-            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
             stats.focusMinutes = try legacy.decodeIfPresent(Int.self, forKey: .totalFocusMinutes) ?? 0
         }
         stash = try container.decodeIfPresent([Data].self, forKey: .stash) ?? []
         preferences = try container.decodeIfPresent(Preferences.self, forKey: .preferences) ?? Preferences()
     }
 
-    private enum LegacyKeys: String, CodingKey {
+    enum LegacyKeys: String, CodingKey {
+        case progress
         case totalFocusMinutes
     }
 }
