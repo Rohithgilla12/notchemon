@@ -21,7 +21,9 @@ struct PokeAPICreatureProvider: CreatureProvider {
         let speciesJSON = try await load(baseURL.appendingPathComponent("pokemon-species/\(id)/"))
         let dto = try PokeAPIParser.species(speciesJSON)
         let chainJSON = try await load(dto.evolutionChain.url)
-        return try PokeAPIParser.species(dto, chainJSON: chainJSON)
+        // Height is a nicety for stats; a species still loads without it.
+        let height = try? PokeAPIParser.heightMetres(try await load(baseURL.appendingPathComponent("pokemon/\(id)/")))
+        return try PokeAPIParser.species(dto, chainJSON: chainJSON, heightMetres: height)
     }
 
     /// SpriteCollab has a sheet per anim and facing. Species or anims it lacks

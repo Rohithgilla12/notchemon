@@ -84,6 +84,10 @@ final class CompanionModel {
         Task { await engine.resetForNewStarter() }
     }
 
+    func record(_ event: CompanionEvent, screenMillimetresPerPoint: Double) {
+        Task { await engine.record(event, screenMillimetresPerPoint: screenMillimetresPerPoint) }
+    }
+
     func retry() {
         Task { await engine.retryNow() }
     }

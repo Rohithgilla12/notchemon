@@ -83,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showDock()
             cursorMoved(to: NSEvent.mouseLocation)
         }
+        roamer.onEvent = { [weak self] event in self?.record(event) }
         dockWatcher.onChange = { [weak self] in
             guard let self else { return }
             showDock()
@@ -179,6 +180,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .dock:
             return dockWatcher.shelf?.spriteCentre(x: x)
         }
+    }
+
+    private func record(_ event: CompanionEvent) {
+        var millimetres = 0.0
+        if case .walked(_, let perch) = event { millimetres = screenMillimetresPerPoint(on: perch) }
+        model.record(event, screenMillimetresPerPoint: millimetres)
+    }
+
+    /// Measured on the display the perch is on, which may not be the notch's.
+    private func screenMillimetresPerPoint(on perch: Perch) -> Double {
+        let screen: NSScreen? = switch perch {
+        case .topEdge: NSScreen.notchHost
+        case .dock: NSScreen.screens.first { $0.frame == dockWatcher.shelf?.screen }
+        }
+        guard let screen, let id = screen.displayID else { return 0 }
+        let physical: CGSize = CGDisplayScreenSize(id)
+        return Distance.screenMillimetresPerPoint(physicalWidth: Double(physical.width), widthInPoints: Double(screen.frame.width))
     }
 
     private func refreshRoam() {

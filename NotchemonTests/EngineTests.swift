@@ -208,7 +208,7 @@ struct EngineTests {
         await engine.stopFocus()
         let saved = store.load()
         #expect(saved.progress?.xp == 100)
-        #expect(saved.totalFocusMinutes == 25)
+        #expect(saved.stats.focusMinutes == 25)
         #expect(await engine.currentSnapshot.focus == nil)
     }
 
@@ -218,7 +218,7 @@ struct EngineTests {
         clock.advance(24 * 60)
         await engine.stopFocus()
         #expect(store.load().progress == .starter(901))
-        #expect(store.load().totalFocusMinutes == 0)
+        #expect(store.load().stats.focusMinutes == 0)
     }
 
     @Test func debugSessionLengthCompletesOnItsOwnAndCreditsFullLength() async throws {
@@ -257,7 +257,7 @@ struct EngineTests {
     /// Loading and an award both find the same stage pending and both wait on
     /// the fetch. The loser must not evolve it again or roll the winner back.
     @Test func concurrentEntrantsEvolveEachStageOnce() async throws {
-        try store.save(CompanionState(progress: Progress(speciesId: 901, level: 7, xp: 0), totalFocusMinutes: 0, stash: []))
+        try store.save(CompanionState(progress: Progress(speciesId: 901, level: 7, xp: 0), stash: []))
         let provider = GatedProvider(gating: 902)
         let engine = engine(provider: provider)
         let loading = Task { await engine.start() }
@@ -386,7 +386,7 @@ struct EngineTests {
     }
 
     @Test func unknownSavedSpeciesOffersStartersAndKeepsLevel() async {
-        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), totalFocusMinutes: 0, stash: []))
+        try? store.save(CompanionState(progress: Progress(speciesId: 4242, level: 12, xp: 30), stash: []))
         let engine = engine()
         await engine.start()
         #expect(await engine.currentSnapshot.phase == .choosingStarter(carryOver: Progress(speciesId: 4242, level: 12, xp: 30)))
@@ -536,7 +536,7 @@ struct StateStoreTests {
     @Test func roundTripsEveryField() throws {
         let state = CompanionState(
             progress: Progress(speciesId: 7, level: 9, xp: 120),
-            totalFocusMinutes: 300,
+            stats: Stats(hops: 3, focusSessions: 12, focusMinutes: 300, firstMet: Date(timeIntervalSince1970: 1_800_000_000)),
             stash: [Data([1, 2, 3])],
             preferences: Preferences(focusMinutes: 45, sleepEnabled: false, virtualNotchEnabled: false)
         )
@@ -566,7 +566,7 @@ struct StateStoreTests {
         try Data(#"{"progress":{"speciesId":25,"level":12,"xp":40},"totalFocusMinutes":75,"stash":[],"preferences":{"focusMinutes":45,"sleepEnabled":false,"virtualNotchEnabled":true}}"#.utf8).write(to: store.url)
         let loaded = store.load()
         #expect(loaded.progress == Progress(speciesId: 25, level: 12, xp: 40))
-        #expect(loaded.totalFocusMinutes == 75)
+        #expect(loaded.stats.focusMinutes == 75)
         #expect(loaded.preferences.focusMinutes == 45)
         #expect(!loaded.preferences.sleepEnabled)
         #expect(loaded.preferences.idleStyle == .calm)
@@ -626,7 +626,7 @@ struct StateStoreTests {
         var preferences = Preferences()
         preferences.clickToOpen = true
         preferences.focusSound = .fanfare
-        try store.save(CompanionState(progress: .starter(4), totalFocusMinutes: 0, stash: [], preferences: preferences))
+        try store.save(CompanionState(progress: .starter(4), stash: [], preferences: preferences))
         #expect(store.load().preferences == preferences)
     }
 
@@ -636,7 +636,7 @@ struct StateStoreTests {
         preferences.hopsOnApproach = false
         preferences.fidgets = false
         preferences.wander = .nearNotch
-        try store.save(CompanionState(progress: .starter(4), totalFocusMinutes: 0, stash: [], preferences: preferences))
+        try store.save(CompanionState(progress: .starter(4), stash: [], preferences: preferences))
         #expect(store.load().preferences == preferences)
     }
 
@@ -650,7 +650,7 @@ struct StateStoreTests {
         try Data(#"{"progress":{"speciesId":7,"level":9},"totalFocusMinutes":300,"stash":["AQID"],"preferences":{"sleepEnabled":false}}"#.utf8).write(to: store.url)
         let loaded = store.load()
         #expect(loaded.progress == Progress(speciesId: 7, level: 9, xp: 0))
-        #expect(loaded.totalFocusMinutes == 300)
+        #expect(loaded.stats.focusMinutes == 300)
         #expect(loaded.stash == [Data([1, 2, 3])])
         #expect(loaded.preferences == Preferences(focusMinutes: 25, sleepEnabled: false, virtualNotchEnabled: true))
         let siblings = try FileManager.default.contentsOfDirectory(atPath: store.url.deletingLastPathComponent().path)

@@ -270,6 +270,21 @@ enum RoamRules {
         }
     }
 
+    /// What moving from `old` to `new` at `now` did, for the stats: a walk
+    /// that ended or was cut short counts the ground it covered, and a hop
+    /// to the other perch counts once as it sets off.
+    static func events(from old: RoamPhase, to new: RoamPhase, at now: Date) -> [CompanionEvent] {
+        var events: [CompanionEvent] = []
+        if let walk = old.walk, new.walk != walk {
+            let points: Double = abs(walk.x(at: now) - walk.from)
+            if points > 0 { events.append(.walked(points: points, perch: walk.perch)) }
+        }
+        if case .transferring(_, let to, _) = new, new != old {
+            events.append(.transferred(to: to.perch))
+        }
+        return events
+    }
+
     /// The range narrowed past the creature, so it walks in to the nearest edge.
     private static func walkBack(from spot: RoamSpot, to range: ClosedRange<Double>, at now: Date) -> RoamPhase {
         .walking(RoamWalk(on: spot.perch, from: spot.x, to: spot.x.clamped(to: range), start: now, speed: walkSpeed))

@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- A Stats submenu in the menu-bar menu: distance walked at the creature's own scale and in real millimetres on screen, hops, naps, Dock trips, focus sessions and minutes, evolutions, and days together. Stats are folded from events emitted when a walk, hop, nap, focus session, or evolution ends, so nothing runs between them. Events are logged at debug level under category `stats`.
+- Species now carry their real height, which sets the creature-scale distance. PokéAPI gives it per species; the original creatures have their own.
+
+### Changed
+
+- `state.json` keeps the tallies under `stats`. The old `totalFocusMinutes` moves into `stats.focusMinutes` on first load, and a companion chosen before this version counts its days together from when its state file was created.
+
 ## [0.2.3] - 2026-10-09
 
 ### Fixed

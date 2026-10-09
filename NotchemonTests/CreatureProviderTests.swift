@@ -91,6 +91,15 @@ struct PokeAPICreatureProviderTests {
         #expect(try await provider(fetcher).species(id: 901) == testmon)
     }
 
+    @Test func heightComesFromTheDefaultFormInMetres() async throws {
+        let fetcher = StubFetcher([
+            Fixtures.api.appendingPathComponent("pokemon-species/901/"): Fixtures.speciesJSON(id: 901, name: "testmon", chain: 90),
+            URL(string: "https://pokeapi.co/api/v2/evolution-chain/90/")!: Fixtures.chainJSON,
+            Fixtures.api.appendingPathComponent("pokemon/901/"): Data(#"{"id": 901, "height": 7, "sprites": {}}"#.utf8),
+        ])
+        #expect(try await provider(fetcher).species(id: 901).heightMetres == 0.7)
+    }
+
     @Test func unknownSpeciesIsReportedAsSuch() async {
         await #expect(throws: CreatureError.unknownSpecies) {
             try await provider(StubFetcher()).species(id: 4242)
@@ -248,6 +257,16 @@ struct OriginalCreatureProviderTests {
     @Test func portraitIsLargeAndSmooth() async throws {
         let portrait = try await provider.portrait(for: try await provider.species(id: provider.starterIDs[1]))
         #expect(portrait.width >= 256)
+    }
+
+    @Test func laterStagesStandTaller() async throws {
+        var species = try await provider.species(id: provider.starterIDs[0])
+        var heights: [Double] = [try #require(species.heightMetres)]
+        while let next = species.evolvesTo {
+            species = try await provider.species(id: next)
+            heights.append(try #require(species.heightMetres))
+        }
+        #expect(heights == heights.sorted() && Set(heights).count == heights.count)
     }
 
     @Test func foreignIDsAreUnknown() async {
