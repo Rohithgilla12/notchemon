@@ -35,8 +35,8 @@ targets:
       path: Notchemon/Info.plist
       properties:
         CFBundleDisplayName: $(NOTCHEMON_DISPLAY_NAME)
-        CFBundleShortVersionString: "0.2.4"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "0.2.5"
+        CFBundleVersion: "7"
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: "MIT licensed. Unaffiliated fan work."

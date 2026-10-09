@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-09
+
 ### Added
 
 - A walking party. Up to two partners can walk along with the one that is out, each with its own **Walking** toggle in **Partners…**. A third is refused while two already walk. Every walker wanders the top edge and the Dock on its own and keeps at least 60 pt clear of where the others stand and are heading. The leader still goes home for the open panel, focus, and a cursor at the notch. Followers keep wandering and never take the notch. Everyone sleeps together, leaves full screen and a vanished Dock, and keeps clear of wild creatures. Each walker's walks, hops, and Dock trips count toward the shared stats and its own distance at its own height. Per-walker moves are logged at debug level under category `roam`.
