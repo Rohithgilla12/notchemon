@@ -23,6 +23,7 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **Expanding notch.** Hover the notch, or press ⌃⌥N anywhere, and the notch springs open. It closes 0.5 seconds after the cursor leaves. ⌃⌥N toggles it, and Escape closes it while the note field has focus. While the notch is closed, menu-bar icons beside it stay clickable.
 - **Click to Open.** Turn on Click to Open in the menu bar menu, and the notch opens on a click instead of on hover. It stays open wherever the cursor goes. A click on the notch or on empty panel space closes it, and so does ⌃⌥N. Clicks on the panel's controls never close it.
 - **Focus timer and progression.** Start a focus session from the panel or the menu bar. A thin ring around the notch shows the time left. A completed 25-minute session gives 100 XP, and a session you stop early gives none. Each level needs `level × 40` XP. The creature evolves at the level its evolution data gives, with a white flash. Item, trade, and friendship evolutions never trigger. The Focus Sound menu plays a chime, a fanfare, or a ping when a session completes, and is off by default.
+- **Collection.** Every creature you choose joins your collection and keeps its own stage, level, and XP. Choose **Partners…** in the menu bar to open the notch on your partners, each with its level. Click one to send it out instead. The starters you do not have yet are listed after them; clicking one adds it at level 5. Focus XP goes to the partner that is out, and each partner evolves on its own. Hover a partner to see how far it has walked at its own scale. Stats stay shared across the collection.
 - **Stats.** The menu bar's Stats submenu keeps a tally of your time together: how far the creature has walked, its hops and naps, its trips to the Dock, your focus sessions and minutes, its evolutions, and how many days you have been together. Distance reads two ways. **Creature-scale** treats one body height on screen as the species' real height, so a 0.4 m creature drawn 40 pt tall covers 1 cm per point. **On screen** is how far the sprite really moved across the glass, from the display's physical size. Stats count only when something ends, such as a walk, a hop to the Dock, or a nap, so they cost nothing between. Each counted event is logged at debug level under category `stats`:
 
   ```sh
@@ -32,7 +33,7 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **System stats.** The open panel shows CPU load, memory in use, free disk space, and, on a Mac with a battery, its charge. It samples every 2 seconds only while the panel is open.
 - **File stash.** Drop up to five files on the notch, closed or open. The creature holds them as bookmarks, so a stashed file survives a rename or move. Drag an icon out of the panel to drop the file elsewhere, which also removes it from the stash. Click an icon to open the file. When the stash is full, the notch shakes and refuses the drop.
 - **Removing from the stash.** Hover an icon and click its × badge, or right-click it and choose Remove from Stash. The context menu also has Open, Reveal in Finder, and Copy Path. Clear Stash, in the panel and in the menu-bar menu, empties the stash. For 5 seconds after, the panel banner and the menu-bar menu both offer Undo. Removing never moves, deletes, or trashes the file.
-- **Menu bar.** The menu bar item offers the Stats submenu, start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, floating notes, choose creature (this resets progress, after confirmation), open notes folder, and quit.
+- **Menu bar.** The menu bar item offers the Stats submenu, start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, floating notes, Partners…, open notes folder, and quit.
 - **Macs without a notch.** The app draws a black virtual notch at the top centre of the built-in display, or of the main display in clamshell mode. You can turn this off.
 
 ## Permissions
@@ -127,6 +128,8 @@ defaults write com.rohithgilla.Notchemon.debug NotchemonCreatureProvider origina
 defaults delete com.rohithgilla.Notchemon.debug NotchemonDebugSessionSeconds
 defaults delete com.rohithgilla.Notchemon.debug NotchemonDebugSleepSeconds
 ```
+
+The first time a version with the collection loads a state saved before it, it copies that file to `state.v1.backup.json` beside it, once, before saving anything in the new format.
 
 To start fresh, quit the app and delete `~/Library/Application Support/Notchemon Debug/` for a Debug build, or `~/Library/Application Support/Notchemon/` for the installed one.
 

@@ -7,10 +7,13 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - A Stats submenu in the menu-bar menu: distance walked at the creature's own scale and in real millimetres on screen, hops, naps, Dock trips, focus sessions and minutes, evolutions, and days together. Stats are folded from events emitted when a walk, hop, nap, focus session, or evolution ends, so nothing runs between them. Events are logged at debug level under category `stats`.
+- A collection of partners. Each creature you choose keeps its own stage, level, and XP, and **Partners…** in the menu-bar menu shows them all with their levels. Switching sends another partner out without resetting anyone. Starters you do not have yet can join at level 5. Focus XP goes to the partner that is out, evolution applies per partner, and distance is also tallied per partner.
 - Species now carry their real height, which sets the creature-scale distance. PokéAPI gives it per species; the original creatures have their own.
 
 ### Changed
 
+- **Partners…** replaces **Choose Creature…**, which reset progress.
+- `state.json` keeps partners under `collection`. The single `progress` of an older file becomes the first partner, and before anything is saved in the new format the old file is copied once to `state.v1.backup.json` beside it.
 - `state.json` keeps the tallies under `stats`. The old `totalFocusMinutes` moves into `stats.focusMinutes` on first load, and a companion chosen before this version counts its days together from when its state file was created.
 
 ## [0.2.3] - 2026-10-09
