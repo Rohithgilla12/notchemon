@@ -22,9 +22,9 @@ enum Banner: Sendable, Equatable {
 struct PartnerOption: Sendable, Identifiable {
     let species: Species
     let portrait: CGImage?
-    /// Nil for a species not yet in the collection.
+    /// The partner of its family, or nil for a family not yet in the collection.
     let partner: Partner?
-    var id: Int { partner?.root ?? species.id }
+    var id: Int { species.id }
 }
 
 /// A one-shot animation played once over the loop.
@@ -70,8 +70,18 @@ struct CompanionSnapshot: Sendable {
     /// Evolutions since launch, which flash the sprite.
     var evolutionCount = 0
     var stats = Stats()
+    var unlocks = UnlockStatus()
     /// Sessions completed since launch. Each one plays the focus sound.
     var completedFocusSessions = 0
+}
+
+/// Where the user stands on unlocks, derived from the stats.
+struct UnlockStatus: Sendable, Equatable {
+    var openTiers = 0
+    /// Every species is available, and the partner picker searches them all.
+    var override = false
+    /// What opens the next tier, or nil once the table runs out.
+    var next: UnlockThreshold?
 }
 
 extension CompanionSnapshot {
@@ -106,6 +116,8 @@ actor CreatureEngine {
     private let now: @Sendable () -> Date
     private let sessionSecondsOverride: TimeInterval?
     private let sleepAfter: TimeInterval
+    private let unlockAll: @Sendable () -> Bool
+    private var index: [SpeciesEntry]?
 
     private var state = CompanionState.empty
     private var snapshot = CompanionSnapshot()
@@ -136,7 +148,8 @@ actor CreatureEngine {
         idleSeconds: @escaping @Sendable () -> TimeInterval = InputIdle.seconds,
         now: @escaping @Sendable () -> Date = Date.init,
         sessionSecondsOverride: TimeInterval? = nil,
-        sleepAfter: TimeInterval = BehaviourRules.sleepAfter
+        sleepAfter: TimeInterval = BehaviourRules.sleepAfter,
+        unlockAll: @escaping @Sendable () -> Bool = { false }
     ) {
         (snapshots, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.provider = provider
@@ -147,6 +160,7 @@ actor CreatureEngine {
         self.now = now
         self.sessionSecondsOverride = sessionSecondsOverride
         self.sleepAfter = sleepAfter
+        self.unlockAll = unlockAll
     }
 
     var currentSnapshot: CompanionSnapshot { snapshot }
@@ -160,6 +174,7 @@ actor CreatureEngine {
         }
         snapshot.preferences = state.preferences
         snapshot.stats = state.stats
+        refreshUnlockStatus()
         refreshStash()
         await loadCompanion()
         startSampling()
@@ -169,13 +184,52 @@ actor CreatureEngine {
         await options(provider.starterIDs.map { OptionEntry(speciesId: $0, partner: nil) })
     }
 
-    /// The partners in the order they joined, then the starters whose
-    /// family is not among them yet. A partner the provider cannot show,
-    /// such as one from another provider, is left out.
+    /// The partners in the order they joined, then the species of every
+    /// open tier whose family is not among them yet. A partner the
+    /// provider cannot show, such as one from another provider, is left out.
     func partnerOptions() async -> [PartnerOption] {
         let owned = state.collection.partners.map { OptionEntry(speciesId: $0.progress.speciesId, partner: $0) }
-        let fresh = provider.starterIDs.filter { !state.collection.owns($0) }.map { OptionEntry(speciesId: $0, partner: nil) }
+        let fresh = available().filter { !state.collection.owns($0) }.map { OptionEntry(speciesId: $0, partner: nil) }
         return await options(owned + fresh)
+    }
+
+    /// Species whose name contains `query`, or whose id it is, from
+    /// everything the provider can show. Only with the override on.
+    func searchOptions(_ query: String, limit: Int = 8) async -> [PartnerOption] {
+        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard unlockAll(), !needle.isEmpty else { return [] }
+        let ids: [Int]
+        if let id = Int(needle) {
+            ids = [id]
+        } else {
+            if index == nil { index = try? await provider.speciesIndex() }
+            ids = (index ?? []).filter { $0.name.lowercased().contains(needle) }.prefix(limit).map(\.id)
+        }
+        let found = await options(ids.map { OptionEntry(speciesId: $0, partner: nil) })
+        return found.map { option in
+            let partner = state.collection.partner(option.species.familyRoot ?? option.species.id)
+            return PartnerOption(species: option.species, portrait: option.portrait, partner: partner)
+        }
+    }
+
+    private func available() -> [Int] {
+        UnlockRules.available(stats: state.stats, tiers: provider.unlockTiers, override: unlockAll())
+    }
+
+    /// Call when the override may have changed.
+    func refreshUnlocks() {
+        refreshUnlockStatus()
+        publish()
+    }
+
+    private func refreshUnlockStatus() {
+        let override = unlockAll()
+        let tierCount = provider.unlockTiers.count
+        snapshot.unlocks = UnlockStatus(
+            openTiers: UnlockRules.openTiers(stats: state.stats, tierCount: tierCount, override: override),
+            override: override,
+            next: override ? nil : UnlockRules.next(stats: state.stats, tierCount: tierCount)?.threshold
+        )
     }
 
     private struct OptionEntry: Sendable {
@@ -211,6 +265,7 @@ actor CreatureEngine {
             await switchPartner(to: root)
             return
         }
+        guard unlockAll() || available().contains(id) else { return }
         var progress = Progress.starter(id)
         if case .choosingStarter(let carryOver?) = snapshot.phase {
             progress.level = carryOver.level
@@ -231,6 +286,30 @@ actor CreatureEngine {
         state.collection.activate(root)
         persist()
         await sendOut(target)
+    }
+
+    /// For developers: empties the collection, keeping the stats.
+    func resetCollection() {
+        cancelFocus()
+        state.collection = PartnerCollection()
+        species = nil
+        forgetSprites()
+        persist()
+        snapshot.sprite = nil
+        snapshot.phase = .choosingStarter(carryOver: nil)
+        publish()
+    }
+
+    /// For developers: a walk of one kilometre at the current partner's scale.
+    func addCreatureKilometre() {
+        guard let species else { return }
+        let perPoint = Distance.creatureMetresPerPoint(heightMetres: species.heightMetres)
+        record(.walked(points: 1_000 / perPoint, perch: .topEdge))
+    }
+
+    /// For developers: an hour of focus, counted without XP.
+    func addFocusHour() {
+        record(.focusCompleted(minutes: 60))
     }
 
     private func sendOut(_ next: Species) async {
@@ -263,6 +342,7 @@ actor CreatureEngine {
         if walked > 0 { state.collection.updateActive { $0.creatureMetres += walked } }
         state.stats = next
         snapshot.stats = next
+        refreshUnlockStatus()
         statsLog.debug("folded \(String(describing: event), privacy: .public)")
         persist()
         publish()

@@ -53,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             provider: CreatureProviderFactory.make(),
             store: .standard,
             sessionSecondsOverride: sessionSeconds > 0 ? sessionSeconds : nil,
-            sleepAfter: sleepSeconds > 0 ? sleepSeconds : BehaviourRules.sleepAfter
+            sleepAfter: sleepSeconds > 0 ? sleepSeconds : BehaviourRules.sleepAfter,
+            unlockAll: { UnlockOverride.isOn(defaults: .standard, bundleIdentifier: Bundle.main.bundleIdentifier) }
         )
         model = CompanionModel(engine: engine)
         super.init()
@@ -218,6 +219,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showPartners() {
         model.showPartners()
         windowController?.expandPinned(focusNote: false)
+    }
+
+    /// Writes this build's own defaults domain, which the override reads.
+    func setUnlockAll(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: UnlockOverride.defaultsKey)
+        model.refreshUnlocks()
+    }
+
+    func confirmResetCollection() {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Reset the collection?"
+        alert.informativeText = "Every partner and its level and XP will be removed, and you will choose a starter again. Stats are kept. This cannot be undone."
+        alert.addButton(withTitle: "Reset Collection")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        model.resetCollection()
     }
 
     /// The only place the app asks for Accessibility, and only when the user

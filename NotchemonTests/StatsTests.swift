@@ -98,6 +98,11 @@ struct StatsSummaryTests {
         ])
     }
 
+    @Test(arguments: [(0, "0 m"), (0.5, "50 cm"), (12.7, "12 m"), (15_000, "15 km"), (1_234, "1.2 km"), (999_960, "1000 km")])
+    func distance(metres: Double, shown: String) {
+        #expect(StatsSummary.metres(metres) == shown)
+    }
+
     @Test(arguments: [(90, "1.5 h"), (60, "1 h"), (600, "10 h"), (615, "10 h")])
     func focusTime(minutes: Int, shown: String) {
         #expect(StatsSummary.focus(minutes) == shown)

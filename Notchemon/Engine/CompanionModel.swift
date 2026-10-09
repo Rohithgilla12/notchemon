@@ -15,6 +15,9 @@ final class CompanionModel {
     private(set) var partnerOptions: [PartnerOption] = []
     /// The open panel shows the partner picker instead of the tools.
     var showsPartners = false
+    /// A tier opened since the user last looked at their partners.
+    var newPartnersWaiting = false
+    private(set) var searchResults: [PartnerOption] = []
     var noteDraft = ""
     @ObservationIgnored var onPreferencesChanged: ((Preferences) -> Void)?
     @ObservationIgnored var onSnapshot: (() -> Void)?
@@ -41,6 +44,9 @@ final class CompanionModel {
     private func apply(_ next: CompanionSnapshot) {
         let preferencesChanged = next.preferences != snapshot.preferences
         let wasChoosing = isChoosing(snapshot.phase)
+        if case .active = snapshot.phase, next.unlocks.openTiers > snapshot.unlocks.openTiers {
+            newPartnersWaiting = true
+        }
         if let sound = next.focusSound(after: snapshot), let name = sound.systemSoundName {
             NSSound(named: name)?.play()
         }
@@ -80,7 +86,33 @@ final class CompanionModel {
 
     func showPartners() {
         showsPartners = true
+        newPartnersWaiting = false
         Task { await loadPartners() }
+    }
+
+    func search(_ query: String) async {
+        searchResults = await engine.searchOptions(query)
+    }
+
+    func refreshUnlocks() {
+        Task {
+            await engine.refreshUnlocks()
+            await loadPartners()
+        }
+    }
+
+    func addCreatureKilometre() {
+        Task { await engine.addCreatureKilometre() }
+    }
+
+    func addFocusHour() {
+        Task { await engine.addFocusHour() }
+    }
+
+    func resetCollection() {
+        starterOptions = []
+        partnerOptions = []
+        Task { await engine.resetCollection() }
     }
 
     func loadPartners() async {

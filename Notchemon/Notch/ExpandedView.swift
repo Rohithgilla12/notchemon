@@ -24,6 +24,10 @@ struct ExpandedView: View {
                 BannerView(banner: banner) { model.undoClearStash(animated: true) }
                     .padding(.bottom, 10)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if model.newPartnersWaiting, !model.showsPartners {
+                NewPartnersBanner(model: model)
+                    .padding(.bottom, 10)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.snapshot.banner)
@@ -223,6 +227,27 @@ private struct EvolutionReveal: View {
             .padding(.top, topInset)
             .padding(.bottom, 24)
             .allowsHitTesting(false)
+    }
+}
+
+/// Shown once in the open panel after a tier opens; a click opens the picker.
+private struct NewPartnersBanner: View {
+    let model: CompanionModel
+
+    var body: some View {
+        Button(action: model.showPartners) {
+            Text("New partners available")
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color.teal.opacity(0.9), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .task {
+            try? await Task.sleep(for: CreatureEngine.bannerLength + .seconds(2))
+            guard !Task.isCancelled else { return }
+            model.newPartnersWaiting = false
+        }
     }
 }
 

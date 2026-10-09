@@ -67,6 +67,17 @@ struct MenuBarContent: View {
             Button("Clear Stash") { model.clearStash(animated: false) }
                 .disabled(model.snapshot.stash.isEmpty)
         }
+        if UnlockOverride.isDeveloperBuild(bundleIdentifier: Bundle.main.bundleIdentifier) {
+            Menu("Developer") {
+                Toggle("Unlock All", isOn: Binding(get: { model.snapshot.unlocks.override }, set: app.setUnlockAll))
+                Button("Add 1 km", action: model.addCreatureKilometre)
+                    .disabled(model.activeSpecies == nil)
+                Button("Add 1 Focus Hour", action: model.addFocusHour)
+                    .disabled(model.activeSpecies == nil)
+                Divider()
+                Button("Reset Collection…", action: app.confirmResetCollection)
+            }
+        }
         Divider()
         AppMenuSection()
         Divider()
