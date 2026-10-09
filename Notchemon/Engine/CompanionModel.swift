@@ -18,6 +18,7 @@ final class CompanionModel {
     /// A tier opened since the user last looked at their partners.
     var newPartnersWaiting = false
     private(set) var searchResults: [PartnerOption] = []
+    let weather = WeatherService()
     var noteDraft = ""
     @ObservationIgnored var onPreferencesChanged: ((Preferences) -> Void)?
     @ObservationIgnored var onSnapshot: (() -> Void)?
@@ -57,6 +58,7 @@ final class CompanionModel {
         } else {
             snapshot = next
         }
+        if preferencesChanged { weather.setEnabled(next.preferences.showsWeather) }
         if preferencesChanged { onPreferencesChanged?(next.preferences) }
         onSnapshot?()
         if isChoosing(next.phase), !wasChoosing {
@@ -180,6 +182,12 @@ final class CompanionModel {
         var preferences = snapshot.preferences
         change(&preferences)
         Task { await engine.setPreferences(preferences) }
+    }
+
+    /// The location prompt comes from turning weather on, never from launch.
+    func setShowsWeather(_ on: Bool) {
+        update { $0.showsWeather = on }
+        if on { weather.requestAccess() }
     }
 
     func submitNote() {

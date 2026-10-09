@@ -13,6 +13,7 @@ struct MenuBarContent: View {
                 }
             }
         }
+        WeatherMenuItem(weather: model.weather)
         Button(model.snapshot.focus == nil ? "Start Focus" : "Stop Focus", action: model.toggleFocus)
             .disabled(model.activeSpecies == nil)
         Picker("Focus Length", selection: preference(\.focusMinutes)) {
@@ -28,6 +29,7 @@ struct MenuBarContent: View {
         Toggle("Sleep When Idle", isOn: preference(\.sleepEnabled))
         Toggle("Virtual Notch on Displays Without One", isOn: preference(\.virtualNotchEnabled))
         Toggle("Click to Open", isOn: preference(\.clickToOpen))
+        Toggle("Show Weather", isOn: Binding(get: { model.snapshot.preferences.showsWeather }, set: { model.setShowsWeather($0) }))
         Menu("Motion") {
             Picker("Idle Style", selection: preference(\.idleStyle)) {
                 ForEach(IdleStyle.allCases, id: \.self) { style in

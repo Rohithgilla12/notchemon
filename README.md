@@ -62,12 +62,13 @@ Notchemon is free, open source, and local. It has no accounts, no telemetry, and
 - **System stats.** The open panel shows CPU load, memory in use, free disk space, and, on a Mac with a battery, its charge. It samples every 2 seconds only while the panel is open.
 - **File stash.** Drop up to five files on the notch, closed or open. The creature holds them as bookmarks, so a stashed file survives a rename or move. Drag an icon out of the panel to drop the file elsewhere, which also removes it from the stash. Click an icon to open the file. When the stash is full, the notch shakes and refuses the drop.
 - **Removing from the stash.** Hover an icon and click its × badge, or right-click it and choose Remove from Stash. The context menu also has Open, Reveal in Finder, and Copy Path. Clear Stash, in the panel and in the menu-bar menu, empties the stash. For 5 seconds after, the panel banner and the menu-bar menu both offer Undo. Removing never moves, deletes, or trashes the file.
-- **Menu bar.** The menu bar item offers the Stats submenu, start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the Motion submenu, floating notes, Partners…, open notes folder, and quit.
+- **Weather.** Turn on **Show Weather** in the menu bar menu, and the menu shows the current conditions and temperature, with the next five days in a submenu. Forecasts come from [Open-Meteo](https://open-meteo.com), which needs no account. Weather is off by default. See [Privacy](#privacy).
+- **Menu bar.** The menu bar item offers the Stats submenu, the weather line, start and stop focus, the focus length, the sleep toggle, the virtual notch toggle, the weather toggle, the Motion submenu, floating notes, Partners…, open notes folder, and quit.
 - **Macs without a notch.** The app draws a black virtual notch at the top centre of the built-in display, or of the main display in clamshell mode. You can turn this off.
 
 ## Permissions
 
-Notchemon never asks for a permission on its own. It reads idle time with `CGEventSource.secondsSinceLastEventType` and watches the cursor with a global `mouseMoved` monitor. Neither needs Accessibility; only keyboard monitors would. The ⌃⌥N hotkey uses Carbon `RegisterEventHotKey`, which also needs no permission.
+Notchemon never asks for a permission on its own. It reads idle time with `CGEventSource.secondsSinceLastEventType` and watches the cursor with a global `mouseMoved` monitor. Neither needs Accessibility; only keyboard monitors would. The ⌃⌥N hotkey uses Carbon `RegisterEventHotKey`, which also needs no permission. Location access is asked for only when you turn on Show Weather. See [Privacy](#privacy).
 
 Dock walking is the one feature that needs Accessibility permission, because only the Accessibility API reports the Dock's exact width. Without it the Dock is not a perch and the creature stays on the top edge. To turn it on:
 
@@ -92,6 +93,10 @@ tccutil reset Accessibility com.rohithgilla.Notchemon
 ```
 
 The app never runs `tccutil` or changes a setting itself.
+
+## Privacy
+
+Weather is the one feature that sends anything about you off the Mac, and it is off by default. When you turn on **Show Weather**, macOS asks once for location access. The app asks for a single approximate fix, about 1 km, and then rounds it to two decimal places before it requests a forecast from [Open-Meteo](https://open-meteo.com). That approximate location goes to Open-Meteo only while Show Weather is on, at most once an hour. Turn it off and the app stops asking for the location and forgets the forecast. If location access is off, the menu shows **Location off — Open Settings** instead of a forecast. Weather requests and their failures are logged under category `weather`, without the location.
 
 ## Updates, login, and About
 
@@ -185,7 +190,9 @@ To start fresh, quit the app and delete `~/Library/Application Support/Notchemon
 
 ## Asset guardrail
 
-The repository and the app bundle must never contain creature sprites, cries, names, or data files. `scripts/check-no-assets.sh` fails on any image or audio file. It also fails on any of the default starters' names in the repository or in a built app. It fails on the franchise's own names too, so the code and the UI stay creature-neutral and the original-creature provider can replace the content. The `allowed_names` list in the script admits only the disclaimer above, the data source's name, and its endpoint paths, each in the files that need them, and the check prints every hit it allows:
+The repository and the app bundle must never contain creature sprites, cries, names, or data files. `scripts/check-no-assets.sh` fails on any image or audio file. It also fails on any of the default starters' names in the repository or in a built app. It fails on the franchise's own names too, so the code and the UI stay creature-neutral and the original-creature provider can replace the content. The `allowed_names` list in the script admits only the disclaimer above, the data source's name, and its endpoint paths, each in the files that need them, and the check prints every hit it allows.
+
+The check also matches every species name, word by word and ignoring case, against the Swift sources, the plists, `project.yml`, and every file in a built app. A word boundary includes a camel-case one, so a name inside a type name fails. The list comes from PokéAPI at check time and is cached in a temporary folder, never in the repository. Offline, the check skips this step and says so. In CI (`CI=true`), a failed download fails the check. Some species names are also ordinary words. The `allowed_species` list admits such a word only in the files where it appears as that word, and the check prints each hit it allows:
 
 ```sh
 scripts/check-no-assets.sh .build/dd/Build/Products/Debug/Notchemon.app

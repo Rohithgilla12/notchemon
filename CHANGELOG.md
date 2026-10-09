@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The open panel's sprite credit names the authors of every creature drawn: the leader, its walking followers, and a wild visitor while it visits. Authors from one source are merged and named once, and a line too long for the panel ends in "…" with the full list, creature by creature, in its tooltip.
 
+- Weather in the menu-bar menu. Turn on **Show Weather** and the menu shows the current conditions and temperature, with the next five days in a submenu, from [Open-Meteo](https://open-meteo.com). It is off by default. macOS asks for location access only when you turn it on. The app takes one approximate fix, rounds it to two decimal places (about 1 km), and refreshes at most once an hour. With location access off, the menu shows **Location off — Open Settings**. Requests are logged under category `weather`. The open panel has no room for a weather card, so the weather lives in the menu.
+- `scripts/check-no-assets.sh` now fails on any species name in the Swift sources, the plists, `project.yml`, and a built app. It downloads the species list from PokéAPI at check time, caches it in a temporary folder, and skips the step offline outside CI. `allowed_species` admits an ordinary word only where it appears as that word.
+
 ## [0.2.4] - 2026-10-09
 
 ### Added
