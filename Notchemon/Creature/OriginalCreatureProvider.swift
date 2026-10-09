@@ -13,6 +13,9 @@ struct OriginalCreatureProvider: CreatureProvider {
         let body: (r: CGFloat, g: CGFloat, b: CGFloat)
         let evolvesTo: Int?
         let evolvesAtLevel: Int?
+
+        /// Each stage stands a little over twice as tall as the one before.
+        var heightMetres: Double { [0.35, 0.8, 1.7][min(max(stage, 1), 3) - 1] }
     }
 
     static let roster: [Int: Design] = [
@@ -33,7 +36,9 @@ struct OriginalCreatureProvider: CreatureProvider {
 
     func species(id: Int) async throws -> Species {
         guard let design = Self.roster[id] else { throw CreatureError.unknownSpecies }
-        return Species(id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel)
+        return Species(
+            id: id, name: design.name, evolvesTo: design.evolvesTo, evolvesAtLevel: design.evolvesAtLevel, heightMetres: design.heightMetres
+        )
     }
 
     /// The eyes follow the facing; the body is symmetric, so nothing else

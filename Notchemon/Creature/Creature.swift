@@ -6,6 +6,8 @@ struct Species: Codable, Sendable, Equatable, Identifiable {
     let name: String
     let evolvesTo: Int?
     let evolvesAtLevel: Int?
+    /// How tall the species really is, which sets its creature-scale stride.
+    var heightMetres: Double? = nil
 }
 
 /// What the creature is doing, as far as its sprite is concerned. `idle`,

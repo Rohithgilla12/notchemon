@@ -43,6 +43,8 @@ struct SpriteSetDTO: Decodable, Sendable {
     }
 
     let id: Int
+    /// In decimetres.
+    let height: Int?
     let sprites: Sprites
 }
 
@@ -94,10 +96,18 @@ enum PokeAPIParser {
         try decoder.decode(SpeciesDTO.self, from: speciesJSON)
     }
 
-    static func species(_ dto: SpeciesDTO, chainJSON: Data) throws -> Species {
+    static func species(_ dto: SpeciesDTO, chainJSON: Data, heightMetres: Double? = nil) throws -> Species {
         let chain = try decoder.decode(EvolutionChainDTO.self, from: chainJSON)
         let evolution = levelUpEvolution(of: dto.id, in: chain.chain)
-        return Species(id: dto.id, name: displayName(dto), evolvesTo: evolution?.to, evolvesAtLevel: evolution?.level)
+        return Species(
+            id: dto.id, name: displayName(dto), evolvesTo: evolution?.to, evolvesAtLevel: evolution?.level, heightMetres: heightMetres
+        )
+    }
+
+    /// PokeAPI gives height in decimetres; nil when it gives none.
+    static func heightMetres(_ json: Data) throws -> Double? {
+        let height: Int? = try decoder.decode(SpriteSetDTO.self, from: json).height
+        return height.map { Double($0) / 10 }
     }
 
     static func displayName(_ dto: SpeciesDTO) -> String {
