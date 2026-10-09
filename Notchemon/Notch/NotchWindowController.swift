@@ -207,6 +207,12 @@ final class NotchWindowController {
         return pasteboard.changeCount != dragChangeCountAtPress && pasteboard.types?.contains(.fileURL) == true
     }
 
+    /// Asks the hover rules again for a cursor that has not moved, when
+    /// what lies under it has.
+    func refreshHitTesting() {
+        handleCursor(NSEvent.mouseLocation)
+    }
+
     private func handleCursor(_ point: CGPoint) {
         onCursorMoved?(point)
         guard let layout = presentation.layout else { return }

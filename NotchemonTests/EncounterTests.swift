@@ -28,7 +28,9 @@ struct EncounterRulesTests {
         alone.hasPartner = false
         var visited = around
         visited.visiting = true
-        for conditions in [away, asleep, fullScreen, focusing, alone, visited] {
+        var lidClosed = around
+        lidClosed.systemAsleep = true
+        for conditions in [away, asleep, fullScreen, focusing, alone, visited, lidClosed] {
             #expect(!EncounterRules.isActive(conditions))
         }
     }
@@ -295,6 +297,13 @@ struct EngineEncounterTests {
         #expect(await engine.currentSnapshot.encounter == nil)
     }
 
+    @Test func noVisitorArrivesWhileTheMacSleeps() async {
+        let engine = await engine()
+        await engine.setSystemAsleep(true)
+        await engine.spawnEncounterNow()
+        #expect(await engine.currentSnapshot.encounter == nil)
+    }
+
     @Test func noVisitorComesWithoutAPartner() async {
         let engine = CreatureEngine(provider: TieredProvider(), store: store, notesURL: directory.appendingPathComponent("notes.md"), idleSeconds: { 0 })
         await engine.start()
@@ -324,5 +333,31 @@ struct EngineEncounterTests {
             await engine.endEncounter(encounter.serial)
         }
         return nil
+    }
+}
+
+@MainActor
+struct WildWalkerTests {
+    @Test func aVisitPlayedToItsEndIsReportedGoneOnceAndRemembered() {
+        var rng = SplitMix64(seed: 6)
+        let visit = WildVisit.plan(on: .topEdge, in: 100...600, start: Date() - 3_600, using: &rng)
+        let walker = WildWalker()
+        var gone: [Int] = []
+        walker.onGone = { gone.append($0) }
+        walker.begin(visit, serial: 7)
+        #expect(gone == [7])
+        #expect(walker.finished == 7)
+        #expect(walker.visit == nil && walker.track == nil)
+    }
+
+    @Test func aCatchSwitchesTheLiveVisitToItsCatchAndOnlyOnce() {
+        var rng = SplitMix64(seed: 6)
+        let walker = WildWalker()
+        walker.begin(WildVisit.plan(on: .topEdge, in: 100...600, start: Date() - 1, using: &rng), serial: 3)
+        #expect(!walker.isCaught)
+        #expect(walker.catchNow())
+        #expect(walker.isCaught)
+        #expect(!walker.catchNow())
+        walker.end()
     }
 }

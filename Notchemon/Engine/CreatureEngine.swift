@@ -156,6 +156,7 @@ actor CreatureEngine {
     private var spawning = false
     private var encounterSerial = 0
     private var fullScreen = false
+    private var systemAsleep = false
 
     static let celebrationLength: Duration = .seconds(2)
     static let bannerLength: Duration = .seconds(4)
@@ -220,6 +221,14 @@ actor CreatureEngine {
         refreshEncounters(secondsSinceInput: idleSeconds())
     }
 
+    /// A sleeping Mac banks no active time. Waking starts a new stretch,
+    /// so a deadline that passed overnight does not fire on wake.
+    func setSystemAsleep(_ asleep: Bool) {
+        guard asleep != systemAsleep else { return }
+        systemAsleep = asleep
+        refreshEncounters(secondsSinceInput: idleSeconds())
+    }
+
     /// For developers: a visit now, whatever the schedule says. It does
     /// not count toward the day's visits.
     func spawnEncounterNow() async {
@@ -262,19 +271,25 @@ actor CreatureEngine {
     /// with it the deadline the next visit waits for.
     private func refreshEncounters(secondsSinceInput: TimeInterval) {
         guard let current = schedule else { return }
-        let conditions = EncounterConditions(
+        let active = EncounterRules.isActive(encounterConditions(secondsSinceInput: secondsSinceInput, visiting: snapshot.encounter != nil))
+        // Midnight starts a new day's count even for a user who never pauses.
+        let newDay = calendar.startOfDay(for: now()) != current.clock.day
+        guard active != (current.activeSince != nil) || newDay else { return }
+        schedule = EncounterRules.update(current, active: active, now: now(), calendar: calendar)
+        saveEncounterClock()
+        scheduleEncounter()
+    }
+
+    private func encounterConditions(secondsSinceInput: TimeInterval, visiting: Bool) -> EncounterConditions {
+        EncounterConditions(
             secondsSinceInput: secondsSinceInput,
             sleeping: snapshot.behaviour == .sleeping,
             fullScreen: fullScreen,
             focusing: timer.session != nil,
             hasPartner: species != nil,
-            visiting: snapshot.encounter != nil
+            visiting: visiting,
+            systemAsleep: systemAsleep
         )
-        let active = EncounterRules.isActive(conditions)
-        guard active != (current.activeSince != nil) else { return }
-        schedule = EncounterRules.update(current, active: active, now: now(), calendar: calendar)
-        saveEncounterClock()
-        scheduleEncounter()
     }
 
     private func scheduleEncounter() {
@@ -307,8 +322,12 @@ actor CreatureEngine {
         defer { spawning = false }
         var draw = rng
         let candidate = try? await provider.encounterCandidate(using: &draw)
-        guard let candidate, let show = await wildShow(of: candidate), species != nil, snapshot.encounter == nil else {
-            encounterLog.info("no wild creature could be found; looking again later")
+        // The search can take a while; the user may have gone, focused, or gone full screen meanwhile.
+        let stillWanted = scheduled
+            ? EncounterRules.isActive(encounterConditions(secondsSinceInput: idleSeconds(), visiting: snapshot.encounter != nil))
+            : !fullScreen && !systemAsleep
+        guard stillWanted, let candidate, let show = await wildShow(of: candidate), species != nil, snapshot.encounter == nil else {
+            encounterLog.info("no visit this time; looking again later")
             if scheduled, var current = schedule {
                 current = EncounterRules.update(current, active: current.activeSince != nil, now: now(), calendar: calendar)
                 current.clock.cooldownLeft = Self.encounterRetry

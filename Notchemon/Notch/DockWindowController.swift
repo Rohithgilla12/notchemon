@@ -61,6 +61,9 @@ final class DockPanel: NSPanel {
         isMovable = false
         isReleasedWhenClosed = false
         ignoresMouseEvents = true
+        // While it takes clicks over a visitor, the moves that leave the
+        // visitor arrive here rather than at the global monitor.
+        acceptsMouseMovedEvents = true
         animationBehavior = .none
     }
 

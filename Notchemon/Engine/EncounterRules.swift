@@ -14,6 +14,8 @@ struct EncounterConditions: Sendable, Equatable {
     var hasPartner: Bool
     /// A wild creature is already here.
     var visiting: Bool
+    /// The Mac is going to sleep or asleep, which is never active time.
+    var systemAsleep = false
 }
 
 /// Saved in `state.json`, so quitting neither skips a cooldown nor resets
@@ -46,7 +48,7 @@ enum EncounterRules {
 
     static func isActive(_ conditions: EncounterConditions) -> Bool {
         conditions.hasPartner && !conditions.visiting && conditions.secondsSinceInput < recentInput
-            && !conditions.sleeping && !conditions.fullScreen && !conditions.focusing
+            && !conditions.sleeping && !conditions.fullScreen && !conditions.focusing && !conditions.systemAsleep
     }
 
     static func fresh(at now: Date, calendar: Calendar, using rng: inout some RandomNumberGenerator) -> EncounterClock {

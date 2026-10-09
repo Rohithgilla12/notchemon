@@ -114,6 +114,10 @@ final class CompanionModel {
         Task { await engine.endEncounter(serial) }
     }
 
+    func setSystemAsleep(_ asleep: Bool) {
+        Task { await engine.setSystemAsleep(asleep) }
+    }
+
     func setFullScreen(_ on: Bool) {
         guard on != sentFullScreen else { return }
         sentFullScreen = on

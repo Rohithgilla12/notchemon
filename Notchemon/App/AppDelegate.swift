@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notesHotKey: HotKey?
     private var cursorNearHome = false
     private var clickMonitor: Any?
+    private var sleepObservers: [NSObjectProtocol] = []
+    private var hitRefresh: Task<Void, Never>?
+    private var hitRefreshAt: Date?
     private let quitPrompt: any QuitPrompt
     private let endsSession: @MainActor () -> Bool
     private let terminate: @MainActor () -> Void
@@ -80,7 +83,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             refreshExtent()
             showDock()
-            cursorMoved(to: NSEvent.mouseLocation)
+            windowController?.refreshHitTesting()
+        }
+        let workspace = NSWorkspace.shared.notificationCenter
+        for (name, asleep) in [(NSWorkspace.willSleepNotification, true), (NSWorkspace.didWakeNotification, false)] {
+            sleepObservers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.model.setSystemAsleep(asleep) }
+            })
         }
         wild.onGone = { [weak self] serial in self?.model.encounterGone(serial) }
         // A click on a visitor catches it and goes no further.
@@ -180,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if wild.serial != nil { wild.end() }
             return
         }
-        if wild.serial != encounter.serial {
+        if wild.serial != encounter.serial, wild.finished != encounter.serial {
             beginWild(encounter)
         } else if encounter.caught {
             wild.catchNow()
@@ -220,6 +229,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return HoverPolicy.wildBox(centre: centre)
     }
 
+    /// A walking visitor can reach or leave a cursor that is not moving, so
+    /// the hover rules are asked again when its box's edge passes it.
+    private func scheduleHitRefresh(for point: CGPoint) {
+        let now = Date()
+        var next: Date?
+        if let visit = wild.visit, !wild.isCaught, let leg = visit.leg(at: now), case .walk(let walk) = leg.track,
+           let origin = closedCentre(on: visit.perch, at: 0) {
+            let half = Double(NotchGeometry.peekHeight) / 2
+            if abs(point.y - origin.y) <= half {
+                let across = CursorOffset(dx: point.x - origin.x, dy: 0)
+                next = walk.crossings(of: across, radius: half).first { $0 > now }
+            }
+        }
+        guard next != hitRefreshAt else { return }
+        hitRefresh?.cancel()
+        hitRefreshAt = next
+        guard let next else { return }
+        hitRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow)), tolerance: .milliseconds(20))
+            guard !Task.isCancelled, let self else { return }
+            hitRefreshAt = nil
+            windowController?.refreshHitTesting()
+        }
+    }
+
     /// Clicks inside the open panel stay the panel's.
     private func catchWild(at point: CGPoint) -> Bool {
         if presentation.isExpanded, presentation.layout?.expanded.contains(point) == true { return false }
@@ -235,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cursorMoved(to point: CGPoint) {
         dockWatcher.cursorMoved(to: point)
         dockController?.setTakesClicks(wildBox(on: .dock)?.contains(point) == true)
+        scheduleHitRefresh(for: point)
         guard let layout = presentation.layout, let metrics = presentation.metrics else {
             roamer.watch(nil)
             refreshRoam()

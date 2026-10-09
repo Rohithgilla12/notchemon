@@ -10,6 +10,8 @@ final class WildWalker {
     private(set) var visit: WildVisit?
     /// The engine's serial for the visit under way.
     private(set) var serial: Int?
+    /// The last visit that played to its end, which a late snapshot must not restart.
+    @ObservationIgnored private(set) var finished: Int?
     /// What the sprite does now. It changes only at a leg's edge.
     private(set) var track: SpriteTrack?
     /// Called whenever the visitor starts, changes leg, or goes.
@@ -51,6 +53,7 @@ final class WildWalker {
     private func advance() {
         guard let visit, let leg = visit.leg(at: Date()) else {
             let gone = serial
+            finished = gone
             end()
             if let gone { onGone?(gone) }
             return
