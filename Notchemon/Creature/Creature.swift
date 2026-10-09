@@ -129,6 +129,9 @@ protocol CreatureProvider: Sendable {
     var unlockTiers: [[Int]] { get }
     /// Every species the provider can show, for the developer search.
     func speciesIndex() async throws -> [SpeciesEntry]
+    /// A species to visit as a wild creature, in its first stage, or nil
+    /// when none could be found this time.
+    func encounterCandidate(using rng: inout some RandomNumberGenerator) async throws -> Species?
     func species(id: Int) async throws -> Species
     func sprite(for species: Species, state: SpriteState, facing: Facing) async throws -> SpriteFrames
     /// Large, smooth art for the starter picker and the evolution reveal.
@@ -139,6 +142,12 @@ extension CreatureProvider {
     var unlockTiers: [[Int]] { [starterIDs] }
 
     func speciesIndex() async throws -> [SpeciesEntry] { [] }
+
+    /// Any species from the unlock tiers, which hold first stages.
+    func encounterCandidate(using rng: inout some RandomNumberGenerator) async throws -> Species? {
+        guard let id = unlockTiers.flatMap({ $0 }).randomElement(using: &rng) else { return nil }
+        return try await species(id: id)
+    }
 }
 
 /// A species as an index lists it: its id and the provider's own name for it.

@@ -41,6 +41,13 @@ struct OriginalCreatureProvider: CreatureProvider {
     let starterIDs = [101, 104, 107, 110]
     let unlockTiers = [[101, 104, 107, 110], [112, 114, 116]]
 
+    /// Any first design, from every tier or none.
+    func encounterCandidate(using rng: inout some RandomNumberGenerator) async throws -> Species? {
+        let roots: [Int] = Self.roster.keys.filter { Self.root(of: $0) == $0 }.sorted()
+        guard let id = roots.randomElement(using: &rng) else { return nil }
+        return try await species(id: id)
+    }
+
     func speciesIndex() async throws -> [SpeciesEntry] {
         Self.roster.keys.sorted().compactMap { id in Self.roster[id].map { SpeciesEntry(id: id, name: $0.name) } }
     }

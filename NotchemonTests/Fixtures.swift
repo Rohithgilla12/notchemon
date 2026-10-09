@@ -29,6 +29,23 @@ final class StubFetcher: DataFetcher, @unchecked Sendable {
     }
 }
 
+/// A small seedable generator, so a test replays the same draws.
+struct SplitMix64: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed
+    }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
+
 enum Fixtures {
     static let api = URL(string: "https://pokeapi.co/api/v2/")!
 
@@ -36,9 +53,10 @@ enum Fixtures {
         FileManager.default.temporaryDirectory.appendingPathComponent("notchemon-tests-\(UUID().uuidString)", isDirectory: true)
     }
 
-    static func speciesJSON(id: Int, name: String, chain: Int) -> Data {
-        Data("""
-        {"id": \(id), "name": "\(name)",
+    static func speciesJSON(id: Int, name: String, chain: Int, evolvesFrom: Int? = nil, legendary: Bool = false) -> Data {
+        let from = evolvesFrom.map { #"{"name": "earlier", "url": "https://pokeapi.co/api/v2/pokemon-species/\#($0)/"}"# } ?? "null"
+        return Data("""
+        {"id": \(id), "name": "\(name)", "evolves_from_species": \(from), "is_legendary": \(legendary), "is_mythical": false,
          "names": [{"name": "\(name.uppercased())-ja", "language": {"name": "ja", "url": "https://pokeapi.co/api/v2/language/1/"}},
                    {"name": "\(name.capitalized)", "language": {"name": "en", "url": "https://pokeapi.co/api/v2/language/9/"}}],
          "evolution_chain": {"url": "https://pokeapi.co/api/v2/evolution-chain/\(chain)/"}}
@@ -89,6 +107,22 @@ enum Fixtures {
                      "showdown": {"front_default": \(json(showdown))}},
            "versions": {"generation-v": {"black-white": {"animated": {"front_default": \(json(animated))}}}}}}
         """.utf8)
+    }
+
+    /// Wild-candidate lookups for `dex`: its species, its chain, and anim
+    /// data with Idle and, when `walks`, Walk.
+    static func wild(dex: Int, chain: Int, walks: Bool = true, evolvesFrom: Int? = nil, legendary: Bool = false) -> [URL: Data] {
+        let walk = walks ? SpriteFixtures.anim("Walk", width: 10, height: 12, durations: [4, 4]) : ""
+        return [
+            URL(string: "https://pokeapi.co/api/v2/pokemon-species/\(dex)/")!: speciesJSON(
+                id: dex, name: "wild\(dex)", chain: chain, evolvesFrom: evolvesFrom, legendary: legendary
+            ),
+            URL(string: "https://pokeapi.co/api/v2/evolution-chain/\(chain)/")!: chainJSON,
+            SpriteCollabEndpoint.animData(dex: dex): SpriteFixtures.animData("""
+            \(SpriteFixtures.anim("Idle", width: 10, height: 12, durations: [6, 12, 18]))
+            \(walk)
+            """),
+        ]
     }
 
     /// Idle and Hop with eight facing rows; Wake, Pose, and their fallbacks absent.

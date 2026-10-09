@@ -61,6 +61,14 @@ struct SpeciesDTO: Decodable, Sendable {
     let name: String
     let names: [LocalizedName]
     let evolutionChain: ChainReference
+    let evolvesFromSpecies: NamedResource?
+    let isLegendary: Bool?
+    let isMythical: Bool?
+
+    /// A first stage that is neither legendary nor mythical.
+    var isWildCandidate: Bool {
+        evolvesFromSpecies == nil && isLegendary != true && isMythical != true
+    }
 }
 
 struct SpeciesListDTO: Decodable, Sendable {

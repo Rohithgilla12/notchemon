@@ -126,6 +126,39 @@ struct PokeAPICreatureProviderTests {
         #expect(fetcher.requests == [components.url!])
     }
 
+    func indexURL() -> URL {
+        var components = URLComponents(url: Fixtures.api.appendingPathComponent("pokemon-species/"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "limit", value: "2000")]
+        return components.url!
+    }
+
+    @Test func aWildCandidateIsAFirstStageThatIdlesAndWalks() async throws {
+        var responses = Fixtures.wild(dex: 902, chain: 90, evolvesFrom: 901)
+        responses.merge(Fixtures.wild(dex: 903, chain: 90, legendary: true)) { $1 }
+        responses.merge(Fixtures.wild(dex: 904, chain: 90, walks: false)) { $1 }
+        responses.merge(Fixtures.wild(dex: 901, chain: 90)) { $1 }
+        responses[indexURL()] = Fixtures.speciesIndexJSON([(901, "a"), (902, "b"), (903, "c"), (904, "d")])
+        let candidate = provider(StubFetcher(responses))
+        for seed in 0..<20 {
+            var rng = SplitMix64(seed: UInt64(seed))
+            let found = try await candidate.encounterCandidate(using: &rng)
+            #expect(found == nil || found?.id == 901)
+        }
+        var rng = SplitMix64(seed: 7)
+        var found: [Int] = []
+        for _ in 0..<5 { found.append(try #require(try await candidate.encounterCandidate(using: &rng)).id) }
+        #expect(Set(found) == [901])
+    }
+
+    @Test func noCandidateAfterTheBoundedDraws() async throws {
+        var responses = Fixtures.wild(dex: 902, chain: 90, evolvesFrom: 901)
+        responses[indexURL()] = Fixtures.speciesIndexJSON([(902, "b")])
+        let fetcher = StubFetcher(responses)
+        var rng = SplitMix64(seed: 1)
+        #expect(try await provider(fetcher).encounterCandidate(using: &rng) == nil)
+        #expect(fetcher.requests.count <= 3)
+    }
+
     @Test func unknownSpeciesIsReportedAsSuch() async {
         await #expect(throws: CreatureError.unknownSpecies) {
             try await provider(StubFetcher()).species(id: 4242)
