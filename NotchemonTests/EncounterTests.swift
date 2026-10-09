@@ -43,7 +43,8 @@ struct EncounterRulesTests {
             #expect(clock.day == calendar.startOfDay(for: morning))
             #expect(clock.visitsToday == 0)
         }
-        #expect(EncounterRules.cooldown == (45 * 60)...(90 * 60))
+        let fortyFiveToNinetyMinutes: ClosedRange<TimeInterval> = 2_700...5_400
+        #expect(EncounterRules.cooldown == fortyFiveToNinetyMinutes)
     }
 
     @Test func onlyActiveTimeCountsTowardTheNextVisit() {
@@ -102,7 +103,8 @@ struct EncounterRulesTests {
             if active { activeMinutes += 1 }
         }
         #expect(visits.count == EncounterRules.dailyLimit)
-        #expect(zip(visits, visits.dropFirst()).allSatisfy { $1 - $0 >= 45 })
+        let gaps: [Int] = zip(visits, visits.dropFirst()).map { (earlier: Int, later: Int) -> Int in later - earlier }
+        #expect(gaps.allSatisfy { $0 >= 45 })
     }
 }
 
@@ -123,7 +125,8 @@ struct WildVisitTests {
             return
         }
         #expect(exit == span.lowerBound || exit == span.upperBound)
-        #expect(zip(visit.legs, visit.legs.dropFirst()).allSatisfy { $0.until == $1.from })
+        let contiguous: Bool = zip(visit.legs, visit.legs.dropFirst()).allSatisfy { (leg: WildLeg, next: WildLeg) -> Bool in leg.until == next.from }
+        #expect(contiguous)
         #expect(visit.end.timeIntervalSince(visit.start) >= EncounterRules.visitLength)
         let leaving = try #require(visit.legs.last)
         #expect(leaving.from.timeIntervalSince(visit.start) < EncounterRules.visitLength + 30)
@@ -146,7 +149,8 @@ struct WildVisitTests {
         let now = start + 20
         let x = try #require(visit.x(at: now))
         let caught = try #require(visit.caught(at: now))
-        #expect(caught.legs.last == WildLeg(track: .caught(x, start: now), from: now, until: now + WildVisit.catchLength))
+        let catchLeg = WildLeg(track: .caught(x, start: now), from: now, until: now + WildVisit.catchLength)
+        #expect(caught.legs.last == catchLeg)
         #expect(caught.x(at: now - 1) == visit.x(at: now - 1))
         #expect(caught.end == now + WildVisit.catchLength)
         #expect(visit.caught(at: visit.end + 1) == nil)
@@ -206,7 +210,8 @@ struct HoverPolicyWildTests {
 
     @Test func theBoxIsTheSpritesBox() {
         let box = HoverPolicy.wildBox(centre: CGPoint(x: 100, y: 50))
-        #expect(box == CGRect(x: 100 - 22, y: 50 - 22, width: 44, height: 44))
+        let expected = CGRect(x: 78, y: 28, width: 44, height: 44)
+        #expect(box == expected)
     }
 }
 
