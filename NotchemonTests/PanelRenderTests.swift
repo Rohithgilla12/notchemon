@@ -76,6 +76,57 @@ struct PanelRenderTests {
         try render(panel, size: metrics.panelSize, padding: 0, to: folder.appendingPathComponent("caught-banner.png"))
     }
 
+    /// Four partners: 110 leads, 101 and 104 walk with it, 107 stays in.
+    func partyModel() async throws -> CompanionModel {
+        let engine = CreatureEngine(
+            provider: OriginalCreatureProvider(),
+            store: StateStore(url: directory.appendingPathComponent("state.json")),
+            notesURL: directory.appendingPathComponent("notes.md"),
+            idleSeconds: { 0 }
+        )
+        await engine.start()
+        for id in [101, 104, 107, 110] { await engine.adopt(id) }
+        _ = await engine.setWalking(101, true)
+        _ = await engine.setWalking(104, true)
+        let model = CompanionModel(engine: engine)
+        Task { await model.run() }
+        for _ in 0..<200 where model.snapshot.followers.count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await model.loadPartners()
+        return model
+    }
+
+    @Test func rendersThePartnersWithWalkingToggles() async throws {
+        let folder = try #require(panelRenderFolder)
+        let model = try await partyModel()
+        try render(PartnersView(model: model), to: folder.appendingPathComponent("partners-walking.png"))
+        try render(
+            PartnersView(model: model, hint: PartnersView.partyFullHint),
+            to: folder.appendingPathComponent("partners-party-full.png")
+        )
+    }
+
+    @Test func rendersAPartyOfThreeOnTheTopEdge() async throws {
+        let folder = try #require(panelRenderFolder)
+        let model = try await partyModel()
+        let screen = ScreenMetrics(frame: CGRect(x: 0, y: 0, width: 1512, height: 982), safeAreaTop: 32, auxiliaryTopLeftWidth: 656, auxiliaryTopRightWidth: 656)
+        let presentation = NotchPresentation()
+        let layout = try #require(NotchGeometry.layout(for: screen, virtualNotchEnabled: true, wander: .topEdge))
+        presentation.layout = layout
+        let metrics = try #require(presentation.metrics)
+        let party = Party()
+        party.sync(leader: model.snapshot.leader, followers: model.snapshot.followers.map(\.root))
+        let reach = Double(layout.roamReach)
+        for roamer in party.all {
+            let homing: Homing = roamer.partner == party.leader ? .snap : .free
+            roamer.update(range: -reach...reach, dock: nil, homing: homing)
+        }
+        #expect(party.all.count == 3)
+        let strip = NotchRootView(presentation: presentation, model: model, party: party, wild: WildWalker())
+        try render(strip, size: metrics.windowSize, padding: 0, to: folder.appendingPathComponent("party-top-edge.png"))
+    }
+
     @Test func rendersTheNewPartnersBanner() async throws {
         let folder = try #require(panelRenderFolder)
         let model = try await model(evolve: false)
