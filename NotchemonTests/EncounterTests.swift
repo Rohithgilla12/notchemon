@@ -317,7 +317,8 @@ struct EngineEncounterTests {
     }
 
     @Test func aRelaunchKeepsTheEncounterClock() async throws {
-        _ = await engine()
+        // The first sample with a partner out starts the active stretch, which saves the clock.
+        await engine().sample()
         let saved = try #require(store.load().encounterClock)
         #expect(EncounterRules.cooldown.contains(saved.cooldownLeft))
         let again = CreatureEngine(
